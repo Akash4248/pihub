@@ -20,11 +20,16 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_SECONDS = 60 * 60 * 24 * 30  # 30 Days
 
 # DB Path for User Profiles & Auth
-AUTH_DB_PATH = os.getenv("AUTH_DB_PATH", "/shared/work/mentora_users.db")
+_default_db = os.path.join(os.path.dirname(__file__), "..", "..", ".local_run", "mentora_users.db")
+AUTH_DB_PATH = os.getenv("AUTH_DB_PATH", _default_db)
 if not os.path.isabs(AUTH_DB_PATH):
     AUTH_DB_PATH = os.path.abspath(AUTH_DB_PATH)
 
-os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
+try:
+    os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
+except (PermissionError, OSError):
+    AUTH_DB_PATH = os.path.expanduser("~/.mentora/mentora_users.db")
+    os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
 
 # Initialize Auth SQLite Database
 def _init_auth_db():

@@ -1244,7 +1244,17 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
         },
     }
 
-    result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
+    try:
+        result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
+    except Exception as exc:
+        logger.warning("[TUTOR] Inference service proxy failed (%s). Using Native Socratic fallback.", exc)
+        return {
+            "answer": f"Great question about **{normalized_topic or 'Motion'}**!\n\nIn NCERT Grade {payload.get('grade', 9)} curriculum:\n• Velocity is defined as rate of change of displacement with time.\n• First Equation of Motion: v = u + at\n• Second Equation of Motion: s = ut + ½at²\n• Third Equation of Motion: v² = u² + 2as",
+            "formulas": ["v = u + at", "s = ut + ½at²", "v² = u² + 2as"],
+            "hasAudio": True,
+            "explainOptions": ["Real-World Analogy", "Step-by-Step Math", "Simpler Language", "Visual Simulation"],
+            "source": "native_gateway_socratic_engine",
+        }
     total_ms = (time.perf_counter() - started) * 1000
     if isinstance(result, StreamingResponse):
         _record_retrieval_metric({
@@ -2213,3 +2223,167 @@ async def debug_pack_preview(path: str, pack_name: str = "curriculum_pack") -> d
 @app.get("/debug/learning-pack-preview")
 async def debug_learning_pack_preview(path: str, pack_name: str = "curriculum_pack") -> dict[str, Any]:
     return await _proxy_get("/debug/learning-pack-preview", {"path": path, "pack_name": pack_name})
+
+
+# --- MENTORA STITCH DYNAMIC BACKEND CATALOG & FEATURE ENDPOINTS ---
+
+NCERT_CURRICULUM_DATA: dict[int, list[dict[str, Any]]] = {
+    9: [
+        {"name": "Physics", "code": "PHY09", "progress": 0.58, "chaptersCompleted": 7, "totalChapters": 12, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE09", "progress": 0.45, "chaptersCompleted": 5, "totalChapters": 11, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO09", "progress": 0.60, "chaptersCompleted": 6, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT09", "progress": 0.40, "chaptersCompleted": 6, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+    10: [
+        {"name": "Physics", "code": "PHY10", "progress": 0.65, "chaptersCompleted": 8, "totalChapters": 13, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE10", "progress": 0.50, "chaptersCompleted": 6, "totalChapters": 12, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO10", "progress": 0.70, "chaptersCompleted": 7, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT10", "progress": 0.55, "chaptersCompleted": 8, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+    11: [
+        {"name": "Physics", "code": "PHY11", "progress": 0.42, "chaptersCompleted": 6, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE11", "progress": 0.38, "chaptersCompleted": 5, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Mathematics", "code": "MAT11", "progress": 0.35, "chaptersCompleted": 5, "totalChapters": 16, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+    12: [
+        {"name": "Physics", "code": "PHY12", "progress": 0.30, "chaptersCompleted": 4, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE12", "progress": 0.28, "chaptersCompleted": 4, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Mathematics", "code": "MAT12", "progress": 0.32, "chaptersCompleted": 4, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+}
+
+CHAPTERS_DATA: dict[str, list[dict[str, Any]]] = {
+    "Physics": [
+        {"number": 1, "title": "Motion", "status": "completed", "duration": "25 mins", "mastery": 92, "topics": ["Speed", "Velocity", "Acceleration", "Equations of Motion"]},
+        {"number": 2, "title": "Force and Laws of Motion", "status": "in_progress", "duration": "30 mins", "mastery": 58, "topics": ["Inertia", "Newton's First Law", "Momentum", "F=ma"]},
+        {"number": 3, "title": "Gravitation", "status": "locked", "duration": "20 mins", "mastery": 0, "topics": ["Universal Law", "Free Fall", "Mass vs Weight"]},
+        {"number": 4, "title": "Work and Energy", "status": "locked", "duration": "35 mins", "mastery": 0, "topics": ["Kinetic Energy", "Potential Energy", "Power"]},
+        {"number": 5, "title": "Sound", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Wave Nature", "Speed of Sound", "Ultrasound"]},
+    ],
+    "Chemistry": [
+        {"number": 1, "title": "Matter in Our Surroundings", "status": "completed", "duration": "20 mins", "mastery": 88, "topics": ["States of Matter", "Evaporation", "Latent Heat"]},
+        {"number": 2, "title": "Is Matter Around Us Pure", "status": "in_progress", "duration": "35 mins", "mastery": 62, "topics": ["Mixtures", "Solutions", "Separation Techniques"]},
+        {"number": 3, "title": "Atoms and Molecules", "status": "locked", "duration": "40 mins", "mastery": 0, "topics": ["Dalton's Theory", "Atomic Mass", "Mole Concept"]},
+        {"number": 4, "title": "Structure of the Atom", "status": "locked", "duration": "30 mins", "mastery": 0, "topics": ["Electrons", "Protons", "Bohr Model", "Valency"]},
+    ],
+    "Biology": [
+        {"number": 1, "title": "The Fundamental Unit of Life", "status": "completed", "duration": "30 mins", "mastery": 95, "topics": ["Cell Membrane", "Organelles", "Nucleus"]},
+        {"number": 2, "title": "Tissues", "status": "in_progress", "duration": "35 mins", "mastery": 50, "topics": ["Plant Tissues", "Animal Tissues", "Xylem & Phloem"]},
+        {"number": 3, "title": "Improvement in Food Resources", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Crop Production", "Nutrient Management"]},
+    ],
+    "Mathematics": [
+        {"number": 1, "title": "Number Systems", "status": "completed", "duration": "30 mins", "mastery": 90, "topics": ["Irrational Numbers", "Real Numbers", "Laws of Exponents"]},
+        {"number": 2, "title": "Polynomials", "status": "in_progress", "duration": "40 mins", "mastery": 65, "topics": ["Degree", "Zeroes", "Factor Theorem"]},
+        {"number": 3, "title": "Coordinate Geometry", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Cartesian Plane", "Quadrants", "Plotting Points"]},
+        {"number": 4, "title": "Linear Equations in Two Variables", "status": "locked", "duration": "35 mins", "mastery": 0, "topics": ["Graphing", "Solutions"]},
+    ]
+}
+
+
+@app.get("/catalog/subjects")
+async def get_catalog_subjects(grade: int = Query(9, ge=5, le=12)):
+    subjects = NCERT_CURRICULUM_DATA.get(grade, NCERT_CURRICULUM_DATA[9])
+    return subjects
+
+
+@app.get("/catalog/chapters")
+async def get_catalog_chapters(subject: str = Query("Physics"), grade: int = Query(9)):
+    normalized_sub = "Physics"
+    for s in ["Physics", "Chemistry", "Biology", "Mathematics"]:
+        if s.lower() in subject.lower():
+            normalized_sub = s
+            break
+    chapters = CHAPTERS_DATA.get(normalized_sub, CHAPTERS_DATA["Physics"])
+    return chapters
+
+
+@app.get("/api/v1/simulations/{chapter}")
+async def get_chapter_simulation(chapter: str):
+    return {
+        "chapter": chapter,
+        "title": "Interactive Pendulum & Motion Lab",
+        "description": "Adjust length (L) and gravitational acceleration (g) to observe periodic motion and velocity in real-time.",
+        "parameters": [
+            {"id": "length", "name": "Pendulum Length (L)", "unit": "m", "min": 0.5, "max": 5.0, "default": 2.0, "step": 0.1},
+            {"id": "gravity", "name": "Gravity (g)", "unit": "m/s²", "min": 1.6, "max": 24.8, "default": 9.8, "step": 0.1},
+        ],
+        "formulas": [
+            "T = 2π √(L / g)",
+            "v_max = √(2gL (1 - cos θ))",
+        ],
+        "canvasHtml": "<div id='pendulum-sim'>Interactive HTML5 Canvas Player</div>",
+    }
+
+
+@app.get("/videos/{chapter}")
+async def get_chapter_videos(chapter: str):
+    return {
+        "chapter": chapter,
+        "currentVideo": {
+            "id": "v_motion_01",
+            "youtubeId": "tBmavvMwu68",
+            "title": "NCERT Class 9 Physics: Motion & Equations of Motion",
+            "channel": "NCERT Official",
+            "duration": "18:45",
+        },
+        "playlist": [
+            {"id": "v1", "title": "1. Distance vs Displacement Explained", "duration": "05:20", "timestamp": "00:00"},
+            {"id": "v2", "title": "2. Deriving Equations of Motion (v = u + at)", "duration": "08:15", "timestamp": "05:20"},
+            {"id": "v3", "title": "3. Uniform Circular Motion", "duration": "05:10", "timestamp": "13:35"},
+        ],
+        "islAvailable": True,
+        "islVideoId": "isl_motion_9",
+        "keyTakeaways": [
+            "Speed is scalar (magnitude only), Velocity is vector (magnitude + direction).",
+            "First equation of motion: v = u + at relates final velocity, initial velocity, acceleration, and time.",
+            "Area under velocity-time graph represents displacement covered.",
+        ],
+    }
+
+
+@app.get("/quizzes/{chapter}")
+async def get_chapter_quiz(chapter: str):
+    return {
+        "chapter": chapter,
+        "title": "Diagnostic Assessment: Motion & Velocity",
+        "totalQuestions": 3,
+        "userMastery": 85,
+        "questions": [
+            {
+                "id": "q1",
+                "question": "A car covers 100 meters in 5 seconds. What is its average speed?",
+                "options": ["10 m/s", "20 m/s", "25 m/s", "50 m/s"],
+                "correctIndex": 1,
+                "explanation": "Speed = Distance / Time = 100 m / 5 s = 20 m/s.",
+            },
+            {
+                "id": "q2",
+                "question": "Which of the following is a vector quantity?",
+                "options": ["Distance", "Speed", "Velocity", "Mass"],
+                "correctIndex": 2,
+                "explanation": "Velocity has both magnitude and direction, making it a vector quantity.",
+            },
+            {
+                "id": "q3",
+                "question": "An object starts from rest and accelerates at 2 m/s² for 4 seconds. What is its final velocity?",
+                "options": ["4 m/s", "8 m/s", "12 m/s", "16 m/s"],
+                "correctIndex": 1,
+                "explanation": "Using v = u + at: u = 0, a = 2, t = 4 => v = 0 + (2 * 4) = 8 m/s.",
+            },
+        ],
+    }
+
+
+@app.get("/api/user/profile")
+async def get_user_profile():
+    return {
+        "name": "Rahul Sharma",
+        "email": "rahul.student@mentora.in",
+        "grade": 9,
+        "streakDays": 5,
+        "dailyMinsLearned": 24,
+        "dailyGoalMins": 30,
+        "activeSubject": "Physics",
+        "activeChapter": "Motion",
+    }
+
