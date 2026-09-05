@@ -2263,51 +2263,51 @@ async def debug_learning_pack_preview(path: str, pack_name: str = "curriculum_pa
 
 NCERT_CURRICULUM_DATA: dict[int, list[dict[str, Any]]] = {
     9: [
-        {"name": "Physics", "code": "PHY09", "progress": 0.58, "chaptersCompleted": 7, "totalChapters": 12, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE09", "progress": 0.45, "chaptersCompleted": 5, "totalChapters": 11, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO09", "progress": 0.60, "chaptersCompleted": 6, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT09", "progress": 0.40, "chaptersCompleted": 6, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 11, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
     10: [
-        {"name": "Physics", "code": "PHY10", "progress": 0.65, "chaptersCompleted": 8, "totalChapters": 13, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE10", "progress": 0.50, "chaptersCompleted": 6, "totalChapters": 12, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO10", "progress": 0.70, "chaptersCompleted": 7, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT10", "progress": 0.55, "chaptersCompleted": 8, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
     11: [
-        {"name": "Physics", "code": "PHY11", "progress": 0.42, "chaptersCompleted": 6, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE11", "progress": 0.38, "chaptersCompleted": 5, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Mathematics", "code": "MAT11", "progress": 0.35, "chaptersCompleted": 5, "totalChapters": 16, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Mathematics", "code": "MAT11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 16, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
     12: [
-        {"name": "Physics", "code": "PHY12", "progress": 0.30, "chaptersCompleted": 4, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE12", "progress": 0.28, "chaptersCompleted": 4, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Mathematics", "code": "MAT12", "progress": 0.32, "chaptersCompleted": 4, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Mathematics", "code": "MAT12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
 }
 
 CHAPTERS_DATA: dict[str, list[dict[str, Any]]] = {
     "Physics": [
-        {"number": 1, "title": "Motion", "status": "completed", "duration": "25 mins", "mastery": 92, "topics": ["Speed", "Velocity", "Acceleration", "Equations of Motion"]},
-        {"number": 2, "title": "Force and Laws of Motion", "status": "in_progress", "duration": "30 mins", "mastery": 58, "topics": ["Inertia", "Newton's First Law", "Momentum", "F=ma"]},
+        {"number": 1, "title": "Motion", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Speed", "Velocity", "Acceleration", "Equations of Motion"]},
+        {"number": 2, "title": "Force and Laws of Motion", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Inertia", "Newton's First Law", "Momentum", "F=ma"]},
         {"number": 3, "title": "Gravitation", "status": "locked", "duration": "20 mins", "mastery": 0, "topics": ["Universal Law", "Free Fall", "Mass vs Weight"]},
         {"number": 4, "title": "Work and Energy", "status": "locked", "duration": "35 mins", "mastery": 0, "topics": ["Kinetic Energy", "Potential Energy", "Power"]},
         {"number": 5, "title": "Sound", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Wave Nature", "Speed of Sound", "Ultrasound"]},
     ],
     "Chemistry": [
-        {"number": 1, "title": "Matter in Our Surroundings", "status": "completed", "duration": "20 mins", "mastery": 88, "topics": ["States of Matter", "Evaporation", "Latent Heat"]},
-        {"number": 2, "title": "Is Matter Around Us Pure", "status": "in_progress", "duration": "35 mins", "mastery": 62, "topics": ["Mixtures", "Solutions", "Separation Techniques"]},
+        {"number": 1, "title": "Matter in Our Surroundings", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["States of Matter", "Evaporation", "Latent Heat"]},
+        {"number": 2, "title": "Is Matter Around Us Pure", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Mixtures", "Solutions", "Separation Techniques"]},
         {"number": 3, "title": "Atoms and Molecules", "status": "locked", "duration": "40 mins", "mastery": 0, "topics": ["Dalton's Theory", "Atomic Mass", "Mole Concept"]},
         {"number": 4, "title": "Structure of the Atom", "status": "locked", "duration": "30 mins", "mastery": 0, "topics": ["Electrons", "Protons", "Bohr Model", "Valency"]},
     ],
     "Biology": [
-        {"number": 1, "title": "The Fundamental Unit of Life", "status": "completed", "duration": "30 mins", "mastery": 95, "topics": ["Cell Membrane", "Organelles", "Nucleus"]},
-        {"number": 2, "title": "Tissues", "status": "in_progress", "duration": "35 mins", "mastery": 50, "topics": ["Plant Tissues", "Animal Tissues", "Xylem & Phloem"]},
+        {"number": 1, "title": "The Fundamental Unit of Life", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Cell Membrane", "Organelles", "Nucleus"]},
+        {"number": 2, "title": "Tissues", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Plant Tissues", "Animal Tissues", "Xylem & Phloem"]},
         {"number": 3, "title": "Improvement in Food Resources", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Crop Production", "Nutrient Management"]},
     ],
     "Mathematics": [
-        {"number": 1, "title": "Number Systems", "status": "completed", "duration": "30 mins", "mastery": 90, "topics": ["Irrational Numbers", "Real Numbers", "Laws of Exponents"]},
-        {"number": 2, "title": "Polynomials", "status": "in_progress", "duration": "40 mins", "mastery": 65, "topics": ["Degree", "Zeroes", "Factor Theorem"]},
+        {"number": 1, "title": "Number Systems", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Irrational Numbers", "Real Numbers", "Laws of Exponents"]},
+        {"number": 2, "title": "Polynomials", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Degree", "Zeroes", "Factor Theorem"]},
         {"number": 3, "title": "Coordinate Geometry", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Cartesian Plane", "Quadrants", "Plotting Points"]},
         {"number": 4, "title": "Linear Equations in Two Variables", "status": "locked", "duration": "35 mins", "mastery": 0, "topics": ["Graphing", "Solutions"]},
     ]
