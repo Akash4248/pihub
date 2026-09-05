@@ -85,6 +85,38 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+from app.services.auth_service import (
+    register_user,
+    authenticate_user,
+    get_current_user_required,
+    get_current_user_optional,
+    extract_user_llm_credentials
+)
+from fastapi import Security
+
+@app.post("/api/auth/register")
+async def api_auth_register(payload: dict[str, Any]):
+    email = payload.get("email")
+    password = payload.get("password")
+    full_name = payload.get("full_name", "Student User")
+    role = payload.get("role", "student")
+    grade = payload.get("grade", 9)
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required.")
+    return register_user(email=email, password=password, full_name=full_name, role=role, grade=grade)
+
+@app.post("/api/auth/login")
+async def api_auth_login(payload: dict[str, Any]):
+    email = payload.get("email")
+    password = payload.get("password")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required.")
+    return authenticate_user(email=email, password=password)
+
+@app.get("/api/auth/me")
+async def api_auth_me(current_user: dict = Security(get_current_user_required)):
+    return current_user
+
 
 def _log_tag(path: str) -> str:
     if path.startswith("/discovery"):
