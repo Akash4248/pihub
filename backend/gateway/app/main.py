@@ -1187,6 +1187,20 @@ def generate_socratic_response(query: str, topic: str | None, grade: int = 9) ->
     q_clean = query.strip()
     t_clean = (topic or "General Science & Mathematics").strip()
 
+    if re.match(r"^(hi|hello|hey|hii+|good\s*(morning|afternoon|evening)|how are you)[\s!.?]*$", q_clean, re.IGNORECASE):
+        t_title = t_clean.title()
+        answer = (
+            f"Hello! 👋 I am your NCERT Class {grade} Socratic AI Tutor for **{t_title}**.\n\n"
+            f"How can I help you master **{t_title}** today? Ask me any question or concept from this chapter to begin!"
+        )
+        return {
+            "answer": answer,
+            "formulas": [],
+            "hasAudio": True,
+            "explainOptions": ["Explain Core Concepts", "Show Example Problems", "Real-World Applications"],
+            "source": "live_generative_socratic_greeting",
+        }
+
     # Extract key query tokens for dynamic prompt response generation
     words = [w for w in q_clean.split() if len(w) > 2]
     key_concept = words[0].capitalize() if words else "Concept"
@@ -2674,76 +2688,78 @@ async def get_catalog_chapters(subject: str = Query("Physics"), grade: int = Que
 
 @app.get("/api/v1/simulations/{chapter}")
 async def get_chapter_simulation(chapter: str):
+    clean_title = chapter.replace("_", " ").title()
     return {
         "chapter": chapter,
-        "title": "Interactive Pendulum & Motion Lab",
-        "description": "Adjust length (L) and gravitational acceleration (g) to observe periodic motion and velocity in real-time.",
+        "title": f"Interactive {clean_title} Lab",
+        "description": f"Adjust key variables in real-time to observe principles of {clean_title}.",
         "parameters": [
-            {"id": "length", "name": "Pendulum Length (L)", "unit": "m", "min": 0.5, "max": 5.0, "default": 2.0, "step": 0.1},
-            {"id": "gravity", "name": "Gravity (g)", "unit": "m/s²", "min": 1.6, "max": 24.8, "default": 9.8, "step": 0.1},
+            {"id": "param1", "name": f"{clean_title} Intensity (I)", "unit": "units", "min": 0.5, "max": 5.0, "default": 2.0, "step": 0.1},
+            {"id": "param2", "name": f"Environmental Factor (k)", "unit": "const", "min": 1.0, "max": 10.0, "default": 5.0, "step": 0.5},
         ],
         "formulas": [
-            "T = 2π √(L / g)",
-            "v_max = √(2gL (1 - cos θ))",
+            f"Standard NCERT Equation for {clean_title}",
+            "Parameter Relationship & SI Units",
         ],
-        "canvasHtml": "<div id='pendulum-sim'>Interactive HTML5 Canvas Player</div>",
+        "canvasHtml": f"<div id='sim-{chapter}'>Interactive HTML5 Canvas Player</div>",
     }
 
 
 @app.get("/videos/{chapter}")
 async def get_chapter_videos(chapter: str):
+    clean_title = chapter.replace("_", " ").title()
     return {
         "chapter": chapter,
         "currentVideo": {
-            "id": "v_motion_01",
+            "id": f"v_{chapter}_01",
             "youtubeId": "tBmavvMwu68",
-            "title": "NCERT Class 9 Physics: Motion & Equations of Motion",
+            "title": f"NCERT Explanation: {clean_title}",
             "channel": "NCERT Official",
-            "duration": "18:45",
+            "duration": "15:00",
         },
         "playlist": [
-            {"id": "v1", "title": "1. Distance vs Displacement Explained", "duration": "05:20", "timestamp": "00:00"},
-            {"id": "v2", "title": "2. Deriving Equations of Motion (v = u + at)", "duration": "08:15", "timestamp": "05:20"},
-            {"id": "v3", "title": "3. Uniform Circular Motion", "duration": "05:10", "timestamp": "13:35"},
+            {"id": "v1", "title": f"1. Introduction to {clean_title}", "duration": "05:00", "timestamp": "00:00"},
+            {"id": "v2", "title": f"2. Core Principles & Formulas of {clean_title}", "duration": "05:00", "timestamp": "05:00"},
+            {"id": "v3", "title": f"3. Solved Examples & NCERT Exercises", "duration": "05:00", "timestamp": "10:00"},
         ],
         "islAvailable": True,
-        "islVideoId": "isl_motion_9",
+        "islVideoId": f"isl_{chapter}",
         "keyTakeaways": [
-            "Speed is scalar (magnitude only), Velocity is vector (magnitude + direction).",
-            "First equation of motion: v = u + at relates final velocity, initial velocity, acceleration, and time.",
-            "Area under velocity-time graph represents displacement covered.",
+            f"Master core definitions and theoretical foundation of {clean_title}.",
+            "Apply equations and problem-solving steps for NCERT examinations.",
         ],
     }
 
 
 @app.get("/quizzes/{chapter}")
 async def get_chapter_quiz(chapter: str):
+    clean_title = chapter.replace("_", " ").title()
     return {
         "chapter": chapter,
-        "title": "Diagnostic Assessment: Motion & Velocity",
+        "title": f"Diagnostic Assessment: {clean_title}",
         "totalQuestions": 3,
-        "userMastery": 85,
+        "userMastery": 0,
         "questions": [
             {
                 "id": "q1",
-                "question": "A car covers 100 meters in 5 seconds. What is its average speed?",
-                "options": ["10 m/s", "20 m/s", "25 m/s", "50 m/s"],
-                "correctIndex": 1,
-                "explanation": "Speed = Distance / Time = 100 m / 5 s = 20 m/s.",
+                "question": f"What is the primary conceptual principle studied in {clean_title}?",
+                "options": ["Fundamental Properties", "Derived Equations", "Practical Applications", "All of the above"],
+                "correctIndex": 3,
+                "explanation": f"{clean_title} encompasses fundamental properties, equations, and practical applications.",
             },
             {
                 "id": "q2",
-                "question": "Which of the following is a vector quantity?",
-                "options": ["Distance", "Speed", "Velocity", "Mass"],
+                "question": f"Which parameter is essential for analyzing {clean_title}?",
+                "options": ["SI Unit Measurements", "Boundary Conditions", "Both A and B", "None of the above"],
                 "correctIndex": 2,
-                "explanation": "Velocity has both magnitude and direction, making it a vector quantity.",
+                "explanation": "Both SI unit measurements and boundary conditions are essential for analytical solutions.",
             },
             {
                 "id": "q3",
-                "question": "An object starts from rest and accelerates at 2 m/s² for 4 seconds. What is its final velocity?",
-                "options": ["4 m/s", "8 m/s", "12 m/s", "16 m/s"],
-                "correctIndex": 1,
-                "explanation": "Using v = u + at: u = 0, a = 2, t = 4 => v = 0 + (2 * 4) = 8 m/s.",
+                "question": f"How are concepts of {clean_title} validated in NCERT experiments?",
+                "options": ["Observation & Data Gathering", "Controlled Laboratory Tests", "Mathematical Derivations", "All of the above"],
+                "correctIndex": 3,
+                "explanation": "Validation requires observation, controlled testing, and mathematical consistency.",
             },
         ],
     }
@@ -2752,13 +2768,13 @@ async def get_chapter_quiz(chapter: str):
 @app.get("/api/user/profile")
 async def get_user_profile():
     return {
-        "name": "Rahul Sharma",
-        "email": "rahul.student@mentora.in",
+        "name": "Student User",
+        "email": "student@mentora.in",
         "grade": 9,
-        "streakDays": 5,
-        "dailyMinsLearned": 24,
+        "streakDays": 0,
+        "dailyMinsLearned": 0,
         "dailyGoalMins": 30,
-        "activeSubject": "Physics",
-        "activeChapter": "Motion",
+        "activeSubject": "Science",
+        "activeChapter": "Overview",
     }
 
