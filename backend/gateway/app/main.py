@@ -2262,55 +2262,255 @@ async def debug_learning_pack_preview(path: str, pack_name: str = "curriculum_pa
 # --- MENTORA STITCH DYNAMIC BACKEND CATALOG & FEATURE ENDPOINTS ---
 
 NCERT_CURRICULUM_DATA: dict[int, list[dict[str, Any]]] = {
+    5: [
+        {"name": "Science", "code": "SCI05", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFF10B981", "icon": "science_outlined"},
+        {"name": "Mathematics", "code": "MAT05", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+    6: [
+        {"name": "Science", "code": "SCI06", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 9, "color": "0xFF10B981", "icon": "science_outlined"},
+        {"name": "Mathematics", "code": "MAT06", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 8, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+    7: [
+        {"name": "Science", "code": "SCI07", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 11, "color": "0xFF10B981", "icon": "science_outlined"},
+        {"name": "Mathematics", "code": "MAT07", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 10, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
+    8: [
+        {"name": "Science", "code": "SCI08", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFF10B981", "icon": "science_outlined"},
+        {"name": "Mathematics", "code": "MAT08", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+    ],
     9: [
-        {"name": "Physics", "code": "PHY09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 11, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 4, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
     10: [
-        {"name": "Physics", "code": "PHY10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 10, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 15, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 4, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 4, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
     11: [
-        {"name": "Physics", "code": "PHY11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Mathematics", "code": "MAT11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 16, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
     12: [
-        {"name": "Physics", "code": "PHY12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Mathematics", "code": "MAT12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
+        {"name": "Physics", "code": "PHY12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF4F46E5", "icon": "science_outlined"},
+        {"name": "Chemistry", "code": "CHE12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF10B981", "icon": "biotech_outlined"},
+        {"name": "Biology", "code": "BIO12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF14B8A6", "icon": "nature_outlined"},
+        {"name": "Mathematics", "code": "MAT12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
     ],
 }
 
-CHAPTERS_DATA: dict[str, list[dict[str, Any]]] = {
-    "Physics": [
+CHAPTERS_BY_GRADE_SUBJECT: dict[tuple[int, str], list[dict[str, Any]]] = {
+    (5, "Science"): [
+        {"number": 1, "title": "Super Senses", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Sense organs in animals", "Sound, vision, and smell"]},
+        {"number": 2, "title": "A Snake Charmer's Story", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Poisonous snakes", "Protection of wildlife"]},
+        {"number": 3, "title": "From Tasting to Digesting", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Taste buds", "Digestive system"]},
+        {"number": 4, "title": "Mangoes Round the Year", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Food preservation", "Spoilage of food"]},
+        {"number": 5, "title": "Seeds and Seeds", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Germination", "Dispersal of seeds"]},
+    ],
+    (5, "Mathematics"): [
+        {"number": 1, "title": "The Fish Tale", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Large numbers", "Speed and distance calculations"]},
+        {"number": 2, "title": "Shapes and Angles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Right angles", "Acute and obtuse angles"]},
+        {"number": 3, "title": "How Many Squares?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Area of grid shapes", "Perimeter"]},
+        {"number": 4, "title": "Parts and Wholes", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Fractions", "Equal shares"]},
+        {"number": 5, "title": "Does it Look the Same?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Symmetry", "Rotational symmetry"]},
+    ],
+    (6, "Science"): [
+        {"number": 1, "title": "Components of Food", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Carbohydrates", "Proteins", "Vitamins", "Balanced Diet"]},
+        {"number": 2, "title": "Sorting Materials into Groups", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Solubility", "Transparency", "Hardness"]},
+        {"number": 3, "title": "Separation of Substances", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Winnowing", "Sieving", "Evaporation", "Filtration"]},
+        {"number": 4, "title": "Getting to Know Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Herbs, Shrubs, Trees", "Root and Stem", "Leaf and Flower"]},
+        {"number": 5, "title": "Body Movements", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Human Skeleton", "Joints", "Gait of Animals"]},
+        {"number": 6, "title": "Motion and Measurement of Distances", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Standard Units", "Linear Motion", "Circular Motion"]},
+        {"number": 7, "title": "Light, Shadows and Reflections", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Opaque Objects", "Shadow Formation", "Pinhole Camera"]},
+        {"number": 8, "title": "Electricity and Circuits", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Electric Cell", "Bulb and Switch", "Conductors and Insulators"]},
+        {"number": 9, "title": "Fun with Magnets", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Magnetic Poles", "Finding Directions", "Attraction and Repulsion"]},
+    ],
+    (6, "Mathematics"): [
+        {"number": 1, "title": "Knowing Our Numbers", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Indian and International Place Value", "Estimation"]},
+        {"number": 2, "title": "Whole Numbers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Number Line", "Properties of Whole Numbers"]},
+        {"number": 3, "title": "Playing with Numbers", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Factors and Multiples", "Prime Numbers", "HCF and LCM"]},
+        {"number": 4, "title": "Basic Geometrical Ideas", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Points, Lines, Rays", "Polygons", "Circles"]},
+        {"number": 5, "title": "Understanding Elementary Shapes", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Measuring Angles", "Triangles", "3D Shapes"]},
+        {"number": 6, "title": "Integers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Positive and Negative Numbers", "Number Line"]},
+        {"number": 7, "title": "Fractions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Proper, Improper, Mixed Fractions", "Equivalent Fractions"]},
+        {"number": 8, "title": "Decimals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Tenths and Hundredths", "Comparing Decimals"]},
+    ],
+    (7, "Science"): [
+        {"number": 1, "title": "Nutrition in Plants", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Photosynthesis", "Autotrophic vs Heterotrophic"]},
+        {"number": 2, "title": "Nutrition in Animals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Digestion in Humans", "Ruminants", "Amoeba"]},
+        {"number": 3, "title": "Heat", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Thermometer", "Conduction, Convection, Radiation"]},
+        {"number": 4, "title": "Acids, Bases and Salts", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Indicators", "Neutralisation in Daily Life"]},
+        {"number": 5, "title": "Physical and Chemical Changes", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Rusting of Iron", "Crystallisation"]},
+        {"number": 6, "title": "Respiration in Organisms", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Aerobic vs Anaerobic Respiration", "Breathing in Animals"]},
+        {"number": 7, "title": "Transportation in Animals and Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Circulatory System", "Excretion in Animals", "Xylem and Phloem"]},
+        {"number": 8, "title": "Reproduction in Plants", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Asexual Reproduction", "Pollination and Fertilisation"]},
+        {"number": 9, "title": "Motion and Time", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Measurement of Time", "Speed-Time Graphs"]},
+        {"number": 10, "title": "Electric Current and Its Effects", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Heating Effect", "Electromagnet"]},
+        {"number": 11, "title": "Light", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Spherical Mirrors", "Lenses", "Rainbow Colours"]},
+    ],
+    (7, "Mathematics"): [
+        {"number": 1, "title": "Integers", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Properties of Multiplication & Division of Integers"]},
+        {"number": 2, "title": "Fractions and Decimals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Multiplication & Division of Fractions and Decimals"]},
+        {"number": 3, "title": "Data Handling", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Mean, Median, Mode", "Double Bar Graphs"]},
+        {"number": 4, "title": "Simple Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Setting up Equations", "Solving Linear Equations"]},
+        {"number": 5, "title": "Lines and Angles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Complementary & Supplementary Angles", "Transversals"]},
+        {"number": 6, "title": "The Triangle and Its Properties", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Exterior Angle Property", "Pythagoras Property"]},
+        {"number": 7, "title": "Comparing Quantities", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Percentages", "Profit & Loss", "Simple Interest"]},
+        {"number": 8, "title": "Rational Numbers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Positive & Negative Rational Numbers", "Standard Form"]},
+        {"number": 9, "title": "Perimeter and Area", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Area of Parallelogram & Triangle", "Circumference of Circle"]},
+        {"number": 10, "title": "Algebraic Expressions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Monomials, Binomials", "Addition & Subtraction"]},
+    ],
+    (8, "Science"): [
+        {"number": 1, "title": "Crop Production and Management", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Preparation of Soil", "Sowing & Irrigation", "Harvesting"]},
+        {"number": 2, "title": "Microorganisms: Friend and Foe", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Commercial Use of Microbes", "Vaccines", "Food Preservation"]},
+        {"number": 3, "title": "Coal and Petroleum", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Fossil Fuels", "Refining of Petroleum", "CNG & LPG"]},
+        {"number": 4, "title": "Combustion and Flame", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Ignition Temperature", "Fire Extinguishers", "Structure of Flame"]},
+        {"number": 5, "title": "Conservation of Plants and Animals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Deforestation", "Biosphere Reserves", "Endemic Species"]},
+        {"number": 6, "title": "Reproduction in Animals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Modes of Reproduction", "Sexual Reproduction", "Metamorphosis"]},
+        {"number": 7, "title": "Reaching the Age of Adolescence", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Puberty & Hormones", "Secondary Sexual Characters"]},
+        {"number": 8, "title": "Force and Pressure", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Contact & Non-Contact Forces", "Atmospheric Pressure"]},
+        {"number": 9, "title": "Friction", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Static & Sliding Friction", "Reducing Friction", "Fluid Friction"]},
+        {"number": 10, "title": "Sound", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Vibrating Bodies", "Amplitude, Frequency, Pitch", "Audible Sounds"]},
+        {"number": 11, "title": "Chemical Effects of Electric Current", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Electroplating", "Conduction in Liquids"]},
+        {"number": 12, "title": "Some Natural Phenomena", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Lightning Safety", "Earthquakes & Seismograph"]},
+        {"number": 13, "title": "Light", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Laws of Reflection", "Multiple Images", "Human Eye Structure"]},
+    ],
+    (8, "Mathematics"): [
+        {"number": 1, "title": "Rational Numbers", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Properties of Rational Numbers", "Additive & Multiplicative Identity"]},
+        {"number": 2, "title": "Linear Equations in One Variable", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Solving Linear Equations", "Word Problems"]},
+        {"number": 3, "title": "Understanding Quadrilaterals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Polygons", "Parallelogram Properties"]},
+        {"number": 4, "title": "Data Handling", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Pie Charts", "Probability Concepts"]},
+        {"number": 5, "title": "Squares and Square Roots", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Square Patterns", "Division Method for Square Root"]},
+        {"number": 6, "title": "Cubes and Cube Roots", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Prime Factorisation for Cube Root"]},
+        {"number": 7, "title": "Comparing Quantities", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Discount, GST, Compound Interest"]},
+        {"number": 8, "title": "Algebraic Expressions and Identities", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Standard Algebraic Identities"]},
+        {"number": 9, "title": "Mensuration", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Area of Trapezium", "Surface Area & Volume"]},
+        {"number": 10, "title": "Exponents and Powers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Negative Exponents", "Laws of Exponents"]},
+        {"number": 11, "title": "Direct and Inverse Proportions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Direct Proportion", "Inverse Proportion"]},
+        {"number": 12, "title": "Factorisation", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Common Factor Method", "Factorisation using Identities"]},
+    ],
+    (9, "Physics"): [
         {"number": 1, "title": "Motion", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Speed", "Velocity", "Acceleration", "Equations of Motion"]},
         {"number": 2, "title": "Force and Laws of Motion", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Inertia", "Newton's First Law", "Momentum", "F=ma"]},
-        {"number": 3, "title": "Gravitation", "status": "locked", "duration": "20 mins", "mastery": 0, "topics": ["Universal Law", "Free Fall", "Mass vs Weight"]},
-        {"number": 4, "title": "Work and Energy", "status": "locked", "duration": "35 mins", "mastery": 0, "topics": ["Kinetic Energy", "Potential Energy", "Power"]},
-        {"number": 5, "title": "Sound", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Wave Nature", "Speed of Sound", "Ultrasound"]},
+        {"number": 3, "title": "Gravitation", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Universal Law", "Free Fall", "Mass vs Weight"]},
+        {"number": 4, "title": "Work and Energy", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Kinetic Energy", "Potential Energy", "Power"]},
+        {"number": 5, "title": "Sound", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Wave Nature", "Speed of Sound", "Ultrasound"]},
     ],
-    "Chemistry": [
+    (9, "Chemistry"): [
         {"number": 1, "title": "Matter in Our Surroundings", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["States of Matter", "Evaporation", "Latent Heat"]},
         {"number": 2, "title": "Is Matter Around Us Pure", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Mixtures", "Solutions", "Separation Techniques"]},
-        {"number": 3, "title": "Atoms and Molecules", "status": "locked", "duration": "40 mins", "mastery": 0, "topics": ["Dalton's Theory", "Atomic Mass", "Mole Concept"]},
-        {"number": 4, "title": "Structure of the Atom", "status": "locked", "duration": "30 mins", "mastery": 0, "topics": ["Electrons", "Protons", "Bohr Model", "Valency"]},
+        {"number": 3, "title": "Atoms and Molecules", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Dalton's Theory", "Atomic Mass", "Mole Concept"]},
+        {"number": 4, "title": "Structure of the Atom", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Electrons", "Protons", "Bohr Model", "Valency"]},
     ],
-    "Biology": [
+    (9, "Biology"): [
         {"number": 1, "title": "The Fundamental Unit of Life", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Cell Membrane", "Organelles", "Nucleus"]},
         {"number": 2, "title": "Tissues", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Plant Tissues", "Animal Tissues", "Xylem & Phloem"]},
-        {"number": 3, "title": "Improvement in Food Resources", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Crop Production", "Nutrient Management"]},
+        {"number": 3, "title": "Improvement in Food Resources", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Crop Production", "Nutrient Management"]},
     ],
-    "Mathematics": [
+    (9, "Mathematics"): [
         {"number": 1, "title": "Number Systems", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Irrational Numbers", "Real Numbers", "Laws of Exponents"]},
         {"number": 2, "title": "Polynomials", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Degree", "Zeroes", "Factor Theorem"]},
-        {"number": 3, "title": "Coordinate Geometry", "status": "locked", "duration": "25 mins", "mastery": 0, "topics": ["Cartesian Plane", "Quadrants", "Plotting Points"]},
-        {"number": 4, "title": "Linear Equations in Two Variables", "status": "locked", "duration": "35 mins", "mastery": 0, "topics": ["Graphing", "Solutions"]},
-    ]
+        {"number": 3, "title": "Coordinate Geometry", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Cartesian Plane", "Quadrants", "Plotting Points"]},
+        {"number": 4, "title": "Linear Equations in Two Variables", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Graphing", "Solutions"]},
+        {"number": 5, "title": "Introduction to Euclid's Geometry", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Axioms and Postulates"]},
+        {"number": 6, "title": "Lines and Angles", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Intersecting Lines", "Parallel Lines & Transversals"]},
+        {"number": 7, "title": "Triangles", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Congruence Criteria", "Inequalities in a Triangle"]},
+        {"number": 8, "title": "Quadrilaterals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Parallelogram Theorems", "Mid-point Theorem"]},
+        {"number": 9, "title": "Circles", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Angle Subtended by Arc", "Cyclic Quadrilaterals"]},
+        {"number": 10, "title": "Heron's Formula", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Area of Triangle Formula"]},
+        {"number": 11, "title": "Surface Areas and Volumes", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Cone", "Sphere", "Hemisphere"]},
+        {"number": 12, "title": "Statistics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Bar Graphs", "Histograms", "Frequency Polygon"]},
+    ],
+
+    # Grade 10
+    (10, "Physics"): [
+        {"number": 1, "title": "Light - Reflection and Refraction", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Mirror Formula", "Refractive Index", "Lens Formula"]},
+        {"number": 2, "title": "Human Eye and Colourful World", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Defects of Vision", "Dispersion", "Atmospheric Refraction"]},
+        {"number": 3, "title": "Electricity", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Ohm's Law", "Resistors in Series & Parallel", "Joule's Law"]},
+        {"number": 4, "title": "Magnetic Effects of Electric Current", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Magnetic Field Lines", "Solenoid", "Fleming's Left Hand Rule"]},
+    ],
+    (10, "Chemistry"): [
+        {"number": 1, "title": "Chemical Reactions and Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Balancing Equations", "Types of Chemical Reactions"]},
+        {"number": 2, "title": "Acids, Bases and Salts", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["pH Scale", "Plaster of Paris", "Bleaching Powder"]},
+        {"number": 3, "title": "Metals and Non-Metals", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Reactivity Series", "Ionic Compounds", "Metallurgy"]},
+        {"number": 4, "title": "Carbon and Its Compounds", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Covalent Bonding", "Homologous Series", "Ethanol & Ethanoic Acid"]},
+    ],
+    (10, "Biology"): [
+        {"number": 1, "title": "Life Processes", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Nutrition", "Respiration", "Transportation", "Excretion"]},
+        {"number": 2, "title": "Control and Coordination", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Nervous System", "Reflex Arc", "Plant Hormones"]},
+        {"number": 3, "title": "How do Organisms Reproduce?", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Asexual vs Sexual", "Human Reproductive System", "Reproductive Health"]},
+        {"number": 4, "title": "Heredity and Evolution", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mendelian Inheritance", "Monohybrid & Dihybrid Cross"]},
+        {"number": 5, "title": "Our Environment", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Ecosystem", "Food Chain & Web", "Ozone Depletion"]},
+    ],
+    (10, "Mathematics"): [
+        {"number": 1, "title": "Real Numbers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Fundamental Theorem of Arithmetic", "Proof of Irrationality"]},
+        {"number": 2, "title": "Polynomials", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Geometrical Meaning of Zeroes", "Relationship between Zeroes & Coefficients"]},
+        {"number": 3, "title": "Pair of Linear Equations in Two Variables", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Graphical Method", "Substitution & Elimination Methods"]},
+        {"number": 4, "title": "Quadratic Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Standard Form", "Quadratic Formula", "Nature of Roots"]},
+        {"number": 5, "title": "Arithmetic Progressions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["nth term of AP", "Sum of first n terms"]},
+        {"number": 6, "title": "Triangles", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Basic Proportionality Theorem", "Criteria for Similarity"]},
+        {"number": 7, "title": "Coordinate Geometry", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Distance Formula", "Section Formula"]},
+        {"number": 8, "title": "Introduction to Trigonometry", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Trigonometric Ratios", "Identities"]},
+        {"number": 9, "title": "Some Applications of Trigonometry", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Heights and Distances", "Angles of Elevation & Depression"]},
+        {"number": 10, "title": "Circles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Tangent to a Circle", "Tangents from External Point"]},
+        {"number": 11, "title": "Areas Related to Circles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Area of Sector & Segment"]},
+        {"number": 12, "title": "Surface Areas and Volumes", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Combination of Solids", "Volume of Combined Solids"]},
+        {"number": 13, "title": "Statistics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mean, Median, Mode of Grouped Data"]},
+        {"number": 14, "title": "Probability", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Classical Definition of Probability"]},
+    ],
+
+    # Grade 11
+    (11, "Physics"): [
+        {"number": 1, "title": "Units and Measurements", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["SI Units", "Dimensional Analysis", "Errors in Measurement"]},
+        {"number": 2, "title": "Motion in a Straight Line", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Position-Time Graphs", "Kinematic Equations"]},
+        {"number": 3, "title": "Motion in a Plane", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Vectors", "Projectile Motion", "Uniform Circular Motion"]},
+        {"number": 4, "title": "Laws of Motion", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Newton's Laws", "Conservation of Momentum", "Friction"]},
+        {"number": 5, "title": "Work, Energy and Power", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Work-Energy Theorem", "Potential Energy of Spring", "Collisions"]},
+    ],
+    (11, "Chemistry"): [
+        {"number": 1, "title": "Some Basic Concepts of Chemistry", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mole Concept", "Molarity & Molality", "Stoichiometry"]},
+        {"number": 2, "title": "Structure of Atom", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Bohr's Model", "Quantum Numbers", "Aufbau Principle"]},
+        {"number": 3, "title": "Classification of Elements", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Periodic Trends", "Ionisation Enthalpy", "Electronegativity"]},
+    ],
+    (11, "Biology"): [
+        {"number": 1, "title": "The Living World", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Taxonomic Hierarchy", "Binomial Nomenclature"]},
+        {"number": 2, "title": "Biological Classification", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Five Kingdom Classification", "Monera, Protista, Fungi"]},
+        {"number": 3, "title": "Plant Kingdom", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Algae, Bryophytes, Pteridophytes, Gymnosperms"]},
+    ],
+    (11, "Mathematics"): [
+        {"number": 1, "title": "Sets", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Venn Diagrams", "Union and Intersection"]},
+        {"number": 2, "title": "Relations and Functions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Cartesian Product", "Domain and Range"]},
+        {"number": 3, "title": "Trigonometric Functions", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Radian Measure", "Trigonometric Identities"]},
+    ],
+
+    # Grade 12
+    (12, "Physics"): [
+        {"number": 1, "title": "Electric Charges and Fields", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Coulomb's Law", "Electric Dipole", "Gauss's Law"]},
+        {"number": 2, "title": "Electrostatic Potential and Capacitance", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Equipotential Surfaces", "Capacitors in Series & Parallel"]},
+        {"number": 3, "title": "Current Electricity", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Drift Velocity", "Kirchhoff's Rules", "Wheatstone Bridge"]},
+    ],
+    (12, "Chemistry"): [
+        {"number": 1, "title": "Solutions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Raoult's Law", "Colligative Properties", "Osmotic Pressure"]},
+        {"number": 2, "title": "Electrochemistry", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Nernst Equation", "Kohlrausch Law", "Batteries"]},
+        {"number": 3, "title": "Chemical Kinetics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Rate of Reaction", "Order & Molecularity", "Arrhenius Equation"]},
+    ],
+    (12, "Biology"): [
+        {"number": 1, "title": "Sexual Reproduction in Flowering Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Microsporogenesis", "Double Fertilisation"]},
+        {"number": 2, "title": "Human Reproduction", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Gametogenesis", "Menstrual Cycle", "Implantation"]},
+        {"number": 3, "title": "Principles of Inheritance and Variation", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Mendelian Genetics", "Sex Determination", "Genetic Disorders"]},
+    ],
+    (12, "Mathematics"): [
+        {"number": 1, "title": "Relations and Functions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Equivalence Relations", "One-One & Onto Functions"]},
+        {"number": 2, "title": "Inverse Trigonometric Functions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Principal Value Branches", "Properties"]},
+        {"number": 3, "title": "Matrices", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Matrix Operations", "Transpose", "Symmetric & Skew Symmetric"]},
+        {"number": 4, "title": "Determinants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Area of Triangle", "Adjoint and Inverse of Matrix"]},
+        {"number": 5, "title": "Continuity and Differentiability", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Chain Rule", "Logarithmic Differentiation", "Second Order Derivatives"]},
+    ],
 }
 
 
@@ -2323,12 +2523,19 @@ async def get_catalog_subjects(grade: int = Query(9, ge=5, le=12)):
 @app.get("/catalog/chapters")
 async def get_catalog_chapters(subject: str = Query("Physics"), grade: int = Query(9)):
     normalized_sub = "Physics"
-    for s in ["Physics", "Chemistry", "Biology", "Mathematics"]:
+    for s in ["Physics", "Chemistry", "Biology", "Science", "Mathematics"]:
         if s.lower() in subject.lower():
             normalized_sub = s
             break
-    chapters = CHAPTERS_DATA.get(normalized_sub, CHAPTERS_DATA["Physics"])
-    return chapters
+
+    if (grade, normalized_sub) in CHAPTERS_BY_GRADE_SUBJECT:
+        return CHAPTERS_BY_GRADE_SUBJECT[(grade, normalized_sub)]
+
+    for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
+        if s == normalized_sub:
+            return ch_list
+
+    return CHAPTERS_BY_GRADE_SUBJECT[(9, "Physics")]
 
 
 @app.get("/api/v1/simulations/{chapter}")
