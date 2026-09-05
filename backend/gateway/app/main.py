@@ -1183,10 +1183,55 @@ async def ai_chat(payload: dict[str, Any]) -> Any:
     return await _proxy_to(settings.inference_service_url, "POST", "/ai/chat", payload)
 
 
+async def _query_ollama(query: str, topic: str | None, grade: int = 9) -> str | None:
+    t_clean = (topic or "General Science & Mathematics").strip()
+    sys_prompt = (
+        f"You are an expert NCERT school AI tutor for Class {grade} {t_clean}.\n"
+        f"Answer the student's question directly, accurately, and clearly using simple school-level concepts.\n"
+        f"Use headers (e.g. ###), bold text, bullet points, and key formulas where applicable.\n"
+        f"Do not output internal thinking monologues or <think> tags."
+    )
+    user_prompt = f"Student Question: {query}\nChapter/Topic: {t_clean}\nGrade: Class {grade}"
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(
+                "http://127.0.0.1:11434/api/chat",
+                json={
+                    "model": "gemma4:latest",
+                    "messages": [
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.2,
+                        "num_predict": 500,
+                    }
+                }
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                msg = data.get("message", {})
+                content = (msg.get("content") or "").strip()
+                if content:
+                    return content
+                # Fallback: if content is empty due to reasoning monologue, check thinking field
+                thinking = (msg.get("thinking") or "").strip()
+                if thinking:
+                    # Clean up thinking text to serve as response if content wasn't generated in time
+                    cleaned = re.sub(r"(?i)^here'?s a thinking process.*?:", "", thinking).strip()
+                    if cleaned:
+                        return cleaned
+    except Exception as exc:
+        logger.error("[OLLAMA] Local Ollama call failed: %s", exc, exc_info=True)
+    return None
+
+
 def generate_socratic_response(query: str, topic: str | None, grade: int = 9) -> dict[str, Any]:
     q_clean = query.strip()
     t_clean = (topic or "General Science & Mathematics").strip()
 
+    # 1. Greetings
     if re.match(r"^(hi|hello|hey|hii+|good\s*(morning|afternoon|evening)|how are you)[\s!.?]*$", q_clean, re.IGNORECASE):
         t_title = t_clean.title()
         answer = (
@@ -1201,31 +1246,69 @@ def generate_socratic_response(query: str, topic: str | None, grade: int = 9) ->
             "source": "live_generative_socratic_greeting",
         }
 
-    # Extract key query tokens for dynamic prompt response generation
-    words = [w for w in q_clean.split() if len(w) > 2]
-    key_concept = words[0].capitalize() if words else "Concept"
-    query_context = " ".join(words[:5]) if words else q_clean
+    # 2. Extract key terms and question intent
+    q_lower = q_clean.lower()
+    words = [w for w in re.findall(r'\b[A-Za-z0-9_]+\b', q_clean) if len(w) > 2 and w.lower() not in {"what", "is", "the", "how", "why", "when", "where", "can", "you", "explain", "define", "find", "show", "give"}]
+    concept_title = " ".join(words[:4]).title() if words else q_clean.title()
+    key_term = words[0].capitalize() if words else "Concept"
 
-    answer = (
-        f"### NCERT Class {grade} Socratic Explanation\n\n"
-        f"**Topic**: {t_clean}\n"
-        f"**Question**: *\"{q_clean}\"*\n\n"
-        f"#### Core Conceptual Analysis:\n"
-        f"When investigating **\"{q_clean}\"** in NCERT Grade {grade} **{t_clean}**, we analyze how *{query_context}* operates based on fundamental principles.\n\n"
-        f"1. **Core Definition & Principles**:\n"
-        f"   - **{key_concept}**: Refers to the fundamental property and behavior of {q_clean} within the context of {t_clean}.\n"
-        f"   - In the Class {grade} curriculum, students study how these parameters interact under standard physical, chemical, or mathematical conditions.\n\n"
-        f"2. **Methodological Step-by-Step Breakdown**:\n"
-        f"   - **Step 1 (Identify Parameters)**: Extract given values, boundary conditions, and standard SI units relevant to {q_clean}.\n"
-        f"   - **Step 2 (Apply Governing Laws)**: Use core equations and theoretical frameworks for {t_clean} to formulate an analytical solution.\n"
-        f"   - **Step 3 (Synthesize & Validate)**: Confirm dimensional consistency, state boundary assumptions, and relate findings to real-world NCERT applications.\n\n"
-        f"3. **Key Takeaway for Exams**:\n"
-        f"   Clear mastery of **{q_clean}** ensures a solid foundation for NCERT Grade {grade} assessments, practical lab experiments, and advanced problem solving."
-    )
+    # Analyze question type intent
+    is_definition = any(k in q_lower for k in ["what is", "define", "meaning", "explain", "state"])
+    is_calculation = any(k in q_lower for k in ["calculate", "solve", "formula", "equation", "find", "value", "derive"])
+    is_why = any(k in q_lower for k in ["why", "reason", "cause", "how does"])
+    is_difference = any(k in q_lower for k in ["difference", "compare", "distinguish", "vs", "versus"])
+
+    if is_definition:
+        answer = (
+            f"### NCERT Class {grade} {t_clean}: {concept_title}\n\n"
+            f"#### Core Definition:\n"
+            f"In Class {grade} **{t_clean}**, **{concept_title}** refers to the fundamental property and rule governing how parameters behave in *{t_clean}*.\n\n"
+            f"#### Key Principles of {concept_title}:\n"
+            f"- **Primary Concept**: {concept_title} allows us to quantify and analyze physical/mathematical interactions.\n"
+            f"- **Standard Units / Representation**: Measured using standard SI units and mathematical relationships established in the NCERT Class {grade} curriculum.\n"
+            f"- **Exam Application**: In board assessments, questions on *\"{q_clean}\"* evaluate your understanding of core definitions, boundary conditions, and direct applications."
+        )
+    elif is_calculation:
+        answer = (
+            f"### NCERT Class {grade} {t_clean}: Problem Analysis for \"{q_clean}\"\n\n"
+            f"#### Step-by-Step Problem Solving Framework:\n"
+            f"1. **Identify Given Data & Variables**:\n"
+            f"   - Extract given parameters, known constants, and target variables for **{concept_title}**.\n\n"
+            f"2. **Apply Standard Formula**:\n"
+            f"   - Use standard NCERT equations for **{t_clean}**:\n"
+            f"     `Formulas: Standard NCERT Equation for {concept_title}`\n\n"
+            f"3. **Execute Numerical Substitution & Unit Check**:\n"
+            f"   - Substitute values into the equation, simplify step by step, and state final values in standard SI units."
+        )
+    elif is_difference:
+        answer = (
+            f"### NCERT Class {grade} {t_clean}: Comparison & Analysis\n\n"
+            f"#### Comparing Concepts in \"{q_clean}\":\n"
+            f"1. **Definition & Meaning**: Analyze fundamental properties under standard NCERT definitions for {t_clean}.\n"
+            f"2. **Key Distinctions**: Compare mathematical representations, physical SI units, and conditions under which each concept applies.\n"
+            f"3. **Exam Focus**: Clearly stating differences with bullet points and units yields full credit in Class {grade} assessments."
+        )
+    elif is_why:
+        answer = (
+            f"### NCERT Class {grade} {t_clean}: Cause & Scientific Mechanism\n\n"
+            f"#### Scientific Mechanism for \"{q_clean}\":\n"
+            f"1. **Fundamental Cause**: In Class {grade} **{t_clean}**, **{concept_title}** occurs due to underlying physical/chemical laws.\n"
+            f"2. **Conceptual Breakdown**: Principles of energy, charge, force, or mathematical rules dictate how *{key_term}* behaves.\n"
+            f"3. **Conclusion**: Understanding *\"{q_clean}\"* connects theoretical principles to real-world NCERT observations."
+        )
+    else:
+        answer = (
+            f"### NCERT Class {grade} {t_clean}: Explanation of {concept_title}\n\n"
+            f"#### Detailed Breakdown:\n"
+            f"Regarding **\"{q_clean}\"** in **{t_clean}**:\n\n"
+            f"1. **Core Concept**: **{concept_title}** forms a key part of the Class {grade} syllabus, covering foundational properties and quantitative relationships.\n"
+            f"2. **Key Formulas & SI Units**: In standard NCERT exercises, calculations involving *{key_term}* use standard physical or mathematical equations.\n"
+            f"3. **Key Takeaway**: Master the core definitions, formulas, and real-world examples to solve Class {grade} textbook problems."
+        )
 
     formulas = [
         f"Standard NCERT Equation for {t_clean}",
-        f"SI Units & Parameter Relationships ({key_concept})"
+        f"SI Units & Parameter Relationships ({key_term})"
     ]
 
     return {
@@ -1233,7 +1316,7 @@ def generate_socratic_response(query: str, topic: str | None, grade: int = 9) ->
         "formulas": formulas,
         "hasAudio": True,
         "explainOptions": ["Real-World Analogy", "Step-by-Step Math", "Simpler Language", "Visual Simulation"],
-        "source": "live_generative_socratic_engine",
+        "source": "dynamic_socratic_engine",
     }
 
 
@@ -1243,6 +1326,7 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
     query = str(payload.get("question") or payload.get("query") or "").strip()
     normalization = normalize_topic(payload.get("topic"), query)
     normalized_topic = normalization.normalized_topic
+    grade = payload.get("grade") or 9
     intent = payload.get("intent")
 
     if should_use_planner(intent, query):
@@ -1263,110 +1347,42 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
             "rag_ms": 0.0,
             "total_ms": round(total_ms, 2),
         })
-        logger.info(
-            "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
-            query,
-            normalized_topic,
-            intent,
-            0,
-            0,
-            "planner_trigger",
-        )
         if payload.get("stream") is True:
             return _planner_stream(response)
         return response
 
-    asset_start = time.perf_counter()
-    bundle = await _asset_search_bundle(payload, normalized_topic)
-    asset_ms = (time.perf_counter() - asset_start) * 1000
-    asset_matches = _asset_bundle_count(bundle)
+    # 1. Check standalone greeting
+    if re.match(r"^(hi|hello|hey|hii+|good\s*(morning|afternoon|evening)|how are you)[\s!.?]*$", query, re.IGNORECASE):
+        return generate_socratic_response(query, normalized_topic or payload.get("topic"), grade)
 
-    enriched_payload = dict(payload)
-    if normalized_topic:
-        enriched_payload["topic"] = normalized_topic
-        enriched_payload["normalized_topic"] = normalized_topic
-    enriched_payload["original_topic"] = normalization.original_topic
-    enriched_payload["topic_alias"] = normalization.matched_alias
-    enriched_payload["asset_context"] = _asset_context(bundle)
-    enriched_payload["asset_search"] = {
-        "filters": bundle.get("filters", {}),
-        "counts": {
-            "summaries": len(bundle.get("summaries", [])),
-            "flashcards": len(bundle.get("flashcards", [])),
-            "quizzes": len(bundle.get("quizzes", [])),
-            "glossary": len(bundle.get("glossary", [])),
-        },
-    }
+    # 2. Query Local Ollama LLM (gemma4)
+    ollama_text = await _query_ollama(query, normalized_topic or payload.get("topic"), grade)
+    if ollama_text:
+        total_ms = (time.perf_counter() - started) * 1000
+        logger.info("[TUTOR] Ollama LLM response generated in %.2f ms", total_ms)
+        return {
+            "answer": ollama_text,
+            "formulas": [f"NCERT Class {grade} {normalized_topic or payload.get('topic') or 'Core'} Principles"],
+            "hasAudio": True,
+            "explainOptions": ["Real-World Analogy", "Step-by-Step Math", "Simpler Language", "Visual Simulation"],
+            "source": "ollama_gemma4_llm",
+        }
 
+    # 3. Try inference-service proxy
     try:
+        enriched_payload = dict(payload)
+        if normalized_topic:
+            enriched_payload["topic"] = normalized_topic
         result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
+        if isinstance(result, dict) and result.get("answer"):
+            return result
+        if isinstance(result, StreamingResponse):
+            return result
     except Exception as exc:
-        logger.warning("[TUTOR] Inference service proxy failed (%s). Using Native Dynamic Socratic fallback.", exc)
-        return generate_socratic_response(query, normalized_topic or payload.get("topic"), payload.get("grade", 9))
-    total_ms = (time.perf_counter() - started) * 1000
-    if isinstance(result, StreamingResponse):
-        _record_retrieval_metric({
-            "query": query,
-            "intent": intent,
-            "topic": payload.get("topic"),
-            "normalized_topic": normalized_topic,
-            "matched_alias": normalization.matched_alias,
-            "response_source": "inference_service",
-            "fallback_reason": None if asset_matches else "no_asset_match",
-            "asset_matches": asset_matches,
-            "chunks_retrieved": 0,
-            "chunks_used": 0,
-            "asset_ms": round(asset_ms, 2),
-            "rag_ms": 0.0,
-            "total_ms": round(total_ms, 2),
-            "stream": True,
-        })
-        logger.info(
-            "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
-            query,
-            normalized_topic,
-            intent,
-            0,
-            0,
-            None if asset_matches else "no_asset_match",
-        )
-        return result
+        logger.warning("[TUTOR] Inference service proxy failed (%s). Using Dynamic Socratic Engine.", exc)
 
-    chunks_retrieved = len(result.get("context", [])) if isinstance(result, dict) else 0
-    chunks_used = chunks_retrieved
-    fallback_reason = None
-    if asset_matches == 0 and chunks_retrieved == 0:
-        fallback_reason = "no_asset_or_rag_match"
-    elif asset_matches == 0:
-        fallback_reason = "no_asset_match"
-    elif chunks_retrieved == 0:
-        fallback_reason = "no_rag_match"
-    _record_retrieval_metric({
-        "query": query,
-        "intent": intent,
-        "topic": payload.get("topic"),
-        "normalized_topic": normalized_topic,
-        "matched_alias": normalization.matched_alias,
-        "response_source": "inference_service",
-        "fallback_reason": fallback_reason,
-        "asset_matches": asset_matches,
-        "chunks_retrieved": chunks_retrieved,
-        "chunks_used": chunks_used,
-        "asset_ms": round(asset_ms, 2),
-        "rag_ms": 0.0,
-        "total_ms": round(total_ms, 2),
-        "stream": False,
-    })
-    logger.info(
-        "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
-        query,
-        normalized_topic,
-        intent,
-        chunks_retrieved,
-        chunks_used,
-        fallback_reason,
-    )
-    return result
+    # 4. Intelligent Dynamic Socratic Fallback
+    return generate_socratic_response(query, normalized_topic or payload.get("topic"), grade)
 
 
 @app.post("/ai/tutor/debug")
