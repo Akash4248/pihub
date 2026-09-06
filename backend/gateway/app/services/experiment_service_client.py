@@ -78,8 +78,8 @@ class ExperimentServiceClient:
             logger.info("[EXPERIMENT_GATEWAY] SERVICE_HEALTH healthy=%s status=%s", healthy, response.status_code)
             return {"healthy": healthy, "status_code": response.status_code}
         except Exception as exc:
-            logger.error("[EXPERIMENT_GATEWAY] SERVICE_HEALTH healthy=false error=%s", exc)
-            return {"healthy": False, "error": str(exc)}
+            logger.info("[EXPERIMENT_GATEWAY] SERVICE_HEALTH healthy=false (optional service offline: %s)", exc)
+            return {"healthy": False, "error": str(exc), "status": "optional_service_offline"}
 
     async def get_experiments(self, params: dict[str, Any] | None = None) -> Any:
         return await self._request("GET", "/experiments", params=params)

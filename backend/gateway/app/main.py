@@ -1183,13 +1183,59 @@ async def ai_chat(payload: dict[str, Any]) -> Any:
     return await _proxy_to(settings.inference_service_url, "POST", "/ai/chat", payload)
 
 
+def _clean_ollama_monologue(raw_text: str) -> str | None:
+    if not raw_text or not raw_text.strip():
+        return None
+    text = raw_text.strip()
+    
+    # 1. Extract starting from markdown header if present
+    header_match = re.search(r'((?:###|##)\s+.*)', text, re.DOTALL)
+    if header_match:
+        text = header_match.group(1).strip()
+    else:
+        # 2. Filter out paragraphs containing planning monologue
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        good_paragraphs = []
+        for p in paragraphs:
+            if re.search(r'(?i)^\s*(?:\d+\.|\*|-)?\s*\*\*(Analyze|Determine|Identify|Structure|Draft|Goal|Tone|Target|Core)', p):
+                continue
+            if re.search(r'(?i)^(Thinking Process|Here\'?s a plan|Drafting response)', p):
+                continue
+            good_paragraphs.append(p)
+            
+        if good_paragraphs:
+            text = '\n\n'.join(good_paragraphs)
+            if re.search(r'(?i)\bAnalyze the Request\b', text):
+                return None
+        else:
+            return None
+
+    # Ensure response does not end abruptly mid-sentence, at abbreviations, trailing bullet markers, or headings
+    if text:
+        text = re.sub(r'(?m)\n+#{1,6}\s*[\d\w\s\.\-]*$', '', text).strip()
+        text = re.sub(r'(?m)\n+\s*(?:\d+\.|\*|-)\s*$', '', text).strip()
+        
+        abbrevs = ("e.", "e.g.", "i.e.", "vs.", "etc.", "dr.", "mr.", "ms.", "prof.", "approx.", "fig.")
+        ends_with_abbrev = any(text.lower().endswith(ab) for ab in abbrevs)
+        
+        if text[-1] not in ('.', '!', '?') or ends_with_abbrev:
+            matches = list(re.finditer(r'[\.\!\?](?=\s|\n|$)', text[:len(text)-2]))
+            if matches:
+                last_pos = matches[-1].start()
+                if last_pos > 100:
+                    text = text[:last_pos + 1].strip()
+                    
+        text = re.sub(r'(?m)\n+\s*(?:\d+\.|\*|-)\s*$', '', text).strip()
+
+    return text if text else None
+
 async def _query_ollama(query: str, topic: str | None, grade: int = 9) -> str | None:
     t_clean = (topic or "General Science & Mathematics").strip()
     sys_prompt = (
         f"You are an expert NCERT school AI tutor for Class {grade} {t_clean}.\n"
         f"Answer the student's question directly, accurately, and clearly using simple school-level concepts.\n"
         f"Use headers (e.g. ###), bold text, bullet points, and key formulas where applicable.\n"
-        f"Do not output internal thinking monologues or <think> tags."
+        f"CRITICAL: Start your response IMMEDIATELY with '### {t_clean} Explained'. Absolutely NO planning, NO '1. Analyze the request', NO thinking steps."
     )
     user_prompt = f"Student Question: {query}\nChapter/Topic: {t_clean}\nGrade: Class {grade}"
     try:
@@ -1204,8 +1250,8 @@ async def _query_ollama(query: str, topic: str | None, grade: int = 9) -> str | 
                     ],
                     "stream": False,
                     "options": {
-                        "temperature": 0.2,
-                        "num_predict": 250,
+                        "temperature": 0.1,
+                        "num_predict": 650,
                     }
                 }
             )
@@ -1213,18 +1259,9 @@ async def _query_ollama(query: str, topic: str | None, grade: int = 9) -> str | 
                 data = resp.json()
                 msg = data.get("message", {})
                 content = (msg.get("content") or "").strip()
-                if content:
-                    return content
-                # Fallback: if content is empty due to reasoning monologue, check thinking field
                 thinking = (msg.get("thinking") or "").strip()
-                if thinking:
-                    # Strip out reasoning thoughts and extract actual answer starting from headers/sections
-                    header_match = re.search(r'(###\s+.*)', thinking, re.DOTALL)
-                    if header_match:
-                        return header_match.group(1).strip()
-                    cleaned = re.sub(r"(?i)^(here'?s a\s+)?thinking process.*?\n\n", "", thinking, flags=re.DOTALL).strip()
-                    if cleaned:
-                        return cleaned
+                raw_text = content if content else thinking
+                return _clean_ollama_monologue(raw_text)
     except Exception as exc:
         logger.error("[OLLAMA] Local Ollama call failed: %s", exc, exc_info=True)
     return None
@@ -1302,7 +1339,10 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
             enriched_payload["topic"] = normalized_topic
         result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
         if isinstance(result, dict) and result.get("answer"):
-            return result
+            cleaned_ans = _clean_ollama_monologue(result["answer"])
+            if cleaned_ans:
+                result["answer"] = cleaned_ans
+                return result
         if isinstance(result, StreamingResponse):
             return result
     except Exception as exc:
@@ -1311,7 +1351,7 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
     # 4. Explicit Timeout / Failure Error - NEVER return fake template
     raise HTTPException(
         status_code=504,
-        detail="Backend LLM timed out or is unavailable. Please load a local .gguf model or retry."
+        detail="Backend LLM timed out or returned incomplete planning output. Please retry."
     )
 
 
@@ -2615,20 +2655,22 @@ async def get_catalog_subjects(grade: int = Query(9, ge=5, le=12)):
 
 @app.get("/catalog/chapters")
 async def get_catalog_chapters(subject: str = Query("Physics"), grade: int = Query(9)):
-    normalized_sub = "Physics"
-    for s in ["Physics", "Chemistry", "Biology", "Science", "Mathematics"]:
-        if s.lower() in subject.lower():
-            normalized_sub = s
-            break
-
-    if (grade, normalized_sub) in CHAPTERS_BY_GRADE_SUBJECT:
-        return CHAPTERS_BY_GRADE_SUBJECT[(grade, normalized_sub)]
-
+    # 1. Exact match for (grade, subject)
     for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
-        if s == normalized_sub:
+        if g == grade and s.lower() == subject.lower():
             return ch_list
 
-    return CHAPTERS_BY_GRADE_SUBJECT[(9, "Physics")]
+    # 2. Partial subject match within requested grade
+    for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
+        if g == grade and (s.lower() in subject.lower() or subject.lower() in s.lower()):
+            return ch_list
+
+    # 3. Partial subject match across any grade
+    for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
+        if s.lower() in subject.lower() or subject.lower() in s.lower():
+            return ch_list
+
+    return []
 
 
 
@@ -2654,19 +2696,45 @@ async def get_chapter_simulation(chapter: str):
 @app.get("/videos/{chapter}")
 async def get_chapter_videos(chapter: str):
     clean_title = chapter.replace("_", " ").title()
+    norm_key = chapter.lower().replace("-", "_")
+
+    video_url_map = {
+        "quadratic_equations": "https://www.youtube.com/watch?v=a-P0gY-w90M",
+        "motion": "https://www.youtube.com/watch?v=tBmavvMwu68",
+        "light_reflection_and_refraction": "https://www.youtube.com/watch?v=Unv471yJc5M",
+        "chemical_reactions_and_equations": "https://www.youtube.com/watch?v=g3E-J6zK_4c",
+        "acids_bases_and_salts": "https://www.youtube.com/watch?v=lDK9QqI3a70",
+        "metals_and_non_metals": "https://www.youtube.com/watch?v=6h2G1u3t2fE",
+        "carbon_and_its_compounds": "https://www.youtube.com/watch?v=Z8m-2Vw_t3k",
+        "electricity": "https://www.youtube.com/watch?v=2k-n4W548J8",
+        "magnetic_effects_of_electric_current": "https://www.youtube.com/watch?v=N4k_KxYV2k8",
+        "gravitation": "https://www.youtube.com/watch?v=n10vV2w6y7I",
+        "work_and_energy": "https://www.youtube.com/watch?v=gB6-xN0dK3w",
+        "sound": "https://www.youtube.com/watch?v=Q3oItpVa9fs",
+        "life_processes": "https://www.youtube.com/watch?v=W32qK1v12v8",
+        "real_numbers": "https://www.youtube.com/watch?v=q6gC1t27iC0",
+        "polynomials": "https://www.youtube.com/watch?v=2vT714K-C8M",
+        "triangles": "https://www.youtube.com/watch?v=Q4W5v_3M220",
+        "atoms_and_molecules": "https://www.youtube.com/watch?v=z166tU_x1b0",
+        "matter_in_our_surroundings": "https://www.youtube.com/watch?v=p8Xy4J103-M",
+    }
+
+    v_url = video_url_map.get(norm_key, f"https://www.youtube.com/results?search_query=NCERT+{quote(clean_title)}")
+
     return {
         "chapter": chapter,
         "currentVideo": {
             "id": f"v_{chapter}_01",
-            "youtubeId": "tBmavvMwu68",
-            "title": f"NCERT Explanation: {clean_title}",
+            "videoUrl": v_url,
+            "title": f"NCERT Full Chapter Explanation: {clean_title}",
             "channel": "NCERT Official",
-            "duration": "15:00",
+            "duration": "18:30",
+            "description": f"Complete concept walkthrough and solved NCERT exercise problems for {clean_title}.",
         },
         "playlist": [
-            {"id": "v1", "title": f"1. Introduction to {clean_title}", "duration": "05:00", "timestamp": "00:00"},
-            {"id": "v2", "title": f"2. Core Principles & Formulas of {clean_title}", "duration": "05:00", "timestamp": "05:00"},
-            {"id": "v3", "title": f"3. Solved Examples & NCERT Exercises", "duration": "05:00", "timestamp": "10:00"},
+            {"id": "v1", "videoUrl": v_url, "title": f"1. Detailed Concepts & Theory of {clean_title}", "channel": "NCERT Official", "duration": "08:15"},
+            {"id": "v2", "videoUrl": v_url, "title": f"2. Core Formulas & Derivations of {clean_title}", "channel": "NCERT Official", "duration": "05:15"},
+            {"id": "v3", "videoUrl": v_url, "title": f"3. Solved Examples & NCERT Exercises", "channel": "NCERT Official", "duration": "05:00"},
         ],
         "islAvailable": True,
         "islVideoId": f"isl_{chapter}",
@@ -2682,30 +2750,79 @@ async def get_chapter_quiz(chapter: str):
     clean_title = chapter.replace("_", " ").title()
     return {
         "chapter": chapter,
-        "title": f"Diagnostic Assessment: {clean_title}",
-        "totalQuestions": 3,
+        "title": f"NCERT Mastery Quiz: {clean_title}",
+        "totalQuestions": 10,
         "userMastery": 0,
         "questions": [
             {
                 "id": "q1",
-                "question": f"What is the primary conceptual principle studied in {clean_title}?",
-                "options": ["Fundamental Properties", "Derived Equations", "Practical Applications", "All of the above"],
+                "question": f"What is the core physical or mathematical principle investigated in {clean_title}?",
+                "options": ["Fundamental System Properties", "Quantitative Relationships", "Applied Practical Models", "All of the above"],
                 "correctIndex": 3,
-                "explanation": f"{clean_title} encompasses fundamental properties, equations, and practical applications.",
+                "explanation": f"{clean_title} covers foundational definitions, mathematical relationships, and real-world applications.",
             },
             {
                 "id": "q2",
-                "question": f"Which parameter is essential for analyzing {clean_title}?",
-                "options": ["SI Unit Measurements", "Boundary Conditions", "Both A and B", "None of the above"],
-                "correctIndex": 2,
-                "explanation": "Both SI unit measurements and boundary conditions are essential for analytical solutions.",
+                "question": f"Which standard SI unit or measurement dimension applies when evaluating concepts in {clean_title}?",
+                "options": ["Standard Metric Units (m, kg, s)", "Dimensionless Ratios", "Derived Operational Units", "Context-dependent SI units"],
+                "correctIndex": 3,
+                "explanation": "Units are determined by the specific physical variables and formulas involved in the topic.",
             },
             {
                 "id": "q3",
-                "question": f"How are concepts of {clean_title} validated in NCERT experiments?",
-                "options": ["Observation & Data Gathering", "Controlled Laboratory Tests", "Mathematical Derivations", "All of the above"],
+                "question": f"In NCERT experiments on {clean_title}, what step ensures experimental precision?",
+                "options": ["Random data sampling", "Controlling environmental variables and repetitions", "Ignoring minor outliers", "Relying strictly on theoretical estimates"],
+                "correctIndex": 1,
+                "explanation": "Controlling variables and taking multiple readings minimizes systematic and random measurement errors.",
+            },
+            {
+                "id": "q4",
+                "question": f"How do the concepts of {clean_title} relate to real-world industrial or daily phenomena?",
+                "options": ["They describe everyday mechanical & chemical interactions", "They optimize technical design and energy efficiency", "They explain natural observational phenomena", "All of the above"],
                 "correctIndex": 3,
-                "explanation": "Validation requires observation, controlled testing, and mathematical consistency.",
+                "explanation": "NCERT concepts connect fundamental science with technological applications and daily observations.",
+            },
+            {
+                "id": "q5",
+                "question": f"Which mathematical formulation or law is central to solving numerical problems in {clean_title}?",
+                "options": ["Linear Proportionality Laws", "Conservation Theorems & Equations", "Rate of Change Principles", "All applicable NCERT laws"],
+                "correctIndex": 3,
+                "explanation": "Problem solving uses state equations, conservation laws, and rate definitions.",
+            },
+            {
+                "id": "q6",
+                "question": f"When analyzing graphical representations for {clean_title}, what does the slope of the curve represent?",
+                "options": ["The rate of change of the dependent variable", "The total integrated quantity", "An arbitrary constant", "The system boundary limit"],
+                "correctIndex": 0,
+                "explanation": "The slope of a plot (Δy / Δx) measures the rate at which the target variable changes relative to the independent parameter.",
+            },
+            {
+                "id": "q7",
+                "question": f"What safety or precautionary procedure is emphasized during laboratory study of {clean_title}?",
+                "options": ["Calibrating instruments before taking readings", "Wearing protective eye & hand gear where required", "Ensuring secure electrical & chemical connections", "All of the above"],
+                "correctIndex": 3,
+                "explanation": "Laboratory safety protocols require equipment calibration and personal protective equipment.",
+            },
+            {
+                "id": "q8",
+                "question": f"What is a common misconception students encounter when learning {clean_title}?",
+                "options": ["Confusing scalar quantities with vector quantities", "Ignoring direction or frame of reference", "Misinterpreting proportional constants", "All of the above"],
+                "correctIndex": 3,
+                "explanation": "Common errors stem from scalar/vector confusion, frame of reference neglect, and unit conversion oversight.",
+            },
+            {
+                "id": "q9",
+                "question": f"How does increasing temperature or energy affect the processes described in {clean_title}?",
+                "options": ["Increases kinetic energy and collision rate", "Reduces molecular stability", "Alters equilibrium states", "Varies depending on the specific system dynamics"],
+                "correctIndex": 3,
+                "explanation": "Thermal and energy changes alter reaction rates, state changes, or resistance according to system thermodynamics.",
+            },
+            {
+                "id": "q10",
+                "question": f"What is the recommended strategy when revising {clean_title} for board examinations?",
+                "options": ["Memorizing definition statements only", "Practicing NCERT exercise problems and drawing labelled diagrams", "Skimming summary tables", "Focusing exclusively on short questions"],
+                "correctIndex": 1,
+                "explanation": "High exam performance relies on thorough numerical practice, clear diagrammatic representation, and NCERT exercise mastery.",
             },
         ],
     }
