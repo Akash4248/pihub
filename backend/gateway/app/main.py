@@ -1218,7 +1218,11 @@ async def _query_ollama(query: str, topic: str | None, grade: int = 9) -> str | 
                 # Fallback: if content is empty due to reasoning monologue, check thinking field
                 thinking = (msg.get("thinking") or "").strip()
                 if thinking:
-                    cleaned = re.sub(r"(?i)^here'?s a thinking process.*?:", "", thinking).strip()
+                    # Strip out reasoning thoughts and extract actual answer starting from headers/sections
+                    header_match = re.search(r'(###\s+.*)', thinking, re.DOTALL)
+                    if header_match:
+                        return header_match.group(1).strip()
+                    cleaned = re.sub(r"(?i)^(here'?s a\s+)?thinking process.*?\n\n", "", thinking, flags=re.DOTALL).strip()
                     if cleaned:
                         return cleaned
     except Exception as exc:
