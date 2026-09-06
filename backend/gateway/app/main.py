@@ -2699,7 +2699,7 @@ async def get_chapter_videos(chapter: str):
     norm_key = chapter.lower().replace("-", "_")
 
     video_url_map = {
-        "quadratic_equations": "https://www.youtube.com/watch?v=a-P0gY-w90M",
+        "quadratic_equations": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
         "motion": "https://www.youtube.com/watch?v=tBmavvMwu68",
         "light_reflection_and_refraction": "https://www.youtube.com/watch?v=Unv471yJc5M",
         "chemical_reactions_and_equations": "https://www.youtube.com/watch?v=g3E-J6zK_4c",
