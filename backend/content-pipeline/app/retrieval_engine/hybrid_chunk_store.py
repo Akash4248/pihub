@@ -78,6 +78,11 @@ class HybridChunkStore:
         }
         self.snapshot_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
+    def export_sqlite_vec(self, sqlite_path: Path) -> int:
+        from .sqlite_vec_exporter import SqliteVecExporter
+        exporter = SqliteVecExporter()
+        return exporter.export_to_sqlite(sqlite_path, list(self._documents.values()))
+
     def clear(self) -> None:
         self._documents.clear()
         self._postings = defaultdict(set)
