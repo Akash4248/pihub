@@ -17,6 +17,7 @@ backend/voice-service/models/
 *.pth
 
 # Local run/debug scratch
+.local_run/
 backend/.local_run/
 backend/.local_run_env
 backend/_depcheck.py

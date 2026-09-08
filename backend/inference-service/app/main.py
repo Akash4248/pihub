@@ -42,13 +42,13 @@ class Settings(BaseSettings):
     content_pipeline_url: str = Field(default="http://content-pipeline:8001", alias="CONTENT_PIPELINE_URL")
     llama_server_host: str = Field(default="127.0.0.1", alias="LLAMA_SERVER_HOST")
     llama_server_port: int = Field(default=8081, alias="LLAMA_SERVER_PORT")
-    llama_model_path: str = Field(default="/models/model.gguf", alias="LLAMA_MODEL_PATH")
+    llama_model_path: str = Field(default="/home/akash/Desktop/NOTIMP/pihub/backend/inference-service/models/model.gguf", alias="LLAMA_MODEL_PATH")
     llama_context_size: int = Field(default=2048, alias="LLAMA_CONTEXT_SIZE")
     llama_max_tokens: int = Field(default=256, alias="LLAMA_MAX_TOKENS")
     llama_temperature: float = Field(default=0.4, alias="LLAMA_TEMPERATURE")
     llama_top_p: float = Field(default=0.9, alias="LLAMA_TOP_P")
     llama_prompt_cache_size: int = Field(default=128, alias="LLAMA_PROMPT_CACHE_SIZE")
-    content_generation_backend: str = Field(default="ollama", alias="CONTENT_GENERATION_BACKEND")
+    content_generation_backend: str = Field(default="llama", alias="CONTENT_GENERATION_BACKEND")
     ollama_base_url: str = Field(default="http://ollama:11434", alias="OLLAMA_BASE_URL")
     gemma_content_model: str = Field(default="gemma4", alias="GEMMA_CONTENT_MODEL")
     content_generation_temperature: float = Field(default=0.2, alias="CONTENT_GENERATION_TEMPERATURE")
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     stream_batch_chars: int = Field(default=120, alias="STREAM_BATCH_CHARS")
     prompt_context_limit: int = Field(default=1800, alias="PROMPT_CONTEXT_LIMIT")
     max_concurrent_inference: int = Field(default=2, alias="MAX_CONCURRENT_INFERENCE")
-    inference_queue_timeout_seconds: float = Field(default=30.0, alias="INFERENCE_QUEUE_TIMEOUT_SECONDS")
+    inference_queue_timeout_seconds: float = Field(default=180.0, alias="INFERENCE_QUEUE_TIMEOUT_SECONDS")
 
 
 class ChatRequest(BaseModel):
@@ -317,8 +317,11 @@ class ModelManager:
         if self.is_ready() or not self.model_path.exists():
             return
 
+        import shutil
+        server_bin = shutil.which("llama-server") or "/home/akash/Desktop/IDP/llama.cpp/build/bin/llama-server"
+
         command = [
-            "llama-server",
+            server_bin,
             "--host",
             self.settings.llama_server_host,
             "--port",
