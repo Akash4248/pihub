@@ -1,0 +1,34 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# Minimal OS runtime packages (no poppler, tesseract, ffmpeg, or heavy build tools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Note: Pi node runs RAG queries over pre-indexed sqlite-vec databases; no heavy PyTorch or Qdrant server required.
+# Install minimal lightweight dependencies (<800MB container target).
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    pydantic \
+    pydantic-settings \
+    sqlite-vec \
+    httpx \
+    chonkie \
+    instructor
+
+COPY shared /app/shared
+COPY content-pipeline/app /app/app
+
+EXPOSE 8001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

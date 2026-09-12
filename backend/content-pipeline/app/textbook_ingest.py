@@ -321,93 +321,16 @@ class EducationalChunkDetector:
         return [t.strip().lower() for t in topics if t.strip() and len(t.strip()) > 3]
 
 
-class EducationalChunker:
-    """
-    Semantic chunking for educational content.
-    
-    DO NOT use fixed-size character chunks.
-    Chunk by:
-    - chapter
-    - section  
-    - paragraph
-    """
-    
-    def __init__(self, chapter_separator: str = "\n\n", min_chunk_size: int = 100, max_chunk_size: int = 1200):
-        self.chapter_separator = chapter_separator
-        self.min_chunk_size = min_chunk_size
-        self.max_chunk_size = max_chunk_size
-    
-    def chunk_educational(self, text: str, metadata: dict[str, Any]) -> list[dict[str, Any]]:
-        """
-        Chunk text using educational semantic boundaries.
-        
-        Returns chunks with enriched metadata.
-        """
-        # Detect chapters first
-        chapters = EducationalChunkDetector.detect_chapters(text)
-        
-        chunks: list[dict[str, Any]] = []
-        
-        for chapter in chapters:
-            chapter_text = text[chapter["start"]:chapter["end"]]
-
-            section_title = chapter["title"]
-            paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", chapter_text) if paragraph.strip()]
-
-            buffer: list[str] = []
-            buffer_length = 0
-
-            def flush_buffer(current_section: str | None = None) -> None:
-                nonlocal buffer, buffer_length
-                if not buffer:
-                    return
-                chunk_text = "\n\n".join(buffer).strip()
-                if len(chunk_text) >= self.min_chunk_size or not chunks:
-                    chunks.append({
-                        "text": chunk_text,
-                        "metadata": {
-                            **metadata,
-                            "chapter": chapter["title"],
-                            "section": current_section or section_title,
-                            "topics": chapter.get("topics", []),
-                        },
-                    })
-                buffer = []
-                buffer_length = 0
-
-            for paragraph in paragraphs:
-                lines = paragraph.splitlines()
-                first_line = lines[0].strip() if lines else ""
-                is_section = EducationalChunkDetector._is_section_heading(first_line)
-                if is_section:
-                    flush_buffer(section_title)
-                    section_title = first_line
-                    remaining = "\n".join(lines[1:]).strip()
-                    if remaining:
-                        buffer.append(remaining)
-                        buffer_length = len(remaining)
-                    continue
-
-                if buffer_length + len(paragraph) + 2 > self.max_chunk_size and buffer:
-                    flush_buffer(section_title)
-
-                buffer.append(paragraph)
-                buffer_length += len(paragraph) + 2
-
-            flush_buffer(section_title)
-        
-        return chunks
-
-
 class StructuredTextbookIngest:
     """Main API for structured textbook ingestion."""
     
     def __init__(self):
         settings = get_settings()
         self.metadata_extractor = TextbookMetadataExtractor()
-        self.chunker = EducationalChunker()
-        self.semantic_chunker = EducationalChunkerV2()
-        self.enable_semantic_educational_chunking = settings.enable_semantic_educational_chunking
+        self.chunker = EducationalChunkerV2()
+        self.semantic_chunker = self.chunker
+        self.enable_semantic_educational_chunking = True
+
 
     def extract_text_from_pdf(self, file_path: Path) -> str:
         """Extract text from PDF with Docling first, then OCR-capable fallback."""

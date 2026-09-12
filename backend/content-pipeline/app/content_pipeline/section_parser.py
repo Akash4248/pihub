@@ -29,10 +29,11 @@ class SectionParser:
 
         def flush() -> None:
             nonlocal current_lines
-            content = "\n".join(line for line in current_lines if line.strip()).strip()
+            content = "\n".join(current_lines).strip()
             if content:
                 sections.append(ParsedSection(title=current_title, content=content))
             current_lines = []
+
 
         for line in lines:
             stripped = line.strip()

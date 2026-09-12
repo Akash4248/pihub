@@ -22,7 +22,22 @@ class Settings(BaseSettings):
     voice_service_required: bool = Field(default=False, alias="VOICE_SERVICE_REQUIRED")
     voice_service_enabled: bool = Field(default=False, alias="VOICE_SERVICE_ENABLED")
     gateway_http_timeout_seconds: float = Field(default=900.0, alias="GATEWAY_HTTP_TIMEOUT_SECONDS")
+    jwt_secret_key: str = Field(default="change-me-super-secret-jwt-key-min32chars", alias="JWT_SECRET_KEY")
+    allow_anonymous_dev: bool = Field(default=True, alias="ALLOW_ANONYMOUS_DEV")
+    database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@db:5432/pihub", alias="DATABASE_URL")
+
+
+    redis_url: str = Field(default="", alias="REDIS_URL")
+    
+    # MinIO Object Storage
+    minio_endpoint: str = Field(default="minio:9000", alias="MINIO_ENDPOINT")
+    minio_access_key: str = Field(default="minioadmin", alias="MINIO_ACCESS_KEY")
+    minio_secret_key: str = Field(default="minioadmin", alias="MINIO_SECRET_KEY")
+    minio_bucket: str = Field(default="educational-packs", alias="MINIO_BUCKET")
+    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
+
     qdrant_url: str = Field(default="http://qdrant:6333", alias="QDRANT_URL")
+    qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="educational_chunks_bge_m3", alias="QDRANT_COLLECTION")
 
     embedding_model_name: str = Field(default="BAAI/bge-m3", alias="EMBEDDING_MODEL_NAME")
@@ -31,6 +46,8 @@ class Settings(BaseSettings):
     local_retrieval_model_name: str = Field(default="BAAI/bge-m3", alias="LOCAL_RETRIEVAL_MODEL_NAME")
     local_retrieval_device: str = Field(default="cpu", alias="LOCAL_RETRIEVAL_DEVICE")
     local_retrieval_cache_dir: str = Field(default="/shared/models/sentence-transformers/retrieval", alias="LOCAL_RETRIEVAL_CACHE_DIR")
+    embedding_fallback: str = Field(default="none", alias="EMBEDDING_FALLBACK") # none|hash
+
 
     upload_dir: str = Field(default="/shared/uploads", alias="UPLOAD_DIR")
     work_dir: str = Field(default="/shared/work", alias="WORK_DIR")
@@ -117,7 +134,18 @@ class Settings(BaseSettings):
     # Qdrant collection for enrichment records (videos/articles/sims/examples)
     enrichment_collection: str = Field(default="enrichment_resources", alias="ENRICHMENT_COLLECTION")
 
+    def validate_security_config(self) -> None:
+        insecure_keys = {"change-me", "change-me-super-secret-jwt-key-min32chars", "default-secret-key-change-in-production"}
+        if not self.allow_anonymous_dev and self.jwt_secret_key in insecure_keys:
+            raise RuntimeError(
+                "Insecure JWT_SECRET_KEY set in production environment. "
+                "Set a secure JWT_SECRET_KEY environment variable or set ALLOW_ANONYMOUS_DEV=true for local dev."
+            )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    settings.validate_security_config()
+    return settings
+

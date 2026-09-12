@@ -15,7 +15,9 @@ from typing import Any, Dict, Optional
 from fastapi import Header, HTTPException, Request, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "mentora_k12_jwt_secret_2026_change_in_prod_7781a")
+from shared.security import get_jwt_secret_key
+
+SECRET_KEY = get_jwt_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_SECONDS = 60 * 60 * 24 * 30  # 30 Days
 
@@ -35,6 +37,7 @@ except (PermissionError, OSError):
 def _init_auth_db():
     conn = sqlite3.connect(AUTH_DB_PATH)
     cursor = conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -57,6 +60,10 @@ def hash_password(password: str) -> str:
     pwd_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
     return base64.b64encode(salt + pwd_hash).decode('utf-8')
 
+import logging
+
+logger = logging.getLogger("gateway.auth")
+
 def verify_password(password: str, stored_hash_str: str) -> bool:
     try:
         decoded = base64.b64decode(stored_hash_str.encode('utf-8'))
@@ -64,7 +71,8 @@ def verify_password(password: str, stored_hash_str: str) -> bool:
         stored_pwd_hash = decoded[16:]
         new_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
         return hmac.compare_digest(stored_pwd_hash, new_hash)
-    except Exception:
+    except Exception as exc:
+        logger.warning("[AUTH] VERIFY_PASSWORD_FAILED error=%s", exc)
         return False
 
 # Base64URL Encoding/Decoding for Zero-Dependency JWT Implementation
@@ -100,6 +108,7 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         parts = token.split('.')
         if len(parts) != 3:
+            logger.warning("[AUTH] INVALID_TOKEN_FORMAT parts=%d", len(parts))
             return None
         
         header_str, payload_str, signature_str = parts
@@ -113,15 +122,19 @@ def decode_access_token(token: str) -> Optional[dict]:
         
         actual_sig = _b64url_decode(signature_str)
         if not hmac.compare_digest(expected_sig, actual_sig):
+            logger.warning("[AUTH] TOKEN_SIGNATURE_MISMATCH")
             return None
             
         payload = json.loads(_b64url_decode(payload_str).decode('utf-8'))
         if payload.get("exp", 0) < int(time.time()):
+            logger.warning("[AUTH] TOKEN_EXPIRED exp=%s", payload.get("exp"))
             return None  # Expired
             
         return payload
-    except Exception:
+    except Exception as exc:
+        logger.warning("[AUTH] DECODE_TOKEN_FAILED error=%s", exc)
         return None
+
 
 # User Registration & Auth DB Queries
 def register_user(email: str, password: str, full_name: str, role: str = "student", grade: int = 9) -> Dict[str, Any]:

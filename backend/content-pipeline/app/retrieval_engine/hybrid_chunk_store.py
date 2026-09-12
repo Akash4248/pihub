@@ -70,13 +70,24 @@ class HybridChunkStore:
         return bool(self._documents)
 
     def save_snapshot(self) -> None:
+        import os
         self.snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "model_name": self.model_name,
             "device": self.device,
             "documents": list(self._documents.values()),
         }
-        self.snapshot_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp_path = self.snapshot_path.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        tmp_path.replace(self.snapshot_path)
+        try:
+            dir_fd = os.open(str(self.snapshot_path.parent), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except Exception:
+            pass
 
     def export_sqlite_vec(self, sqlite_path: Path) -> int:
         from .sqlite_vec_exporter import SqliteVecExporter
@@ -92,9 +103,13 @@ class HybridChunkStore:
         if self.snapshot_path.exists():
             self.snapshot_path.unlink()
 
-    def upsert(self, chunks: list[dict[str, Any]]) -> None:
+    def upsert(self, chunks: list[dict[str, Any]], vectors: list[list[float]] | None = None) -> None:
         if not chunks:
             return
+
+        if vectors is not None and len(vectors) != len(chunks):
+            raise ValueError(f"Precomputed vectors length ({len(vectors)}) does not match chunks length ({len(chunks)})")
+
         documents: list[dict[str, Any]] = []
         indexed_texts: list[str] = []
         for chunk in chunks:
@@ -104,20 +119,25 @@ class HybridChunkStore:
             documents.append(document)
             indexed_texts.append(document["indexed_text"])
 
-        vectors: list[list[float]] = []
-        model = self._load_model()
-        if model is not None and indexed_texts:
-            encoded = model.encode(indexed_texts, normalize_embeddings=True)
-            if hasattr(encoded, "tolist"):
-                encoded = encoded.tolist()
-            vectors = [[float(value) for value in row] for row in encoded]
+        if vectors is None:
+            model = self._load_model()
+            if model is not None and indexed_texts:
+                encoded = model.encode(indexed_texts, normalize_embeddings=True)
+                if hasattr(encoded, "tolist"):
+                    encoded = encoded.tolist()
+                computed_vectors = [[float(value) for value in row] for row in encoded]
+            else:
+                computed_vectors = []
+        else:
+            computed_vectors = vectors
 
         for index, document in enumerate(documents):
-            if index < len(vectors):
-                document["vector"] = vectors[index]
+            if index < len(computed_vectors):
+                document["vector"] = computed_vectors[index]
             self._documents[document["chunk_id"]] = document
         self._rebuild_statistics()
         self.save_snapshot()
+
 
     def search(
         self,
@@ -292,17 +312,12 @@ class HybridChunkStore:
             return self._model
         self._model_ready = True
         try:
-            from sentence_transformers import SentenceTransformer
-        except Exception:
-            self._model = None
-            return None
-
-        try:
-            load_target = self._resolve_local_model_path()
-            self._model = SentenceTransformer(str(load_target or self.model_name), device=self.device)
+            from shared.embedding_service import EmbeddingModelManager
+            self._model = EmbeddingModelManager.get_instance().get_model()
         except Exception:
             self._model = None
         return self._model
+
 
     def _resolve_local_model_path(self) -> Path | None:
         model_path = Path(self.model_name)

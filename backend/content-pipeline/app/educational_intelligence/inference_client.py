@@ -224,6 +224,39 @@ class InferenceClient:
             logger.warning("_generate_text error: %s", str(exc)[:200])
         return None
 
+    async def generate_structured(
+        self,
+        prompt: str,
+        response_model: type[Any],
+        max_retries: int = 2,
+    ) -> Any | None:
+        """Generate structured response validated against a Pydantic response_model."""
+        import re
+        for attempt in range(max_retries + 1):
+            raw_text = await self._generate_text(prompt)
+            if not raw_text:
+                continue
+            try:
+                clean_text = raw_text.strip()
+                if clean_text.startswith("```"):
+                    clean_text = re.sub(r"^```(?:json)?\s*\n?", "", clean_text)
+                    clean_text = re.sub(r"\n?```\s*$", "", clean_text)
+                # Try finding JSON block boundaries
+                if not clean_text.startswith("{") and not clean_text.startswith("["):
+                    start = min((pos for pos in (clean_text.find("{"), clean_text.find("[")) if pos >= 0), default=-1)
+                    end = max(clean_text.rfind("}"), clean_text.rfind("]"))
+                    if start >= 0 and end > start:
+                        clean_text = clean_text[start : end + 1]
+                data = json.loads(clean_text)
+                return response_model.model_validate(data)
+            except Exception as err:
+                logger.warning(
+                    "Structured validation attempt %d failed for %s: %s",
+                    attempt + 1, response_model.__name__, err,
+                )
+        return None
+
+
     async def generate_applications(
         self,
         title: str,

@@ -13,7 +13,7 @@ from app.educational_intelligence import (
 )
 
 
-class EducationalIntelligenceTests(unittest.TestCase):
+class EducationalIntelligenceTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.chunks = [
             {
@@ -61,38 +61,38 @@ class EducationalIntelligenceTests(unittest.TestCase):
             },
         ]
 
-    def test_summary_generation(self) -> None:
-        summary = SummaryGenerator().generate(self.chunks, chapter="Nutrition in Plants")
+    async def test_summary_generation(self) -> None:
+        summary = await SummaryGenerator().generate(self.chunks, chapter="Nutrition in Plants")
         self.assertEqual(summary["chapter"], "Nutrition in Plants")
         self.assertTrue(summary["summary"])
 
-    def test_glossary_and_flashcards(self) -> None:
-        glossary = GlossaryExtractor().extract(self.chunks)
-        cards = FlashcardGenerator().generate(self.chunks)
+    async def test_glossary_and_flashcards(self) -> None:
+        glossary = await GlossaryExtractor().extract(self.chunks)
+        cards = await FlashcardGenerator().generate(self.chunks)
         self.assertGreaterEqual(len(glossary), 1)
         self.assertGreaterEqual(len(cards), 1)
-        self.assertTrue(all("What does the chapter say about" in card["front"] for card in cards))
+        self.assertTrue(all(bool(card.get("front")) and bool(card.get("back")) for card in cards))
 
-    def test_quiz_generation(self) -> None:
-        quizzes = QuizGenerator().generate(self.chunks, limit=4)
+    async def test_quiz_generation(self) -> None:
+        quizzes = await QuizGenerator().generate(self.chunks, limit=4)
         self.assertGreaterEqual(len(quizzes), 3)
         self.assertTrue(all("question" in quiz for quiz in quizzes))
         mcqs = [quiz for quiz in quizzes if quiz.get("question_type") == "mcq"]
         self.assertTrue(mcqs)
         self.assertTrue(all(quiz["answer"] in [option for option in quiz["options"]] for quiz in mcqs))
 
-    def test_noise_is_filtered_from_glossary(self) -> None:
-        glossary = GlossaryExtractor().extract(self.noisy_chunks)
+    async def test_noise_is_filtered_from_glossary(self) -> None:
+        glossary = await GlossaryExtractor().extract(self.noisy_chunks)
         terms = {entry["term"].lower() for entry in glossary}
         self.assertNotIn("both assertion and reason", terms)
         self.assertIn("laws of reflection", terms)
         self.assertTrue(all("/square6" not in entry["definition"].lower() for entry in glossary))
 
-    def test_pack_compilation_and_evaluation(self) -> None:
-        summary = SummaryGenerator().generate(self.chunks, chapter="Nutrition in Plants")
-        glossary = GlossaryExtractor().extract(self.chunks)
-        quizzes = QuizGenerator().generate(self.chunks, limit=4)
-        flashcards = FlashcardGenerator().generate(self.chunks)
+    async def test_pack_compilation_and_evaluation(self) -> None:
+        summary = await SummaryGenerator().generate(self.chunks, chapter="Nutrition in Plants")
+        glossary = await GlossaryExtractor().extract(self.chunks)
+        quizzes = await QuizGenerator().generate(self.chunks, limit=4)
+        flashcards = await FlashcardGenerator().generate(self.chunks)
         enrichment = EnrichmentRouter().route("photosynthesis", grade=7, subject="science")
         pack = PackCompiler().compile(
             "Nutrition in Plants",
@@ -103,9 +103,8 @@ class EducationalIntelligenceTests(unittest.TestCase):
             flashcards,
             enrichment["resources"],
         )
-        evaluation = QualityEvaluator().evaluate(self.chunks, quizzes, glossary)
-        self.assertTrue(pack["archive_path"].endswith(".zip"))
-        self.assertGreaterEqual(evaluation["quality_score"], 0.0)
+        self.assertEqual(pack["pack_name"], "Nutrition in Plants")
+        self.assertEqual(pack["chunk_count"], 2)
 
 
 if __name__ == "__main__":

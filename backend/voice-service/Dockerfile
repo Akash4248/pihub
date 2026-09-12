@@ -6,6 +6,7 @@ ENV PYTHONPATH=/app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
+    ffmpeg \
     libgomp1 \
     libsndfile1 \
     pkg-config \

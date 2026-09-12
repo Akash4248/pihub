@@ -617,36 +617,58 @@ class ArtifactAgent:
             f"Return valid JSON only."
         )
 
+        from app.educational_intelligence.artifact_schemas import (
+            QuizSet, GlossarySet, FlashcardDeck, ChapterSummary, MisconceptionGuide, LearningObjectives
+        )
+
+        schema_map = {
+            "quiz": QuizSet,
+            "glossary": GlossarySet,
+            "flashcards": FlashcardDeck,
+            "summary": ChapterSummary,
+            "misconceptions": MisconceptionGuide,
+            "learning_objectives": LearningObjectives,
+        }
+
         best_result = None
         best_score = 0.0
         critique = None
+
+        schema_cls = schema_map.get(task.artifact_type)
 
         for attempt in range(max_iterations):
             logger.info("Generating %s (attempt %d/%d)", task.artifact_type, attempt + 1, max_iterations)
 
             if attempt == 0:
-                raw = await self.inference._generate_text(full_prompt)
+                target_prompt = full_prompt
             else:
                 critique_text = json.dumps({
                     "issues": critique.issues if critique is not None else [],
                     "suggestions": critique.suggestions if critique is not None else [],
                     "scores": {"overall": critique.score} if critique is not None else {},
                 }, indent=2)
-                improvement_prompt = ARTIFACT_IMPROVEMENT_PROMPT.format(
+                target_prompt = ARTIFACT_IMPROVEMENT_PROMPT.format(
                     artifact_type=task.artifact_type.replace("_", " "),
                     source_context=source_context,
                     grade=grade,
                     previous_content=json.dumps(best_result, indent=2, ensure_ascii=False)[:2000],
                     critique_text=critique_text,
                 )
-                raw = await self.inference._generate_text(improvement_prompt)
 
-            if not raw:
-                continue
+            if schema_cls:
+                structured_model = await self.inference.generate_structured(target_prompt, schema_cls, max_retries=2)
+                if structured_model is not None:
+                    result = structured_model.model_dump()
+                else:
+                    raw = await self.inference._generate_text(target_prompt)
+                    result = self._parse_artifact(raw, task.artifact_type) if raw else None
+            else:
+                raw = await self.inference._generate_text(target_prompt)
+                result = self._parse_artifact(raw, task.artifact_type) if raw else None
 
-            result = self._parse_artifact(raw, task.artifact_type)
             if not result:
                 continue
+
 
             if skip_critique:
                 return result
@@ -673,12 +695,26 @@ class ArtifactAgent:
         return best_result
 
     def _parse_artifact(self, raw: str, artifact_type: str) -> Any:
+        from app.educational_intelligence.artifact_schemas import (
+            QuizSet, GlossarySet, FlashcardDeck, ChapterSummary, MisconceptionGuide, LearningObjectives
+        )
+
+        schema_map = {
+            "quiz": QuizSet,
+            "glossary": GlossarySet,
+            "flashcards": FlashcardDeck,
+            "summary": ChapterSummary,
+            "misconceptions": MisconceptionGuide,
+            "learning_objectives": LearningObjectives,
+        }
+
+        parsed_json = None
         try:
             text = raw.strip()
             if text.startswith("```"):
                 text = re.sub(r"^```(?:json)?\s*\n?", "", text)
                 text = re.sub(r"\n?```\s*$", "", text)
-            return json.loads(text)
+            parsed_json = json.loads(text)
         except json.JSONDecodeError:
             try:
                 start = min(
@@ -687,11 +723,24 @@ class ArtifactAgent:
                 )
                 end = max(raw.rfind("}"), raw.rfind("]"))
                 if end > start:
-                    return json.loads(raw[start : end + 1])
+                    parsed_json = json.loads(raw[start : end + 1])
             except (json.JSONDecodeError, ValueError):
                 pass
-            logger.warning("Failed to parse %s output as JSON", artifact_type)
-            return None
+
+        if parsed_json is not None:
+            schema_cls = schema_map.get(artifact_type)
+            if schema_cls and isinstance(parsed_json, dict):
+                try:
+                    model_inst = schema_cls.model_validate(parsed_json)
+                    return model_inst.model_dump()
+                except Exception as exc:
+                    logger.warning("Pydantic validation failed for %s: %s", artifact_type, exc)
+                    return parsed_json
+            return parsed_json
+
+        logger.warning("Failed to parse %s output as JSON", artifact_type)
+        return None
+
 
     def _collection_key(self, artifact_type: str) -> str:
         mapping = {

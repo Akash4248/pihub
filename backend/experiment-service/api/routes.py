@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 
 from domain.enums import ExperimentDifficulty, ExperimentExecutionMode
@@ -43,9 +43,9 @@ async def list_experiments(
     chapter: str | None = Query(default=None),
     topic: str | None = Query(default=None),
     difficulty: ExperimentDifficulty | None = Query(default=None),
-    required_sensors: list[str] = Query(default=[]),
-    execution_modes: list[ExperimentExecutionMode] = Query(default=[]),
-    tags: list[str] = Query(default=[]),
+    required_sensors: list[str] | None = Query(default=None),
+    execution_modes: list[ExperimentExecutionMode] | None = Query(default=None),
+    tags: list[str] | None = Query(default=None),
     page: int = page_query(),
     page_size: int = page_size_query(),
 ) -> dict[str, Any]:
@@ -55,9 +55,9 @@ async def list_experiments(
         chapter=chapter,
         topic=topic,
         difficulty=difficulty,
-        required_sensors=required_sensors,
-        execution_modes=execution_modes,
-        tags=tags,
+        required_sensors=required_sensors or [],
+        execution_modes=execution_modes or [],
+        tags=tags or [],
     )
     experiments = registry.list_experiments(filters)
     paged = paginate(experiments, page, page_size)
@@ -167,7 +167,17 @@ async def create_experiment_run(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/experiment-runs/student/{student_id}")
-async def list_student_experiment_runs(student_id: str) -> list[dict[str, Any]]:
+async def list_student_experiment_runs(
+    student_id: str,
+    x_user_id: str | None = Header(None, alias="x-user-id"),
+    x_user_role: str | None = Header(None, alias="x-user-role"),
+) -> list[dict[str, Any]]:
+    # IDOR Protection: Enforce caller identity matches student_id or role is admin/teacher
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Authentication required: x-user-id header missing.")
+    if x_user_id != student_id and x_user_role not in {"admin", "teacher"}:
+        logger.warning("[SECURITY] IDOR attempt: user %s requested runs for student %s", x_user_id, student_id)
+        raise HTTPException(status_code=403, detail="Forbidden: Access to specified student runs is unauthorized.")
     runs = await run_service.list_student_runs(student_id)
     return [_dump(run) for run in runs]
 

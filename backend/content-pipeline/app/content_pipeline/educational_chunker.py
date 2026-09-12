@@ -49,6 +49,21 @@ class EducationalChunkerV2:
         self.formula_preserver = FormulaPreserver()
         self.boundary_detector = ConceptBoundaryDetector()
         self.metadata_builder = ChunkMetadataBuilder()
+        try:
+            from chonkie import SemanticChunker, SentenceChunker
+            try:
+                self._chonkie_chunker = SemanticChunker(
+                    max_chunk_size=max_chunk_chars,
+                    similarity_threshold=0.5,
+                )
+            except Exception:
+                self._chonkie_chunker = SentenceChunker(
+                    chunk_size=max_chunk_chars,
+                    chunk_overlap=overlap_chars,
+                )
+        except Exception:
+            self._chonkie_chunker = None
+
 
     @staticmethod
     def _is_noise(paragraph: str) -> bool:
@@ -56,7 +71,7 @@ class EducationalChunkerV2:
         return bool(p) and len(p) < 80 and bool(_NOISE_RE.match(p))
 
     def _split_long_paragraph(self, paragraph: str) -> list[str]:
-        """Break an overlong paragraph on sentence boundaries.
+        """Break an overlong paragraph on sentence boundaries using Chonkie if available.
 
         Sentences are kept intact; only when a single sentence itself exceeds
         the cap do we fall back to a hard character split.
@@ -64,7 +79,17 @@ class EducationalChunkerV2:
         if len(paragraph) <= self.max_chunk_chars:
             return [paragraph]
 
+        if self._chonkie_chunker:
+            try:
+                chunks = self._chonkie_chunker.chunk(paragraph)
+                extracted = [c.text.strip() for c in chunks if c.text and c.text.strip()]
+                if extracted:
+                    return extracted
+            except Exception:
+                pass
+
         sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+
         pieces: list[str] = []
         buf = ""
         for sent in sentences:
@@ -109,8 +134,10 @@ class EducationalChunkerV2:
 
     def _chunk_section(self, section: ParsedSection, base_metadata: dict[str, Any]) -> list[dict[str, Any]]:
         raw_paragraphs = [p.strip() for p in re.split(r"\n\s*\n", section.content) if p.strip()]
-        merged = self.paragraph_merger.merge(raw_paragraphs)
+        filtered_raw = [p for p in raw_paragraphs if not self._is_noise(p)]
+        merged = self.paragraph_merger.merge(filtered_raw)
         paragraphs = self._preprocess_paragraphs(merged)
+
         section_chunks: list[dict[str, Any]] = []
         current: list[str] = []
         current_len = 0

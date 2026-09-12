@@ -89,8 +89,21 @@ class MediaStore:
         self._media_max_total_gb = float(getattr(s, "media_max_total_gb", 0.0) or 0.0)
         self._has_ffmpeg = shutil.which("ffmpeg") is not None
         if self.enabled:
-            self.video_dir.mkdir(parents=True, exist_ok=True)
-            self.image_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                self.video_dir.mkdir(parents=True, exist_ok=True)
+                self.image_dir.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                fallback_base = Path.cwd() / ".local_run" / "media"
+                self.storage_path = fallback_base
+                self.video_dir = fallback_base / "videos"
+                self.image_dir = fallback_base / "images"
+                try:
+                    self.video_dir.mkdir(parents=True, exist_ok=True)
+                    self.image_dir.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
+                logger.warning("Permission denied for storage_path, falling back to %s", self.storage_path)
+
 
     # ------------------------------------------------------------------ mongo
     def _collection(self):

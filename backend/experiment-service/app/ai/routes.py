@@ -28,6 +28,7 @@ def _parse_model(model_type: Any, payload: dict[str, Any]) -> Any:
 
 
 @router.post("/ai/generate-experiment")
+@router.post("/ai/experiment/generate")
 async def generate_experiment(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         request = _parse_model(ExperimentGenerationRequest, payload)

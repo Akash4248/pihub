@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 
 from app.sharing.models import ShareExportRequest, ShareImportRequest, ShareSignRequest, ShareTrustRequest, ShareVerifyRequest
 from app.sharing.services.experiment_sharing_service import ExperimentSharingService, SharingNotFoundError, SharingValidationError
+from shared.security import verify_internal_api_key
 
 
 router = APIRouter(tags=["Experiment Sharing"])
@@ -53,13 +54,13 @@ async def verify_share_package(payload: dict[str, Any]) -> dict[str, Any]:
     return _dump(sharing_service.verify_package(request.package))
 
 
-@router.post("/sharing/sign")
+@router.post("/sharing/sign", dependencies=[Depends(verify_internal_api_key)])
 async def sign_share_package(payload: dict[str, Any]) -> dict[str, Any]:
     request = _parse_model(ShareSignRequest, payload)
     return _dump(sharing_service.sign_package(request.package))
 
 
-@router.post("/sharing/trust")
+@router.post("/sharing/trust", dependencies=[Depends(verify_internal_api_key)])
 async def trust_share_source(payload: dict[str, Any]) -> dict[str, Any]:
     request = _parse_model(ShareTrustRequest, payload)
     return sharing_service.trust(request)

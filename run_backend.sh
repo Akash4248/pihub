@@ -64,7 +64,8 @@ start_service() {
         return 0
     fi
 
-    echo ">> Starting ${name} on http://0.0.0.0:${port}..."
+    local bind_host="${HOST:-127.0.0.1}"
+    echo ">> Starting ${name} on http://${bind_host}:${port}..."
     local target_dir="${BACKEND_DIR}/${dir}"
     if [[ ! -d "${target_dir}" ]]; then
         target_dir="${BACKEND_DIR}"
@@ -72,8 +73,17 @@ start_service() {
 
     PYTHONUNBUFFERED=1 \
     PYTHONPATH="${BACKEND_DIR}:${BACKEND_DIR}/shared:${target_dir}" \
+    CONTENT_PIPELINE_URL="http://127.0.0.1:8001" \
+    INFERENCE_SERVICE_URL="http://127.0.0.1:8010" \
+    PIHUB_URL="http://127.0.0.1:8020" \
+    PACK_SERVICE_URL="http://127.0.0.1:8030" \
+    EXPERIMENT_SERVICE_URL="http://127.0.0.1:8040" \
+    VOICE_SERVICE_URL="http://127.0.0.1:8050" \
+    QDRANT_URL="http://127.0.0.1:6333" \
     UPLOAD_DIR="${ROOT_DIR}/.local_run/uploads" \
     WORK_DIR="${ROOT_DIR}/.local_run/work" \
+    CURRICULUM_GRAPH_PATH="${ROOT_DIR}/.local_run/work/curriculum_graph.json" \
+    CURRICULUM_RELATION_GRAPH_PATH="${ROOT_DIR}/.local_run/work/curriculum_relation_graph.json" \
     MEDIA_STORAGE_PATH="${ROOT_DIR}/.local_run/media" \
     PACK_STORAGE_PATH="${ROOT_DIR}/.local_run/packs" \
     CONTENT_DIR="${ROOT_DIR}/.local_run/content" \
@@ -81,7 +91,7 @@ start_service() {
     CACHE_DIR="${ROOT_DIR}/.local_run/pihub_cache" \
     STORAGE_DIR="${ROOT_DIR}/.local_run/pihub_storage" \
     LOGS_DIR="${ROOT_DIR}/.local_run/pihub_logs" \
-      setsid "${PY}" -m uvicorn "${mod}:${appobj}" --app-dir "${target_dir}" --host 0.0.0.0 --port "${port}" >"${log_file}" 2>&1 &
+      setsid "${PY}" -m uvicorn "${mod}:${appobj}" --app-dir "${target_dir}" --host "${bind_host}" --port "${port}" >"${log_file}" 2>&1 &
 
     local pid=$!
     echo "${pid}" >"${pid_file}"

@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 
+_default_model_path = os.getenv("LLAMA_MODEL_PATH", "/models/model.gguf")
+
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -42,7 +46,8 @@ class Settings(BaseSettings):
     content_pipeline_url: str = Field(default="http://content-pipeline:8001", alias="CONTENT_PIPELINE_URL")
     llama_server_host: str = Field(default="127.0.0.1", alias="LLAMA_SERVER_HOST")
     llama_server_port: int = Field(default=8081, alias="LLAMA_SERVER_PORT")
-    llama_model_path: str = Field(default="/home/akash/Desktop/NOTIMP/pihub/backend/inference-service/models/model.gguf", alias="LLAMA_MODEL_PATH")
+    llama_model_path: str = Field(default=_default_model_path, alias="LLAMA_MODEL_PATH")
+
     llama_context_size: int = Field(default=2048, alias="LLAMA_CONTEXT_SIZE")
     llama_max_tokens: int = Field(default=256, alias="LLAMA_MAX_TOKENS")
     llama_temperature: float = Field(default=0.4, alias="LLAMA_TEMPERATURE")
@@ -306,9 +311,15 @@ class ModelManager:
         self.model_path = Path(settings.llama_model_path)
         self.server_process: subprocess.Popen[str] | None = None
         self.http = httpx.AsyncClient(timeout=180.0)
-        self.prompt_cache = PromptCache(settings.llama_prompt_cache_size)
+        self.chat_prompt_cache = PromptCache(settings.llama_prompt_cache_size)
+        self.artifact_prompt_cache = PromptCache(settings.llama_prompt_cache_size)
         self.active_model = self.model_path.name
         self.semaphore = asyncio.Semaphore(settings.max_concurrent_inference)
+
+    @property
+    def prompt_cache(self) -> PromptCache:
+        """Deprecated alias for chat_prompt_cache."""
+        return self.chat_prompt_cache
 
     def is_ready(self) -> bool:
         return self.server_process is not None and self.server_process.poll() is None
@@ -318,7 +329,7 @@ class ModelManager:
             return
 
         import shutil
-        server_bin = shutil.which("llama-server") or "/home/akash/Desktop/IDP/llama.cpp/build/bin/llama-server"
+        server_bin = shutil.which("llama-server") or "llama-server"
 
         command = [
             server_bin,
@@ -331,7 +342,11 @@ class ModelManager:
             "--ctx-size",
             str(self.settings.llama_context_size),
         ]
-        self.server_process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        try:
+            self.server_process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+        except Exception as exc:
+            logger.warning("[MODEL_MANAGER] FAILED_TO_START_SERVER error=%s", exc)
+
 
     async def close(self) -> None:
         if self.server_process and self.server_process.poll() is None:
@@ -509,8 +524,19 @@ def _sanitize_prompt_text(value: Any) -> str:
         cleaned.append(char)
 
     sanitized = "".join(cleaned)
+    # Strip dangerous LLM control tokens and injection headers to prevent prompt injection
+    injection_tokens = [
+        "<|im_start|>", "<|im_end|>", "<|endoftext|>",
+        "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
+        "### Instruction:", "### System:", "### Response:",
+        "SYSTEM:", "USER:", "ASSISTANT:"
+    ]
+    for token in injection_tokens:
+        sanitized = re.sub(re.escape(token), "", sanitized, flags=re.IGNORECASE)
+
     sanitized_lines = [re.sub(r"[ \t]+", " ", line).strip() for line in sanitized.splitlines()]
     return "\n".join(sanitized_lines).strip()
+
 
 
 def _build_system_prompt(request: ChatRequest, style: str) -> str:
@@ -532,25 +558,29 @@ def _build_system_prompt(request: ChatRequest, style: str) -> str:
     return "\n".join(parts)
 
 
-async def _search_context(query: str, limit: int, metadata: dict[str, Any]) -> list[ContextResult]:
+async def _search_context(query: str, limit: int, metadata: dict[str, Any]) -> tuple[list[ContextResult], bool]:
     payload: dict[str, Any] = {"query": query, "limit": limit}
     if metadata:
         payload["metadata"] = metadata
-    response = await manager.http.post(f"{shared_settings.content_pipeline_url}/rag/search", json=payload)
-    if response.is_error:
-        logger.error(f"[RAG] content-pipeline error: {response.text}")
-        return []
-    data = response.json().get("results", [])
-    logger.info(f"[RAG] content-pipeline returned {len(data)} results for payload {payload}")
-    return [ContextResult.model_validate(item) for item in data]
+    try:
+        response = await manager.http.post(f"{shared_settings.content_pipeline_url}/rag/search", json=payload)
+        if response.is_error:
+            logger.error(f"[RAG] content-pipeline error: {response.text}")
+            return [], True
+        data = response.json().get("results", [])
+        logger.info(f"[RAG] content-pipeline returned {len(data)} results for payload {payload}")
+        return [ContextResult.model_validate(item) for item in data], False
+    except Exception as exc:
+        logger.error(f"[RAG] content-pipeline exception: {exc}")
+        return [], True
 
 
 async def _retrieve_context_with_observability(request: ChatRequest) -> tuple[list[ContextResult], dict[str, Any]]:
     normalization = normalize_topic(request.normalized_topic or request.topic, request.question)
     normalized_topic = normalization.normalized_topic
-    query = request.question
+    query = _sanitize_prompt_text(request.question)
     if normalized_topic and normalized_topic not in request.question.lower():
-        query = f"{request.question} {normalized_topic}"
+        query = f"{query} {_sanitize_prompt_text(normalized_topic)}"
 
     normalized_lang = normalize_language_code(request.language) or None
 
@@ -564,39 +594,45 @@ async def _retrieve_context_with_observability(request: ChatRequest) -> tuple[li
     }.items() if value is not None}
 
     started = time.perf_counter()
-    context = await _search_context(query, request.limit, metadata)
-    fallback_reason = None
-    if not context and metadata.get("topic"):
-        relaxed_metadata = dict(metadata)
-        relaxed_metadata.pop("topic", None)
-        context = await _search_context(query, request.limit, relaxed_metadata)
-        fallback_reason = "strict_topic_miss_relaxed_topic" if context else "no_rag_match"
-    elif not context:
-        fallback_reason = "no_rag_match"
-    retrieval_ms = (time.perf_counter() - started) * 1000
-    diagnostics = {
+    chunks, fallback_error = await _search_context(query, request.limit, metadata)
+    fallback_reason: str | None = "content_pipeline_error" if fallback_error else None
+
+    if not chunks and metadata and not fallback_error:
+        fallback_reason = "metadata_relaxed"
+        chunks, _ = await _search_context(query, request.limit, {})
+
+    if not chunks and not fallback_reason:
+        fallback_reason = "no_matching_chunks"
+
+    rag_ms = (time.perf_counter() - started) * 1000
+    retrieval_meta = {
         "query": request.question,
-        "rag_query": query,
         "intent": request.intent,
         "topic": request.topic,
         "normalized_topic": normalized_topic,
-        "matched_alias": request.topic_alias or normalization.matched_alias,
-        "chunks_retrieved": len(context),
-        "chunks_used": len(context),
+        "matched_alias": normalization.matched_alias,
+        "response_source": "rag" if chunks else "direct_llm",
         "fallback_reason": fallback_reason,
-        "retrieval_ms": round(retrieval_ms, 2),
+        "rag_fallback": fallback_error,
+        "asset_matches": len(request.asset_context),
+        "chunks_retrieved": len(chunks),
+        "chunks_used": len(chunks),
+        "asset_ms": 0.0,
+        "rag_ms": round(rag_ms, 2),
+        "total_ms": round(rag_ms, 2),
     }
-    _record_retrieval_metric(diagnostics)
+    _record_retrieval_metric(retrieval_meta)
     logger.info(
         "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
-        diagnostics["query"],
-        diagnostics["normalized_topic"],
-        diagnostics["intent"],
-        diagnostics["chunks_retrieved"],
-        diagnostics["chunks_used"],
-        diagnostics["fallback_reason"],
+        retrieval_meta["query"],
+        retrieval_meta["normalized_topic"],
+        retrieval_meta["intent"],
+        retrieval_meta["chunks_retrieved"],
+        retrieval_meta["chunks_used"],
+        retrieval_meta["fallback_reason"],
     )
-    return context, diagnostics
+    return chunks, retrieval_meta
+
 
 
 async def _retrieve_context(request: ChatRequest) -> list[ContextResult]:
@@ -911,16 +947,9 @@ async def _generate_content_json(
     schema_hint: str,
 ) -> Any:
     cache_key = _content_section_hash(request, artifact)
-    cached = await manager.prompt_cache.get(cache_key)
+    cached = await manager.artifact_prompt_cache.get(cache_key)
     if cached is not None:
         return schema_model.model_validate_json(cached)
-
-    if settings.content_generation_allow_fallback and settings.content_generation_backend.lower() == "llama":
-        logger.warning("[CONTENT_GENERATION_FALLBACK] artifact=%s reason=llama_backend_disabled_for_artifacts", artifact)
-        fallback = _fallback_content_artifact(request, artifact)
-        model = schema_model.model_validate(fallback)
-        await manager.prompt_cache.set(cache_key, model.model_dump_json())
-        return model
 
     system_prompt = _content_system_prompt(schema_hint, request.language)
     user_prompt = _content_user_prompt(request, artifact)
@@ -933,19 +962,26 @@ async def _generate_content_json(
             raw = await _content_completion(system_prompt, prompt)
             parsed = _extract_json_object(raw)
             model = schema_model.model_validate(parsed)
-            await manager.prompt_cache.set(cache_key, model.model_dump_json())
+            await manager.artifact_prompt_cache.set(cache_key, model.model_dump_json())
             return model
         except Exception as exc:
             last_error = str(exc)
-            logger.warning("[CONTENT_GENERATION] invalid_json artifact=%s attempt=%s error=%s", artifact, attempt + 1, last_error[:300])
-    logger.warning("[CONTENT_GENERATION_FALLBACK] artifact=%s reason=%s", artifact, last_error[:300])
-    fallback = _fallback_content_artifact(request, artifact)
-    model = schema_model.model_validate(fallback)
-    await manager.prompt_cache.set(cache_key, model.model_dump_json())
-    return model
+            logger.warning("[CONTENT_GENERATION_RETRY] artifact=%s attempt=%d error=%s", artifact, attempt + 1, exc)
+
+    if settings.content_generation_allow_fallback:
+        logger.warning("[CONTENT_GENERATION_FALLBACK] artifact=%s reason=generation_retries_exhausted error=%s", artifact, last_error)
+        fallback = _fallback_content_artifact(request, artifact)
+        if isinstance(fallback, dict):
+            fallback["fallback"] = True
+        model = schema_model.model_validate(fallback)
+        await manager.artifact_prompt_cache.set(cache_key, model.model_dump_json())
+        return model
+
+    raise HTTPException(status_code=502, detail=f"Content generation failed for {artifact}: {last_error}")
 
 
 async def _chat_completion(
+
     system_prompt: str,
     user_prompt: str,
     request: ChatRequest,
@@ -979,7 +1015,7 @@ async def _chat_completion(
 
     cache_key = _prompt_cache_key(system_prompt, user_prompt, manager.active_model, payload)
     if not stream:
-        cached = await manager.prompt_cache.get(cache_key)
+        cached = await manager.chat_prompt_cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -991,7 +1027,7 @@ async def _chat_completion(
                         raw = await _ollama_generate(user_prompt, system_prompt)
                         if not raw:
                             raise HTTPException(status_code=502, detail="Ollama returned empty response")
-                        await manager.prompt_cache.set(cache_key, raw)
+                        await manager.chat_prompt_cache.set(cache_key, raw)
                         return raw
                     response = await manager.http.post(f"{base_url}/v1/chat/completions", json=payload, timeout=180.0)
                     if response.is_error:
@@ -999,7 +1035,7 @@ async def _chat_completion(
                     body = response.json()
                     content = body["choices"][0]["message"]["content"]
                     content = _finalize_tutor_answer(content, request)
-                    await manager.prompt_cache.set(cache_key, content)
+                    await manager.chat_prompt_cache.set(cache_key, content)
                     return content
     except TimeoutError:
         raise HTTPException(
@@ -1017,12 +1053,17 @@ async def _chat_completion(
 
         async def read_upstream() -> None:
             try:
-                async with manager.http.stream("POST", f"{base_url}/v1/chat/completions", json=payload, timeout=180.0) as streamed:
-                    async for line in streamed.aiter_lines():
-                        await queue.put(line)
+                async with asyncio.timeout(settings.inference_queue_timeout_seconds):
+                    async with manager.semaphore:
+                        async with manager.http.stream("POST", f"{base_url}/v1/chat/completions", json=payload, timeout=180.0) as streamed:
+                            async for line in streamed.aiter_lines():
+                                await queue.put(line)
+            except Exception as exc:
+                logger.error("[STREAM] UPSTREAM_ERROR=%s", exc)
             finally:
                 stream_closed.set()
                 await queue.put(None)
+
 
         reader_task = asyncio.create_task(read_upstream())
         last_heartbeat = time.monotonic()

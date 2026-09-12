@@ -113,8 +113,13 @@ class AutoIngestionEngine:
     
     def _on_pdf_created(self, path: Path) -> None:
         """Handle new PDF (called from file watcher thread)."""
-        # Schedule ingestion in event loop
-        asyncio.create_task(self._ingest_pdf(path))
+        try:
+            loop = getattr(self, "_loop", None) or asyncio.get_event_loop()
+            if loop and loop.is_running():
+                loop.call_soon_threadsafe(lambda: asyncio.create_task(self._ingest_pdf(path)))
+        except Exception as exc:
+            logger.warning("Could not schedule pdf ingestion safely: %s", exc)
+
     
     async def _ingest_pdf(self, path: Path) -> None:
         """Ingest a PDF file."""

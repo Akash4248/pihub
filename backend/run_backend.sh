@@ -101,6 +101,7 @@ start_service() {
   GEMMA_MODEL_CACHE_DIR="$ROOT/.local_run/models/gemma4_audio" \
   EMBEDDING_CACHE_DIR="$ROOT/.local_run/models/sentence-transformers/embedding" \
   LOCAL_RETRIEVAL_CACHE_DIR="$ROOT/.local_run/models/sentence-transformers/retrieval" \
+  EMBEDDING_FALLBACK="${EMBEDDING_FALLBACK:-hash}" \
   CONTENT_GENERATION_BACKEND="llama" \
   LLAMA_MODEL_PATH="$ROOT/inference-service/models/model.gguf" \
   CONTENT_PIPELINE_URL="http://localhost:8001" \

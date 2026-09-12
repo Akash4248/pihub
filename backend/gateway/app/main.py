@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -21,9 +21,19 @@ from starlette.background import BackgroundTask
 
 from shared.config import get_settings
 from shared.schemas import HealthResponse, IngestResponse, Metadata, SearchRequest, SearchResponse
+from shared.security import (
+    read_file_chunks_safely,
+    sanitize_llm_prompt,
+    sanitize_safe_filename,
+    verify_internal_api_key,
+    verify_jwt_token,
+)
 from shared.topic_normalization import normalize_subject, normalize_topic, should_use_planner, topic_aliases
+from app.services.auth_service import get_current_user_optional, get_current_user_required
 from app.services.experiment_service_client import ExperimentGatewayMetrics, ExperimentServiceClient
 
+
+from app.middleware.structlog_middleware import StructuredLoggingMiddleware
 
 settings = get_settings()
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -84,105 +94,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(StructuredLoggingMiddleware)
 
-from app.services.auth_service import (
-    register_user,
-    authenticate_user,
-    get_current_user_required,
-    get_current_user_optional,
-    extract_user_llm_credentials
-)
-from fastapi import Security
-
-@app.post("/api/auth/register")
-async def api_auth_register(payload: dict[str, Any]):
-    email = payload.get("email")
-    password = payload.get("password")
-    full_name = payload.get("full_name", "Student User")
-    role = payload.get("role", "student")
-    grade = payload.get("grade", 9)
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="Email and password are required.")
-    return register_user(email=email, password=password, full_name=full_name, role=role, grade=grade)
-
-@app.post("/api/auth/login")
-async def api_auth_login(payload: dict[str, Any]):
-    email = payload.get("email")
-    password = payload.get("password")
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="Email and password are required.")
-    return authenticate_user(email=email, password=password)
-
-@app.get("/api/auth/me")
-async def api_auth_me(current_user: dict = Security(get_current_user_required)):
-    return current_user
-
-
-def _log_tag(path: str) -> str:
-    if path.startswith("/discovery"):
-        return "DISCOVERY"
-    if path.startswith("/sync") or path.startswith("/packs/sync"):
-        return "SYNC"
-    if path.startswith("/packs") or path in {"/flashcards", "/quizzes", "/glossary", "/summaries"}:
-        return "PACK"
-    if path.startswith("/rag"):
-        return "RAG"
-    if path.startswith("/experiments") or path.startswith("/experiment-templates") or path.startswith("/experiment-runs") or path.startswith("/analytics") or path.startswith("/experiment-metrics"):
-        return "EXPERIMENT_GATEWAY"
-    if settings.voice_service_enabled and (path.startswith("/api/voice") or path.startswith("/voice")):
-        return "VOICE"
-    if path.startswith("/ai") or path.startswith("/tutor") or path.startswith("/planner") or path.startswith("/metrics/tutor") or path.startswith("/metrics/retrieval"):
-        return "TUTOR"
-    if path.startswith("/progress"):
-        return "PROGRESS"
-    if path.startswith("/quiz-sessions"):
-        return "PROGRESS"
-    return "REQUEST"
-
-
-@app.middleware("http")
-async def structured_logging(request: Request, call_next):
-    if request.scope.get("type") == "websocket":
-        return await call_next(request)
-    started = time.perf_counter()
-    tag = _log_tag(request.url.path)
-    if request.url.path == "/ai/tutor":
-        body = await request.body()
-        logger.info("[TUTOR] RAW_REQUEST=%s", body.decode("utf-8", errors="ignore"))
-
-        async def receive():
-            return {"type": "http.request", "body": body, "more_body": False}
-
-        request = Request(request.scope, receive)
-
-    if tag == "DISCOVERY":
-        logger.info("[DISCOVERY] REQUEST_RECEIVED method=%s path=%s", request.method, request.url.path)
-    logger.info("[%s] REQUEST_START method=%s path=%s", tag, request.method, request.url.path)
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        duration_ms = (time.perf_counter() - started) * 1000
-        logger.exception(
-            "[%s] REQUEST_ERROR method=%s path=%s duration_ms=%.2f error=%s",
-            tag,
-            request.method,
-            request.url.path,
-            duration_ms,
-            exc,
-        )
-        raise
-    duration_ms = (time.perf_counter() - started) * 1000
-    logger.info(
-        "[%s] REQUEST_END method=%s path=%s status=%s duration_ms=%.2f",
-        tag,
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
-    )
-    if tag == "DISCOVERY":
-        logger.info("[DISCOVERY] REQUEST_COMPLETED method=%s path=%s", request.method, request.url.path)
-    return response
 
 
 @app.exception_handler(RequestValidationError)
@@ -194,38 +107,57 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-async def _proxy_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    response = await app.state.http.post(f"{settings.content_pipeline_url}{path}", json=payload)
+async def _proxy_request(
+    base_url: str,
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    files: dict[str, Any] | None = None,
+    stream: bool = False,
+) -> Any:
+    if stream:
+        return await _proxy_stream(base_url, method, path, payload=payload, headers=headers)
+
+    url = f"{base_url}{path}"
+    try:
+        response = await app.state.http.request(
+            method, url, json=payload, params=params, headers=headers, files=files
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}") from exc
+
     if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+        raise HTTPException(status_code=response.status_code, detail=response.text[:2000])
+
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type or not content_type:
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            return {"text": response.text[:2000]}
+
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return {"text": response.text[:2000]}
+
+
+async def _proxy_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return await _proxy_request(settings.content_pipeline_url, path, method="POST", payload=payload)
 
 
 async def _proxy_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.content_pipeline_url}{path}", params=params)
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _proxy_request(settings.content_pipeline_url, path, method="GET", params=params)
 
 
 async def _get_json(base_url: str, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    try:
-        response = await app.state.http.get(f"{base_url}{path}", params=params)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _proxy_request(base_url, path, method="GET", params=params)
 
 
 async def _post_json(base_url: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    try:
-        response = await app.state.http.post(f"{base_url}{path}", json=payload)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _proxy_request(base_url, path, method="POST", payload=payload)
 
 
 async def _post_multipart(
@@ -234,21 +166,14 @@ async def _post_multipart(
     file: UploadFile,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    content = await file.read()
-    files = {
-        "file": (
-            file.filename or "audio.wav",
-            content,
-            file.content_type or "application/octet-stream",
-        )
-    }
-    try:
-        response = await app.state.http.post(f"{base_url}{path}", params=params, files=files)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=_error_detail(response.text))
-    return response.json()
+    safe_name = sanitize_safe_filename(file.filename or "file.bin")
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    files = {"file": (safe_name, content, file.content_type or "application/octet-stream")}
+    return await _proxy_request(base_url, path, method="POST", params=params, files=files)
+
 
 
 def _iso_from_epoch(value: Any) -> str | None:
@@ -652,31 +577,42 @@ async def _pack_service_packs(params: dict[str, Any] | None = None) -> list[dict
     return packs if isinstance(packs, list) else []
 
 
+async def _fetch_pack_preview(pack_id: str) -> dict[str, Any] | None:
+    try:
+        res = await _get_json(settings.pack_service_url, f"/packs/{pack_id}/preview")
+        return res if isinstance(res, dict) else None
+    except Exception:
+        return None
+
+
 async def _asset_response(asset_name: str, filters: dict[str, Any]) -> dict[str, Any]:
     topic = filters.pop("topic", None)
     filters["subject"] = normalize_subject(filters.get("subject"))
     params = {key: value for key, value in filters.items() if value is not None}
     packs = await _pack_service_packs(params)
     items: list[dict[str, Any]] = []
-    for pack in packs:
-        pack_id = pack.get("pack_id")
-        if not pack_id:
-            continue
-        try:
-            preview = await _get_json(settings.pack_service_url, f"/packs/{pack_id}/preview")
-        except HTTPException:
-            continue
-        manifest = preview.get("manifest", {})
-        for item in preview.get(asset_name, []) or []:
-            if isinstance(item, dict) and _matches_topic(item, topic):
-                metadata = _asset_metadata(asset_name, item, manifest)
-                items.append({
-                    "pack_id": pack_id,
-                    "manifest": manifest,
-                    "metadata": metadata,
-                    **metadata,
-                    **item,
-                })
+    
+    valid_packs = [p for p in packs if p.get("pack_id")]
+    if valid_packs:
+        previews = await asyncio.gather(
+            *[_fetch_pack_preview(str(p["pack_id"])) for p in valid_packs],
+            return_exceptions=True,
+        )
+        for pack, preview in zip(valid_packs, previews):
+            if not isinstance(preview, dict):
+                continue
+            pack_id = str(pack["pack_id"])
+            manifest = preview.get("manifest", {})
+            for item in preview.get(asset_name, []) or []:
+                if isinstance(item, dict) and _matches_topic(item, topic):
+                    metadata = _asset_metadata(asset_name, item, manifest)
+                    items.append({
+                        "pack_id": pack_id,
+                        "manifest": manifest,
+                        "metadata": metadata,
+                        **metadata,
+                        **item,
+                    })
     return {"items": items, "total": len(items), "filters": {**params, "topic": topic}}
 
 
@@ -689,29 +625,31 @@ async def _chapter_knowledge_assets(filters: dict[str, Any]) -> list[dict[str, A
     topic = str(filters.get("topic") or "").lower()
     packs = await _pack_service_packs({key: value for key, value in params.items() if value is not None})
     assets: list[dict[str, Any]] = []
-    for pack in packs[:2]:
-        pack_id = pack.get("pack_id")
-        if not pack_id:
-            continue
-        try:
-            preview = await _get_json(settings.pack_service_url, f"/packs/{pack_id}/preview")
-        except HTTPException:
-            continue
-        knowledge = preview.get("chapter_knowledge") or {}
-        if not isinstance(knowledge, dict):
-            continue
-        snippets = _chapter_knowledge_snippets(knowledge, topic)
-        if snippets:
-            assets.append({
-                "title": preview.get("manifest", {}).get("chapter") or pack.get("chapter") or pack_id,
-                "text": "\n".join(snippets[:8]),
-                "metadata": {
-                    "pack_id": pack_id,
-                    "grade": pack.get("grade"),
-                    "subject": pack.get("subject"),
-                    "chapter": pack.get("chapter"),
-                },
-            })
+    valid_packs = [p for p in packs[:2] if p.get("pack_id")]
+    if valid_packs:
+        previews = await asyncio.gather(
+            *[_fetch_pack_preview(str(p["pack_id"])) for p in valid_packs],
+            return_exceptions=True,
+        )
+        for pack, preview in zip(valid_packs, previews):
+            if not isinstance(preview, dict):
+                continue
+            pack_id = str(pack["pack_id"])
+            knowledge = preview.get("chapter_knowledge") or {}
+            if not isinstance(knowledge, dict):
+                continue
+            snippets = _chapter_knowledge_snippets(knowledge, topic)
+            if snippets:
+                assets.append({
+                    "title": preview.get("manifest", {}).get("chapter") or pack.get("chapter") or pack_id,
+                    "text": "\n".join(snippets[:8]),
+                    "metadata": {
+                        "pack_id": pack_id,
+                        "grade": pack.get("grade"),
+                        "subject": pack.get("subject"),
+                        "chapter": pack.get("chapter"),
+                    },
+                })
     return assets[:2]
 
 
@@ -756,18 +694,31 @@ async def _asset_search_bundle(payload: dict[str, Any], normalized_topic: str | 
         "chapter": payload.get("chapter"),
         "topic": normalized_topic or payload.get("topic") or payload.get("question"),
     }
-    summaries = await _asset_response("summaries", dict(filters))
-    flashcards = await _asset_response("flashcards", dict(filters))
-    quizzes = await _asset_response("quizzes", dict(filters))
-    glossary = await _asset_response("glossary", dict(filters))
+    summaries_task = _asset_response("summaries", dict(filters))
+    flashcards_task = _asset_response("flashcards", dict(filters))
+    quizzes_task = _asset_response("quizzes", dict(filters))
+    glossary_task = _asset_response("glossary", dict(filters))
+    chapter_task = _chapter_knowledge_assets(filters)
+
+    results = await asyncio.gather(
+        summaries_task, flashcards_task, quizzes_task, glossary_task, chapter_task, return_exceptions=True
+    )
+
+    summaries = results[0] if isinstance(results[0], dict) else {}
+    flashcards = results[1] if isinstance(results[1], dict) else {}
+    quizzes = results[2] if isinstance(results[2], dict) else {}
+    glossary = results[3] if isinstance(results[3], dict) else {}
+    chapter_knowledge = results[4] if isinstance(results[4], list) else []
+
     return {
         "filters": filters,
         "summaries": summaries.get("items", [])[:3],
         "flashcards": flashcards.get("items", [])[:5],
         "quizzes": quizzes.get("items", [])[:5],
         "glossary": glossary.get("items", [])[:5],
-        "chapter_knowledge": await _chapter_knowledge_assets(filters),
+        "chapter_knowledge": chapter_knowledge,
     }
+
 
 
 def _asset_bundle_count(bundle: dict[str, Any]) -> int:
@@ -970,108 +921,115 @@ async def tutor_capabilities() -> dict[str, bool]:
     }
 
 
+async def _safe_http_get_json(url: str, timeout: float = 3.0) -> tuple[bool, Any]:
+
+    try:
+        resp = await app.state.http.get(url, timeout=timeout)
+        if resp.is_error:
+            try:
+                return False, resp.json()
+            except Exception:
+                return False, {"status": "error", "status_code": resp.status_code, "text": resp.text[:500]}
+        try:
+            return True, resp.json()
+        except Exception:
+            return True, {"status": "ok", "text": resp.text[:500]}
+    except Exception as exc:
+        return False, {"status": "error", "detail": str(exc)}
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     checks: dict[str, Any] = {"gateway": "ok"}
     status = "healthy"
-    inference_ok = False
-    experiment_ok = False
-    voice_ok = False
-    database_ok = False
-    pack_count = 0
+
+    # Define tasks for concurrent execution
+    content_task = _safe_http_get_json(f"{settings.content_pipeline_url}/health")
+    qdrant_task = _safe_http_get_json(f"{settings.qdrant_url}/healthz")
+    qdrant_coll_task = _safe_http_get_json(f"{settings.qdrant_url}/collections/{settings.qdrant_collection}")
+    inference_task = _safe_http_get_json(f"{settings.inference_service_url}/ai/health")
+    exp_task = app.state.experiment_client.health()
+    pihub_task = _safe_http_get_json(f"{settings.pihub_url}/health")
+    pihub_packs_task = _safe_http_get_json(f"{settings.pihub_url}/packs")
+    pack_svc_task = _safe_http_get_json(f"{settings.pack_service_url}/packs")
+
+    voice_task = (
+        _safe_http_get_json(f"{settings.voice_service_url}/health")
+        if settings.voice_service_enabled
+        else None
+    )
+
+    tasks = [content_task, qdrant_task, qdrant_coll_task, inference_task, exp_task, pihub_task, pihub_packs_task, pack_svc_task]
+    if voice_task:
+        tasks.append(voice_task)
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process content_pipeline
+    content_ok, content_body = results[0] if isinstance(results[0], tuple) else (False, {"error": str(results[0])})
+    checks["content_pipeline"] = content_body
+    if not content_ok:
+        status = "degraded"
+
+    # Process qdrant
+    qdrant_ok, qdrant_body = results[1] if isinstance(results[1], tuple) else (False, {"error": str(results[1])})
+    checks["qdrant"] = qdrant_body
+    if not qdrant_ok:
+        status = "degraded"
+
+    # Process qdrant collection
+    coll_ok, coll_body = results[2] if isinstance(results[2], tuple) else (False, {"error": str(results[2])})
+    checks["qdrant_collection"] = coll_body
     chunk_count = 0
+    if coll_ok and isinstance(coll_body, dict):
+        res = coll_body.get("result", {})
+        if isinstance(res, dict):
+            chunk_count = int(res.get("points_count") or res.get("vectors_count") or 0)
 
-    try:
-        content = await app.state.http.get(f"{settings.content_pipeline_url}/health")
-        checks["content_pipeline"] = content.json()
-        if content.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["content_pipeline"] = {"status": "error", "detail": str(exc)}
+    # Process inference
+    inference_ok, inference_body = results[3] if isinstance(results[3], tuple) else (False, {"error": str(results[3])})
+    checks["inference_service"] = inference_body
+    if not inference_ok:
         status = "degraded"
 
-    try:
-        qdrant = await app.state.http.get(f"{settings.qdrant_url}/healthz")
-        checks["qdrant"] = {"status_code": qdrant.status_code, "body": qdrant.text}
-        if qdrant.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["qdrant"] = {"status": "error", "detail": str(exc)}
+    # Process experiment service
+    exp_res = results[4] if isinstance(results[4], dict) else {"healthy": False, "error": str(results[4])}
+    checks["experiment_service"] = exp_res
+    experiment_ok = bool(exp_res.get("healthy"))
+    if not experiment_ok and settings.experiment_service_required:
         status = "degraded"
 
-    try:
-        collection = await app.state.http.get(f"{settings.qdrant_url}/collections/{settings.qdrant_collection}")
-        collection_body = collection.json()
-        checks["qdrant_collection"] = collection_body
-        if collection.is_success:
-            result = collection_body.get("result", {})
-            chunk_count = int(result.get("points_count") or result.get("vectors_count") or 0)
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["qdrant_collection"] = {"status": "error", "detail": str(exc)}
-
-    try:
-        inference = await app.state.http.get(f"{settings.inference_service_url}/ai/health")
-        checks["inference_service"] = inference.json()
-        inference_ok = inference.is_success
-        if inference.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["inference_service"] = {"status": "error", "detail": str(exc)}
+    # Process pihub
+    pihub_ok, pihub_body = results[5] if isinstance(results[5], tuple) else (False, {"error": str(results[5])})
+    checks["pihub"] = pihub_body
+    database_ok = pihub_ok
+    if not pihub_ok:
         status = "degraded"
 
-    try:
-        experiment_health = await app.state.experiment_client.health()
-        checks["experiment_service"] = experiment_health
-        experiment_ok = bool(experiment_health.get("healthy"))
-        if not experiment_ok and settings.experiment_service_required:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - defensive path
-        checks["experiment_service"] = {"healthy": False, "error": str(exc)}
-        if settings.experiment_service_required:
-            status = "degraded"
+    # Process packs count
+    pack_count = 0
+    packs_ok, packs_body = results[6] if isinstance(results[6], tuple) else (False, {})
+    if packs_ok and isinstance(packs_body, dict):
+        pack_count = len(packs_body.get("packs", [])) + len(packs_body.get("cached", []))
 
-    if settings.voice_service_enabled:
-        try:
-            voice = await app.state.http.get(f"{settings.voice_service_url}/health")
-            checks["voice_service"] = voice.json()
-            voice_ok = voice.is_success
-            if voice.is_error and settings.voice_service_required:
-                status = "degraded"
-        except Exception as exc:  # pragma: no cover - network failure path
-            checks["voice_service"] = {"healthy": False, "error": str(exc)}
-            if settings.voice_service_required:
-                status = "degraded"
+    # Process pack_service
+    pack_svc_ok, pack_svc_body = results[7] if isinstance(results[7], tuple) else (False, {})
+    if pack_svc_ok and isinstance(pack_svc_body, dict):
+        pack_count = max(pack_count, len(pack_svc_body.get("packs", [])))
+        checks["pack_service"] = {"status": "ok", "pack_count": len(pack_svc_body.get("packs", []))}
+    else:
+        checks["pack_service"] = pack_svc_body if isinstance(pack_svc_body, dict) else {"status": "degraded"}
+
+    # Process voice service
+    voice_ok = False
+    if settings.voice_service_enabled and len(results) > 8:
+        v_ok, v_body = results[8] if isinstance(results[8], tuple) else (False, {})
+        checks["voice_service"] = v_body
+        voice_ok = v_ok
+        if not v_ok and settings.voice_service_required:
+            status = "degraded"
     else:
         checks["voice_service"] = {"healthy": True, "disabled": True}
-
-    try:
-        pihub = await app.state.http.get(f"{settings.pihub_url}/health")
-        checks["pihub"] = pihub.json()
-        database_ok = pihub.is_success
-        if pihub.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["pihub"] = {"status": "error", "detail": str(exc)}
-        status = "degraded"
-
-    try:
-        packs = await app.state.http.get(f"{settings.pihub_url}/packs")
-        if packs.is_success:
-            body = packs.json()
-            pack_count = len(body.get("packs", [])) + len(body.get("cached", []))
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["packs"] = {"status": "error", "detail": str(exc)}
-
-    try:
-        pack_service = await app.state.http.get(f"{settings.pack_service_url}/packs")
-        if pack_service.is_success:
-            body = pack_service.json()
-            pack_count = max(pack_count, len(body.get("packs", [])))
-            checks["pack_service"] = {"status": "ok", "pack_count": len(body.get("packs", []))}
-        elif pack_service.is_error:
-            checks["pack_service"] = {"status": "degraded", "status_code": pack_service.status_code}
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["pack_service"] = {"status": "error", "detail": str(exc)}
 
     return {
         "status": status,
@@ -1092,8 +1050,8 @@ async def health() -> dict[str, Any]:
     }
 
 
-@app.post("/content/upload", response_model=IngestResponse)
-@app.post("/upload", response_model=IngestResponse)
+@app.post("/content/upload", response_model=IngestResponse, dependencies=[Depends(verify_internal_api_key)])
+@app.post("/upload", response_model=IngestResponse, dependencies=[Depends(verify_internal_api_key)])
 async def upload_content(
     file: UploadFile = File(...),
     grade: int | None = Form(default=None),
@@ -1102,16 +1060,22 @@ async def upload_content(
     topic: str | None = Form(default=None),
     language: str | None = Form(default=None),
 ) -> dict[str, Any]:
+    safe_name = sanitize_safe_filename(file.filename or "upload.pdf")
     metadata = Metadata(grade=grade, subject=subject, chapter=chapter, topic=topic, language=language)
-    content = await file.read()
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+
     response = await app.state.http.post(
         f"{settings.content_pipeline_url}/ingest/pdf",
         data={"metadata": metadata.model_dump_json()},
-        files={"file": (file.filename or "upload.pdf", content, file.content_type or "application/pdf")},
+        files={"file": (safe_name, content, file.content_type or "application/pdf")},
     )
     if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+        raise HTTPException(status_code=response.status_code, detail=response.text[:2000])
     return response.json()
+
 
 
 @app.post("/ingest/pdf", response_model=IngestResponse)
@@ -1180,117 +1144,21 @@ async def rag_subject(subject: str, limit: int = 5) -> dict[str, Any]:
 
 @app.post("/ai/chat")
 async def ai_chat(payload: dict[str, Any]) -> Any:
-    return await _proxy_to(settings.inference_service_url, "POST", "/ai/chat", payload)
-
-
-def _clean_ollama_monologue(raw_text: str) -> str | None:
-    if not raw_text or not raw_text.strip():
-        return None
-    text = raw_text.strip()
-    
-    # 1. Extract starting from markdown header if present
-    header_match = re.search(r'((?:###|##)\s+.*)', text, re.DOTALL)
-    if header_match:
-        text = header_match.group(1).strip()
-    else:
-        # 2. Filter out paragraphs containing planning monologue
-        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
-        good_paragraphs = []
-        for p in paragraphs:
-            if re.search(r'(?i)^\s*(?:\d+\.|\*|-)?\s*\*\*(Analyze|Determine|Identify|Structure|Draft|Goal|Tone|Target|Core)', p):
-                continue
-            if re.search(r'(?i)^(Thinking Process|Here\'?s a plan|Drafting response)', p):
-                continue
-            good_paragraphs.append(p)
-            
-        if good_paragraphs:
-            text = '\n\n'.join(good_paragraphs)
-            if re.search(r'(?i)\bAnalyze the Request\b', text):
-                return None
-        else:
-            return None
-
-    # Ensure response does not end abruptly mid-sentence, at abbreviations, trailing bullet markers, or headings
-    if text:
-        text = re.sub(r'(?m)\n+#{1,6}\s*[\d\w\s\.\-]*$', '', text).strip()
-        text = re.sub(r'(?m)\n+\s*(?:\d+\.|\*|-)\s*$', '', text).strip()
-        
-        abbrevs = ("e.", "e.g.", "i.e.", "vs.", "etc.", "dr.", "mr.", "ms.", "prof.", "approx.", "fig.")
-        ends_with_abbrev = any(text.lower().endswith(ab) for ab in abbrevs)
-        
-        if text[-1] not in ('.', '!', '?') or ends_with_abbrev:
-            matches = list(re.finditer(r'[\.\!\?](?=\s|\n|$)', text[:len(text)-2]))
-            if matches:
-                last_pos = matches[-1].start()
-                if last_pos > 100:
-                    text = text[:last_pos + 1].strip()
-                    
-        text = re.sub(r'(?m)\n+\s*(?:\d+\.|\*|-)\s*$', '', text).strip()
-
-    return text if text else None
-
-async def _query_ollama(query: str, topic: str | None, grade: int = 9) -> str | None:
-    t_clean = (topic or "General Science & Mathematics").strip()
-    sys_prompt = (
-        f"You are an expert NCERT school AI tutor for Class {grade} {t_clean}.\n"
-        f"Answer the student's question directly, accurately, and clearly using simple school-level concepts.\n"
-        f"Use headers (e.g. ###), bold text, bullet points, and key formulas where applicable.\n"
-        f"CRITICAL: Start your response IMMEDIATELY with '### {t_clean} Explained'. Absolutely NO planning, NO '1. Analyze the request', NO thinking steps."
-    )
-    user_prompt = f"Student Question: {query}\nChapter/Topic: {t_clean}\nGrade: Class {grade}"
-    try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(
-                "http://127.0.0.1:11434/api/chat",
-                json={
-                    "model": "gemma4:latest",
-                    "messages": [
-                        {"role": "system", "content": sys_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,
-                        "num_predict": 650,
-                    }
-                }
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                msg = data.get("message", {})
-                content = (msg.get("content") or "").strip()
-                thinking = (msg.get("thinking") or "").strip()
-                raw_text = content if content else thinking
-                return _clean_ollama_monologue(raw_text)
-    except Exception as exc:
-        logger.error("[OLLAMA] Local Ollama call failed: %s", exc, exc_info=True)
-    return None
-
-def generate_socratic_response(query: str, topic: str | None, grade: int = 9) -> dict[str, Any]:
-    q_clean = query.strip()
-    t_clean = (topic or "General Science & Mathematics").strip()
-
-    t_title = t_clean.title()
-    answer = (
-        f"Hello! 👋 I am your NCERT Class {grade} Socratic AI Tutor for **{t_title}**.\n\n"
-        f"How can I help you master **{t_title}** today? Ask me any question or concept from this chapter to begin!"
-    )
-    return {
-        "answer": answer,
-        "formulas": [],
-        "hasAudio": True,
-        "explainOptions": ["Explain Core Concepts", "Show Example Problems", "Real-World Applications"],
-        "source": "live_generative_socratic_greeting",
-    }
+    sanitized_payload = dict(payload)
+    if "prompt" in sanitized_payload and isinstance(sanitized_payload["prompt"], str):
+        sanitized_payload["prompt"] = sanitize_llm_prompt(sanitized_payload["prompt"])
+    if "message" in sanitized_payload and isinstance(sanitized_payload["message"], str):
+        sanitized_payload["message"] = sanitize_llm_prompt(sanitized_payload["message"])
+    return await _proxy_to(settings.inference_service_url, "POST", "/ai/chat", sanitized_payload)
 
 
 @app.post("/ai/tutor")
 async def ai_tutor(payload: dict[str, Any]) -> Any:
     started = time.perf_counter()
-    query = str(payload.get("question") or payload.get("query") or "").strip()
+    query = sanitize_llm_prompt(str(payload.get("question") or payload.get("query") or "").strip())
     normalization = normalize_topic(payload.get("topic"), query)
+
     normalized_topic = normalization.normalized_topic
-    grade = payload.get("grade") or 9
     intent = payload.get("intent")
 
     if should_use_planner(intent, query):
@@ -1311,48 +1179,106 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
             "rag_ms": 0.0,
             "total_ms": round(total_ms, 2),
         })
+        logger.info(
+            "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
+            query,
+            normalized_topic,
+            intent,
+            0,
+            0,
+            "planner_trigger",
+        )
         if payload.get("stream") is True:
             return _planner_stream(response)
         return response
 
-    # 1. Check standalone greeting
-    if re.match(r"^(hi|hello|hey|hii+|good\s*(morning|afternoon|evening)|how are you)[\s!.?]*$", query, re.IGNORECASE):
-        return generate_socratic_response(query, normalized_topic or payload.get("topic"), grade)
+    asset_start = time.perf_counter()
+    bundle = await _asset_search_bundle(payload, normalized_topic)
+    asset_ms = (time.perf_counter() - asset_start) * 1000
+    asset_matches = _asset_bundle_count(bundle)
 
-    # 2. Query Local Ollama LLM (gemma4)
-    ollama_text = await _query_ollama(query, normalized_topic or payload.get("topic"), grade)
-    if ollama_text:
-        total_ms = (time.perf_counter() - started) * 1000
-        logger.info("[TUTOR] Ollama LLM response generated in %.2f ms", total_ms)
-        return {
-            "answer": ollama_text,
-            "formulas": [f"NCERT Class {grade} {normalized_topic or payload.get('topic') or 'Core'} Principles"],
-            "hasAudio": True,
-            "explainOptions": ["Real-World Analogy", "Step-by-Step Math", "Simpler Language", "Visual Simulation"],
-            "source": "ollama_gemma4_llm",
-        }
+    enriched_payload = dict(payload)
+    if normalized_topic:
+        enriched_payload["topic"] = normalized_topic
+        enriched_payload["normalized_topic"] = normalized_topic
+    enriched_payload["original_topic"] = normalization.original_topic
+    enriched_payload["topic_alias"] = normalization.matched_alias
+    enriched_payload["asset_context"] = _asset_context(bundle)
+    enriched_payload["asset_search"] = {
+        "filters": bundle.get("filters", {}),
+        "counts": {
+            "summaries": len(bundle.get("summaries", [])),
+            "flashcards": len(bundle.get("flashcards", [])),
+            "quizzes": len(bundle.get("quizzes", [])),
+            "glossary": len(bundle.get("glossary", [])),
+        },
+    }
 
-    # 3. Try inference-service proxy
-    try:
-        enriched_payload = dict(payload)
-        if normalized_topic:
-            enriched_payload["topic"] = normalized_topic
-        result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
-        if isinstance(result, dict) and result.get("answer"):
-            cleaned_ans = _clean_ollama_monologue(result["answer"])
-            if cleaned_ans:
-                result["answer"] = cleaned_ans
-                return result
-        if isinstance(result, StreamingResponse):
-            return result
-    except Exception as exc:
-        logger.warning("[TUTOR] Inference service proxy failed (%s).", exc)
+    result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
+    total_ms = (time.perf_counter() - started) * 1000
+    if isinstance(result, StreamingResponse):
+        _record_retrieval_metric({
+            "query": query,
+            "intent": intent,
+            "topic": payload.get("topic"),
+            "normalized_topic": normalized_topic,
+            "matched_alias": normalization.matched_alias,
+            "response_source": "inference_service",
+            "fallback_reason": None if asset_matches else "no_asset_match",
+            "asset_matches": asset_matches,
+            "chunks_retrieved": 0,
+            "chunks_used": 0,
+            "asset_ms": round(asset_ms, 2),
+            "rag_ms": 0.0,
+            "total_ms": round(total_ms, 2),
+            "stream": True,
+        })
+        logger.info(
+            "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
+            query,
+            normalized_topic,
+            intent,
+            0,
+            0,
+            None if asset_matches else "no_asset_match",
+        )
+        return result
 
-    # 4. Explicit Timeout / Failure Error - NEVER return fake template
-    raise HTTPException(
-        status_code=504,
-        detail="Backend LLM timed out or returned incomplete planning output. Please retry."
+    chunks_retrieved = len(result.get("context", [])) if isinstance(result, dict) else 0
+    chunks_used = chunks_retrieved
+    fallback_reason = None
+    if asset_matches == 0 and chunks_retrieved == 0:
+        fallback_reason = "no_asset_or_rag_match"
+    elif asset_matches == 0:
+        fallback_reason = "no_asset_match"
+    elif chunks_retrieved == 0:
+        fallback_reason = "no_rag_match"
+    _record_retrieval_metric({
+        "query": query,
+        "intent": intent,
+        "topic": payload.get("topic"),
+        "normalized_topic": normalized_topic,
+        "matched_alias": normalization.matched_alias,
+        "response_source": "inference_service",
+        "fallback_reason": fallback_reason,
+        "asset_matches": asset_matches,
+        "chunks_retrieved": chunks_retrieved,
+        "chunks_used": chunks_used,
+        "asset_ms": round(asset_ms, 2),
+        "rag_ms": 0.0,
+        "total_ms": round(total_ms, 2),
+        "stream": False,
+    })
+    logger.info(
+        "[RAG] RETRIEVAL query=%s normalized_topic=%s intent=%s chunks_retrieved=%s chunks_used=%s fallback_reason=%s",
+        query,
+        normalized_topic,
+        intent,
+        chunks_retrieved,
+        chunks_used,
+        fallback_reason,
     )
+    return result
 
 
 @app.post("/ai/tutor/debug")
@@ -1541,9 +1467,8 @@ async def packs_sync(
         for pack in all_packs
         if _pack_matches_filters(pack, grade=grade, subject=subject, language=language)
     ]
-    if not packs and all_packs:
-        packs = all_packs
     records = {str(pack["pack_id"]): pack for pack in packs}
+
     changed_packs = [
         pack
         for pack in packs
@@ -2182,662 +2107,67 @@ async def quiz_session_answer(quiz_session_id: str, payload: dict[str, Any]) -> 
     return await _post_json(settings.pihub_url, f"/quiz-sessions/{quiz_session_id}/answer", payload)
 
 
-@app.get("/classroom")
+@app.get("/classroom", dependencies=[Depends(verify_internal_api_key)])
 async def classroom_get() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.pihub_url}/classroom")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.pihub_url, "/classroom")
 
 
-@app.post("/classroom")
+@app.post("/classroom", dependencies=[Depends(verify_internal_api_key)])
 async def classroom_post(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.pihub_url, "POST", "/classroom", payload)
 
 
-@app.post("/ingest/directory")
+@app.post("/ingest/directory", dependencies=[Depends(verify_internal_api_key)])
 async def ingest_directory(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.content_pipeline_url, "POST", "/ingest/directory", payload)
 
 
-@app.get("/devices")
+@app.get("/devices", dependencies=[Depends(verify_internal_api_key)])
 async def devices_get() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.pihub_url}/devices")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.pihub_url, "/devices")
 
 
-@app.post("/devices")
+@app.post("/devices", dependencies=[Depends(verify_internal_api_key)])
 async def devices_post(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.pihub_url, "POST", "/devices", payload)
 
 
-@app.get("/debug/curriculum")
+@app.get("/debug/curriculum", dependencies=[Depends(verify_internal_api_key)])
 async def debug_curriculum() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.content_pipeline_url}/debug/curriculum")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.content_pipeline_url, "/debug/curriculum")
 
 
-@app.get("/debug/curriculum-relations")
+@app.get("/debug/curriculum-relations", dependencies=[Depends(verify_internal_api_key)])
 async def debug_curriculum_relations() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.content_pipeline_url}/debug/curriculum-relations")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.content_pipeline_url, "/debug/curriculum-relations")
 
 
-@app.get("/debug/metadata")
+@app.get("/debug/metadata", dependencies=[Depends(verify_internal_api_key)])
 async def debug_metadata(path: str) -> dict[str, Any]:
     return await _proxy_get("/debug/metadata", {"path": path})
 
 
-@app.get("/debug/chunks")
+@app.get("/debug/chunks", dependencies=[Depends(verify_internal_api_key)])
 async def debug_chunks(path: str) -> dict[str, Any]:
     return await _proxy_get("/debug/chunks", {"path": path})
 
 
-@app.post("/debug/retrieval")
+@app.post("/debug/retrieval", dependencies=[Depends(verify_internal_api_key)])
 async def debug_retrieval(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_json("/debug/retrieval", payload)
 
 
-@app.get("/debug/similarity")
+@app.get("/debug/similarity", dependencies=[Depends(verify_internal_api_key)])
 async def debug_similarity(left: str, right: str) -> dict[str, Any]:
     return await _proxy_get("/debug/similarity", {"left": left, "right": right})
 
 
-@app.get("/debug/pack-preview")
+@app.get("/debug/pack-preview", dependencies=[Depends(verify_internal_api_key)])
 async def debug_pack_preview(path: str, pack_name: str = "curriculum_pack") -> dict[str, Any]:
     return await _proxy_get("/debug/pack-preview", {"path": path, "pack_name": pack_name})
 
 
-@app.get("/debug/learning-pack-preview")
+@app.get("/debug/learning-pack-preview", dependencies=[Depends(verify_internal_api_key)])
 async def debug_learning_pack_preview(path: str, pack_name: str = "curriculum_pack") -> dict[str, Any]:
     return await _proxy_get("/debug/learning-pack-preview", {"path": path, "pack_name": pack_name})
-
-
-# --- MENTORA STITCH DYNAMIC BACKEND CATALOG & FEATURE ENDPOINTS ---
-
-CHAPTERS_BY_GRADE_SUBJECT: dict[tuple[int, str], list[dict[str, Any]]] = {
-    # Grade 5
-    (5, "Science"): [
-        {"number": 1, "title": "Super Senses", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Sense organs", "Animal senses"]},
-        {"number": 2, "title": "A Snake Charmer's Story", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Poisonous snakes", "Wildlife protection"]},
-        {"number": 3, "title": "From Tasting to Digesting", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Taste buds", "Digestive system"]},
-        {"number": 4, "title": "Mangoes Round the Year", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Food preservation", "Spoilage"]},
-        {"number": 5, "title": "Seeds and Seeds", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Germination", "Dispersal of seeds"]},
-        {"number": 6, "title": "Every Drop Counts", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Water conservation", "Lakes and wells"]},
-        {"number": 7, "title": "Experiments with Water", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Floating and sinking", "Solubility"]},
-        {"number": 8, "title": "A Treat for Mosquitoes", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Malaria and Dengue", "Prevention"]},
-        {"number": 9, "title": "Up You Go!", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Mountaineering", "Leadership and team work"]},
-        {"number": 10, "title": "Walls Tell Stories", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Golconda Fort", "Historical monuments"]},
-        {"number": 11, "title": "Sunita in Space", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Gravity", "Space travel"]},
-        {"number": 12, "title": "What if it Finishes...?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Fuels", "Petroleum conservation"]},
-        {"number": 13, "title": "A Shelter so High!", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Leh and Ladakh", "Cold deserts"]},
-        {"number": 14, "title": "When the Earth Shook!", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Earthquakes", "Disaster management"]},
-        {"number": 15, "title": "Blow Hot, Blow Cold", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Breathing", "Air flow and temperature"]},
-        {"number": 16, "title": "Who will do this Work?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Cleanliness", "Social equality"]},
-        {"number": 17, "title": "Across the Wall", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Gender equality", "Sportsmanship"]},
-        {"number": 18, "title": "No Place for Us?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Displacement", "Dams and migration"]},
-        {"number": 19, "title": "A Seed tells a Farmer's Story", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Agriculture", "Traditional vs Modern farming"]},
-        {"number": 20, "title": "Whose Forests?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Forest conservation", "Tribal life"]},
-        {"number": 21, "title": "Like Father, Like Daughter", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Heredity traits", "Family characteristics"]},
-        {"number": 22, "title": "On the Move Again", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Seasonal migration", "Sugarcane workers"]},
-    ],
-    (5, "Mathematics"): [
-        {"number": 1, "title": "The Fish Tale", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Large numbers", "Speed calculations"]},
-        {"number": 2, "title": "Shapes and Angles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Angles", "Right angles"]},
-        {"number": 3, "title": "How Many Squares?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Area of grid shapes", "Perimeter"]},
-        {"number": 4, "title": "Parts and Wholes", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Fractions", "Equal parts"]},
-        {"number": 5, "title": "Does it Look the Same?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Symmetry", "Rotations"]},
-        {"number": 6, "title": "Be My Multiple, I'll be Your Factor", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Factors and Multiples", "LCM"]},
-        {"number": 7, "title": "Can You See the Pattern?", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Number patterns", "Magic squares"]},
-        {"number": 8, "title": "Mapping Your Way", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Scale drawing", "Directions and maps"]},
-        {"number": 9, "title": "Boxes and Sketches", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["3D nets", "Cube drawings"]},
-        {"number": 10, "title": "Tenths and Hundredths", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Decimals", "Centimetres and millimetres"]},
-        {"number": 11, "title": "Area and its Boundary", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Perimeter and area formulas"]},
-        {"number": 12, "title": "Smart Charts", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Tally marks", "Bar charts"]},
-        {"number": 13, "title": "Ways to Multiply and Divide", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Multiplication methods", "Division word problems"]},
-        {"number": 14, "title": "How Big? How Heavy?", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Volume of cuboids", "Weight measurement"]},
-    ],
-
-    # Grade 6
-    (6, "Science"): [
-        {"number": 1, "title": "Components of Food", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Nutrients", "Balanced diet"]},
-        {"number": 2, "title": "Sorting Materials into Groups", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Material properties", "Solubility"]},
-        {"number": 3, "title": "Separation of Substances", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Sieving", "Filtration", "Evaporation"]},
-        {"number": 4, "title": "Getting to Know Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Roots", "Stems", "Leaves", "Flowers"]},
-        {"number": 5, "title": "Body Movements", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Human skeleton", "Joints"]},
-        {"number": 6, "title": "The Living Organisms — Characteristics and Habitats", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Adaptations", "Terrestrial vs Aquatic"]},
-        {"number": 7, "title": "Motion and Measurement of Distances", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["SI units", "Types of motion"]},
-        {"number": 8, "title": "Light, Shadows and Reflections", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Opaque objects", "Shadows", "Mirrors"]},
-        {"number": 9, "title": "Electricity and Circuits", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Electric cell", "Switches", "Conductors"]},
-        {"number": 10, "title": "Fun with Magnets", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Poles of magnet", "Magnetic compass"]},
-        {"number": 11, "title": "Air Around Us", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Composition of air", "Oxygen cycle"]},
-    ],
-    (6, "Mathematics"): [
-        {"number": 1, "title": "Knowing Our Numbers", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Place value", "Estimation", "Brackets"]},
-        {"number": 2, "title": "Whole Numbers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Number line", "Properties of whole numbers"]},
-        {"number": 3, "title": "Playing with Numbers", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Prime numbers", "HCF and LCM"]},
-        {"number": 4, "title": "Basic Geometrical Ideas", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Points", "Lines", "Polygons", "Circles"]},
-        {"number": 5, "title": "Understanding Elementary Shapes", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Angles", "Triangles", "3D Shapes"]},
-        {"number": 6, "title": "Integers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Positive and negative numbers"]},
-        {"number": 7, "title": "Fractions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Types of fractions", "Equivalent fractions"]},
-        {"number": 8, "title": "Decimals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Tenths and hundredths", "Comparing decimals"]},
-        {"number": 9, "title": "Data Handling", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Pictographs", "Bar graphs"]},
-        {"number": 10, "title": "Mensuration", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Perimeter", "Area of rectangle & square"]},
-        {"number": 11, "title": "Algebra", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Matchstick patterns", "Variables"]},
-        {"number": 12, "title": "Ratio and Proportion", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Ratios", "Unitary method"]},
-    ],
-
-    # Grade 7
-    (7, "Science"): [
-        {"number": 1, "title": "Nutrition in Plants", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Photosynthesis", "Heterotrophs"]},
-        {"number": 2, "title": "Nutrition in Animals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Human digestion", "Ruminants"]},
-        {"number": 3, "title": "Heat", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Conduction", "Convection", "Radiation"]},
-        {"number": 4, "title": "Acids, Bases and Salts", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Litmus indicator", "Neutralisation"]},
-        {"number": 5, "title": "Physical and Chemical Changes", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Rusting", "Crystallisation"]},
-        {"number": 6, "title": "Respiration in Organisms", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Aerobic vs Anaerobic", "Breathing"]},
-        {"number": 7, "title": "Transportation in Animals and Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Circulatory system", "Xylem & Phloem"]},
-        {"number": 8, "title": "Reproduction in Plants", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Asexual reproduction", "Pollination"]},
-        {"number": 9, "title": "Motion and Time", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Simple pendulum", "Speed-time graphs"]},
-        {"number": 10, "title": "Electric Current and Its Effects", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Heating effect", "Electromagnets"]},
-        {"number": 11, "title": "Light", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Mirrors and lenses", "Prisms"]},
-        {"number": 12, "title": "Forests: Our Lifeline", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Forest ecosystem", "Interdependence"]},
-        {"number": 13, "title": "Wastewater Story", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Sewage treatment", "Sanitation"]},
-    ],
-    (7, "Mathematics"): [
-        {"number": 1, "title": "Integers", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Integer operations", "Properties"]},
-        {"number": 2, "title": "Fractions and Decimals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Multiplication & division"]},
-        {"number": 3, "title": "Data Handling", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Mean, median, mode", "Bar graphs"]},
-        {"number": 4, "title": "Simple Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Solving equations"]},
-        {"number": 5, "title": "Lines and Angles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Complementary & supplementary", "Transversals"]},
-        {"number": 6, "title": "The Triangle and Its Properties", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Exterior angle", "Pythagoras theorem"]},
-        {"number": 7, "title": "Comparing Quantities", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Percentages", "Profit & Loss", "Simple interest"]},
-        {"number": 8, "title": "Rational Numbers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Standard form", "Number line"]},
-        {"number": 9, "title": "Perimeter and Area", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Parallelograms", "Triangles", "Circles"]},
-        {"number": 10, "title": "Algebraic Expressions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Terms and factors", "Adding expressions"]},
-        {"number": 11, "title": "Exponents and Powers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Laws of exponents", "Scientific notation"]},
-        {"number": 12, "title": "Symmetry", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Line symmetry", "Rotational symmetry"]},
-        {"number": 13, "title": "Visualising Solid Shapes", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Nets for 3D shapes", "Views of solids"]},
-    ],
-
-    # Grade 8
-    (8, "Science"): [
-        {"number": 1, "title": "Crop Production and Management", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Soil preparation", "Sowing & Irrigation"]},
-        {"number": 2, "title": "Microorganisms: Friend and Foe", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Vaccines", "Pathogens", "Food preservation"]},
-        {"number": 3, "title": "Coal and Petroleum", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Fossil fuels", "Petroleum refining"]},
-        {"number": 4, "title": "Combustion and Flame", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Ignition temp", "Flame structure"]},
-        {"number": 5, "title": "Conservation of Plants and Animals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Deforestation", "Biosphere reserves"]},
-        {"number": 6, "title": "Reproduction in Animals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Sexual reproduction", "Metamorphosis"]},
-        {"number": 7, "title": "Reaching the Age of Adolescence", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Puberty", "Hormones"]},
-        {"number": 8, "title": "Force and Pressure", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Contact forces", "Pressure in fluids"]},
-        {"number": 9, "title": "Friction", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Static & kinetic friction", "Fluid friction"]},
-        {"number": 10, "title": "Sound", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Vibrations", "Frequency and pitch"]},
-        {"number": 11, "title": "Chemical Effects of Electric Current", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Electroplating", "Conduction in liquids"]},
-        {"number": 12, "title": "Some Natural Phenomena", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Lightning", "Earthquakes"]},
-        {"number": 13, "title": "Light", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Reflection laws", "Human eye"]},
-    ],
-    (8, "Mathematics"): [
-        {"number": 1, "title": "Rational Numbers", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Properties of rational numbers"]},
-        {"number": 2, "title": "Linear Equations in One Variable", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Solving equations", "Applications"]},
-        {"number": 3, "title": "Understanding Quadrilaterals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Polygons", "Parallelogram properties"]},
-        {"number": 4, "title": "Data Handling", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Pie charts", "Probability"]},
-        {"number": 5, "title": "Squares and Square Roots", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Square root division method"]},
-        {"number": 6, "title": "Cubes and Cube Roots", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Prime factorisation for cube root"]},
-        {"number": 7, "title": "Comparing Quantities", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Discounts", "GST", "Compound interest"]},
-        {"number": 8, "title": "Algebraic Expressions and Identities", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Algebraic identities"]},
-        {"number": 9, "title": "Mensuration", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Area of trapezium", "Surface area & volume"]},
-        {"number": 10, "title": "Exponents and Powers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Negative exponents", "Laws"]},
-        {"number": 11, "title": "Direct and Inverse Proportions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Direct & inverse variation"]},
-        {"number": 12, "title": "Factorisation", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Common factors", "Splitting middle term"]},
-        {"number": 13, "title": "Introduction to Graphs", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Line graphs", "Cartesian coordinates"]},
-    ],
-
-    # Grade 9
-    (9, "Physics"): [
-        {"number": 1, "title": "Motion", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Speed", "Velocity", "Acceleration", "Equations of Motion"]},
-        {"number": 2, "title": "Force and Laws of Motion", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Inertia", "Newton's First Law", "Momentum", "F=ma"]},
-        {"number": 3, "title": "Gravitation", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Universal Law", "Free Fall", "Mass vs Weight"]},
-        {"number": 4, "title": "Work and Energy", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Kinetic Energy", "Potential Energy", "Power"]},
-        {"number": 5, "title": "Sound", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Wave Nature", "Speed of Sound", "Ultrasound"]},
-    ],
-    (9, "Chemistry"): [
-        {"number": 1, "title": "Matter in Our Surroundings", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["States of Matter", "Evaporation", "Latent Heat"]},
-        {"number": 2, "title": "Is Matter Around Us Pure", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Mixtures", "Solutions", "Separation Techniques"]},
-        {"number": 3, "title": "Atoms and Molecules", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Dalton's Theory", "Atomic Mass", "Mole Concept"]},
-        {"number": 4, "title": "Structure of the Atom", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Electrons", "Protons", "Bohr Model", "Valency"]},
-    ],
-    (9, "Biology"): [
-        {"number": 1, "title": "The Fundamental Unit of Life", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Cell Membrane", "Organelles", "Nucleus"]},
-        {"number": 2, "title": "Tissues", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Plant Tissues", "Animal Tissues", "Xylem & Phloem"]},
-        {"number": 3, "title": "Improvement in Food Resources", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Crop Production", "Nutrient Management"]},
-    ],
-    (9, "Mathematics"): [
-        {"number": 1, "title": "Number Systems", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Irrational Numbers", "Real Numbers", "Laws of Exponents"]},
-        {"number": 2, "title": "Polynomials", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Degree", "Zeroes", "Factor Theorem"]},
-        {"number": 3, "title": "Coordinate Geometry", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Cartesian Plane", "Quadrants", "Plotting Points"]},
-        {"number": 4, "title": "Linear Equations in Two Variables", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Graphing", "Solutions"]},
-        {"number": 5, "title": "Introduction to Euclid's Geometry", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Axioms and Postulates"]},
-        {"number": 6, "title": "Lines and Angles", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Intersecting Lines", "Parallel Lines & Transversals"]},
-        {"number": 7, "title": "Triangles", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Congruence Criteria", "Inequalities in a Triangle"]},
-        {"number": 8, "title": "Quadrilaterals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Parallelogram Theorems", "Mid-point Theorem"]},
-        {"number": 9, "title": "Circles", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Angle Subtended by Arc", "Cyclic Quadrilaterals"]},
-        {"number": 10, "title": "Heron's Formula", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Area of Triangle Formula"]},
-        {"number": 11, "title": "Surface Areas and Volumes", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Cone", "Sphere", "Hemisphere"]},
-        {"number": 12, "title": "Statistics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Bar Graphs", "Histograms", "Frequency Polygon"]},
-    ],
-
-    # Grade 10
-    (10, "Physics"): [
-        {"number": 1, "title": "Light - Reflection and Refraction", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Mirror Formula", "Refractive Index", "Lens Formula"]},
-        {"number": 2, "title": "Human Eye and Colourful World", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Defects of Vision", "Dispersion", "Atmospheric Refraction"]},
-        {"number": 3, "title": "Electricity", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Ohm's Law", "Resistors in Series & Parallel", "Joule's Law"]},
-        {"number": 4, "title": "Magnetic Effects of Electric Current", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Magnetic Field Lines", "Solenoid", "Fleming's Left Hand Rule"]},
-    ],
-    (10, "Chemistry"): [
-        {"number": 1, "title": "Chemical Reactions and Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Balancing Equations", "Types of Chemical Reactions"]},
-        {"number": 2, "title": "Acids, Bases and Salts", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["pH Scale", "Plaster of Paris", "Bleaching Powder"]},
-        {"number": 3, "title": "Metals and Non-Metals", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Reactivity Series", "Ionic Compounds", "Metallurgy"]},
-        {"number": 4, "title": "Carbon and Its Compounds", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Covalent Bonding", "Homologous Series", "Ethanol & Ethanoic Acid"]},
-    ],
-    (10, "Biology"): [
-        {"number": 1, "title": "Life Processes", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Nutrition", "Respiration", "Transportation", "Excretion"]},
-        {"number": 2, "title": "Control and Coordination", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Nervous System", "Reflex Arc", "Plant Hormones"]},
-        {"number": 3, "title": "How do Organisms Reproduce?", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Asexual vs Sexual", "Human Reproductive System", "Reproductive Health"]},
-        {"number": 4, "title": "Heredity and Evolution", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mendelian Inheritance", "Monohybrid & Dihybrid Cross"]},
-        {"number": 5, "title": "Our Environment", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Ecosystem", "Food Chain & Web", "Ozone Depletion"]},
-    ],
-    (10, "Mathematics"): [
-        {"number": 1, "title": "Real Numbers", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Fundamental Theorem of Arithmetic", "Proof of Irrationality"]},
-        {"number": 2, "title": "Polynomials", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Geometrical Meaning of Zeroes", "Relationship between Zeroes & Coefficients"]},
-        {"number": 3, "title": "Pair of Linear Equations in Two Variables", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Graphical Method", "Substitution & Elimination Methods"]},
-        {"number": 4, "title": "Quadratic Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Standard Form", "Quadratic Formula", "Nature of Roots"]},
-        {"number": 5, "title": "Arithmetic Progressions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["nth term of AP", "Sum of first n terms"]},
-        {"number": 6, "title": "Triangles", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Basic Proportionality Theorem", "Criteria for Similarity"]},
-        {"number": 7, "title": "Coordinate Geometry", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Distance Formula", "Section Formula"]},
-        {"number": 8, "title": "Introduction to Trigonometry", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Trigonometric Ratios", "Identities"]},
-        {"number": 9, "title": "Some Applications of Trigonometry", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Heights and Distances", "Angles of Elevation & Depression"]},
-        {"number": 10, "title": "Circles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Tangent to a Circle", "Tangents from External Point"]},
-        {"number": 11, "title": "Areas Related to Circles", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Area of Sector & Segment"]},
-        {"number": 12, "title": "Surface Areas and Volumes", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Combination of Solids", "Volume of Combined Solids"]},
-        {"number": 13, "title": "Statistics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mean, Median, Mode of Grouped Data"]},
-        {"number": 14, "title": "Probability", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Classical Definition of Probability"]},
-    ],
-
-    # Grade 11
-    (11, "Physics"): [
-        {"number": 1, "title": "Units and Measurements", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["SI Units", "Dimensional Analysis", "Errors"]},
-        {"number": 2, "title": "Motion in a Straight Line", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Position-Time Graphs", "Kinematics"]},
-        {"number": 3, "title": "Motion in a Plane", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Vectors", "Projectile Motion", "Circular Motion"]},
-        {"number": 4, "title": "Laws of Motion", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Newton's Laws", "Momentum", "Friction"]},
-        {"number": 5, "title": "Work, Energy and Power", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Work-Energy Theorem", "Collisions"]},
-        {"number": 6, "title": "System of Particles and Rotational Motion", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Center of mass", "Torque", "Angular momentum"]},
-        {"number": 7, "title": "Gravitation", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Kepler's laws", "Gravitational potential", "Satellites"]},
-        {"number": 8, "title": "Mechanical Properties of Solids", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Stress and strain", "Hooke's law", "Young's modulus"]},
-        {"number": 9, "title": "Mechanical Properties of Fluids", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Pascal's law", "Bernoulli's principle", "Viscosity"]},
-        {"number": 10, "title": "Thermal Properties of Matter", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Heat capacity", "Thermal expansion", "Newton's law of cooling"]},
-        {"number": 11, "title": "Thermodynamics", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["First & Second law", "Carnot engine"]},
-        {"number": 12, "title": "Kinetic Theory", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Ideal gas laws", "Degrees of freedom"]},
-        {"number": 13, "title": "Oscillations", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Simple harmonic motion", "Damped oscillations"]},
-        {"number": 14, "title": "Waves", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Transverse & longitudinal waves", "Doppler effect"]},
-    ],
-    (11, "Chemistry"): [
-        {"number": 1, "title": "Some Basic Concepts of Chemistry", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mole Concept", "Stoichiometry"]},
-        {"number": 2, "title": "Structure of Atom", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Quantum Numbers", "Bohr Model"]},
-        {"number": 3, "title": "Classification of Elements and Periodicity in Properties", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Periodic Trends", "Electronegativity"]},
-        {"number": 4, "title": "Chemical Bonding and Molecular Structure", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["VSEPR Theory", "Hybridisation", "MO Theory"]},
-        {"number": 5, "title": "Chemical Thermodynamics", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Enthalpy", "Entropy", "Gibbs Free Energy"]},
-        {"number": 6, "title": "Equilibrium", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Le Chatelier's Principle", "pH and Buffers", "Solubility Product"]},
-        {"number": 7, "title": "Redox Reactions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Oxidation Number", "Balancing Redox Reactions"]},
-        {"number": 8, "title": "Organic Chemistry: Some Basic Principles and Techniques", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["IUPAC Nomenclature", "Isomerism", "Reaction Mechanisms"]},
-        {"number": 9, "title": "Hydrocarbons", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Alkanes, Alkenes, Alkynes", "Aromaticity & Benzene"]},
-    ],
-    (11, "Biology"): [
-        {"number": 1, "title": "The Living World", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Taxonomic Hierarchy", "Binomial Nomenclature"]},
-        {"number": 2, "title": "Biological Classification", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Five Kingdom System", "Monera, Fungi"]},
-        {"number": 3, "title": "Plant Kingdom", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Algae, Bryophytes, Gymnosperms"]},
-        {"number": 4, "title": "Animal Kingdom", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Non-chordates and Chordates"]},
-        {"number": 5, "title": "Morphology of Flowering Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Roots, Stems, Inflorescence"]},
-        {"number": 6, "title": "Anatomy of Flowering Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Tissues", "Dicot vs Monocot anatomy"]},
-        {"number": 7, "title": "Structural Organisation in Animals", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Animal Tissues", "Cockroach anatomy"]},
-        {"number": 8, "title": "Cell: The Unit of Life", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Prokaryotic vs Eukaryotic cells", "Organelles"]},
-        {"number": 9, "title": "Biomolecules", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Proteins, Nucleic Acids, Enzymes"]},
-        {"number": 10, "title": "Cell Cycle and Cell Division", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Mitosis", "Meiosis"]},
-        {"number": 11, "title": "Photosynthesis in Higher Plants", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Light reactions", "C3 and C4 Pathways"]},
-        {"number": 12, "title": "Respiration in Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Glycolysis", "Krebs Cycle", "Electron Transport"]},
-        {"number": 13, "title": "Plant Growth and Development", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Auxins, Gibberellins, Photoperiodism"]},
-        {"number": 14, "title": "Breathing and Exchange of Gases", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Human Respiratory System", "Gas Transport"]},
-        {"number": 15, "title": "Body Fluids and Circulation", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Blood groups", "Cardiac Cycle", "ECG"]},
-        {"number": 16, "title": "Excretory Products and Their Elimination", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Nephron structure", "Urine formation"]},
-        {"number": 17, "title": "Locomotion and Movement", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Muscle contraction", "Skeletal joints"]},
-        {"number": 18, "title": "Neural Control and Coordination", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Neuron", "Conduction of nerve impulse"]},
-        {"number": 19, "title": "Chemical Coordination and Integration", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Endocrine glands", "Hormone action"]},
-    ],
-    (11, "Mathematics"): [
-        {"number": 1, "title": "Sets", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Venn Diagrams", "Union and Intersection"]},
-        {"number": 2, "title": "Relations and Functions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Cartesian Product", "Domain and Range"]},
-        {"number": 3, "title": "Trigonometric Functions", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Radian Measure", "Trigonometric Identities"]},
-        {"number": 4, "title": "Complex Numbers and Quadratic Equations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Imaginary numbers", "Modulus and Conjugate"]},
-        {"number": 5, "title": "Linear Inequalities", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Algebraic solutions of inequalities"]},
-        {"number": 6, "title": "Permutations and Combinations", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Factorial n", "nPr and nCr formulas"]},
-        {"number": 7, "title": "Binomial Theorem", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Pascal's triangle", "General term"]},
-        {"number": 8, "title": "Sequences and Series", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Arithmetic & Geometric Progressions"]},
-        {"number": 9, "title": "Straight Lines", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Slope of a line", "Forms of line equations"]},
-        {"number": 10, "title": "Conic Sections", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Circles", "Parabolas", "Ellipses", "Hyperbolas"]},
-        {"number": 11, "title": "Introduction to Three Dimensional Geometry", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Coordinates in 3D space", "Distance formula"]},
-        {"number": 12, "title": "Limits and Derivatives", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Intuitive idea of limit", "Standard derivatives"]},
-        {"number": 13, "title": "Statistics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Mean deviation", "Variance and standard deviation"]},
-        {"number": 14, "title": "Probability", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Sample spaces", "Events and axioms"]},
-    ],
-
-    # Grade 12
-    (12, "Physics"): [
-        {"number": 1, "title": "Electric Charges and Fields", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Coulomb's Law", "Electric Dipole", "Gauss's Law"]},
-        {"number": 2, "title": "Electrostatic Potential and Capacitance", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Equipotential Surfaces", "Capacitors in Series & Parallel"]},
-        {"number": 3, "title": "Current Electricity", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Drift Velocity", "Kirchhoff's Rules", "Wheatstone Bridge"]},
-        {"number": 4, "title": "Moving Charges and Magnetism", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Biot-Savart Law", "Ampere's Law", "Cyclotron"]},
-        {"number": 5, "title": "Magnetism and Matter", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Magnetic dipole moment", "Para-, Dia-, Ferromagnetism"]},
-        {"number": 6, "title": "Electromagnetic Induction", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Faraday's Law", "Lenz's Law", "Self & Mutual Inductance"]},
-        {"number": 7, "title": "Alternating Current", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["LCR Series Circuit", "Resonance", "Transformers"]},
-        {"number": 8, "title": "Electromagnetic Waves", "status": "not_started", "duration": "20 mins", "mastery": 0, "topics": ["Displacement current", "EM Spectrum"]},
-        {"number": 9, "title": "Ray Optics and Optical Instruments", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Total Internal Reflection", "Prisms", "Microscopes"]},
-        {"number": 10, "title": "Wave Optics", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Huygens Principle", "Young's Double Slit", "Diffraction"]},
-        {"number": 11, "title": "Dual Nature of Radiation and Matter", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Photoelectric effect", "de Broglie wavelength"]},
-        {"number": 12, "title": "Atoms", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Alpha-particle scattering", "Bohr model of hydrogen atom"]},
-        {"number": 13, "title": "Nuclei", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Binding energy", "Nuclear fission and fusion"]},
-        {"number": 14, "title": "Semiconductor Electronics: Materials, Devices and Simple Circuits", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["p-n junction diode", "Rectifiers", "Zener diode"]},
-    ],
-    (12, "Chemistry"): [
-        {"number": 1, "title": "Solutions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Raoult's Law", "Colligative Properties", "Osmotic Pressure"]},
-        {"number": 2, "title": "Electrochemistry", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Nernst Equation", "Kohlrausch Law", "Batteries"]},
-        {"number": 3, "title": "Chemical Kinetics", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Rate of Reaction", "Order & Molecularity", "Arrhenius Equation"]},
-        {"number": 4, "title": "The d- and f- Block Elements", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Transition metals", "Lanthanoid contraction"]},
-        {"number": 5, "title": "Coordination Compounds", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["IUPAC naming", "Werner's theory", "Crystal Field Theory"]},
-        {"number": 6, "title": "Haloalkanes and Haloarenes", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["SN1 and SN2 mechanisms", "Polyhalogen compounds"]},
-        {"number": 7, "title": "Alcohols, Phenols and Ethers", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Reactions of phenols", "Preparation of ethers"]},
-        {"number": 8, "title": "Aldehydes, Ketones and Carboxylic Acids", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Nucleophilic addition", "Aldol condensation", "Cannizzaro reaction"]},
-        {"number": 9, "title": "Amines", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Basicity of amines", "Diazonium salts"]},
-        {"number": 10, "title": "Biomolecules", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Carbohydrates", "Proteins and Amino Acids", "DNA & RNA"]},
-    ],
-    (12, "Biology"): [
-        {"number": 1, "title": "Sexual Reproduction in Flowering Plants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Microsporogenesis", "Double Fertilisation"]},
-        {"number": 2, "title": "Human Reproduction", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Gametogenesis", "Menstrual Cycle", "Implantation"]},
-        {"number": 3, "title": "Reproductive Health", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Contraception", "ART techniques"]},
-        {"number": 4, "title": "Principles of Inheritance and Variation", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Mendelian Genetics", "Sex Determination", "Pedigree analysis"]},
-        {"number": 5, "title": "Molecular Basis of Inheritance", "status": "not_started", "duration": "45 mins", "mastery": 0, "topics": ["DNA replication", "Transcription", "Translation", "Human Genome Project"]},
-        {"number": 6, "title": "Evolution", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Origin of life", "Darwinism", "Hardy-Weinberg principle"]},
-        {"number": 7, "title": "Human Health and Disease", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Immunity", "Cancer", "AIDS", "Drugs & Alcohol abuse"]},
-        {"number": 8, "title": "Microbes in Human Welfare", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Household products", "Sewage treatment", "Biocontrol agents"]},
-        {"number": 9, "title": "Biotechnology: Principles and Processes", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Recombinant DNA technology", "Restriction enzymes", "PCR"]},
-        {"number": 10, "title": "Biotechnology and Its Applications", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Bt cotton", "Gene therapy", "Transgenic animals"]},
-        {"number": 11, "title": "Organisms and Populations", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Organism and environment", "Population growth models"]},
-        {"number": 12, "title": "Ecosystem", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Energy flow", "Ecological pyramids", "Primary productivity"]},
-        {"number": 13, "title": "Biodiversity and Conservation", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Loss of biodiversity", "In-situ & Ex-situ conservation"]},
-    ],
-    (12, "Mathematics"): [
-        {"number": 1, "title": "Relations and Functions", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Equivalence Relations", "One-One & Onto Functions"]},
-        {"number": 2, "title": "Inverse Trigonometric Functions", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["Principal Value Branches", "Properties"]},
-        {"number": 3, "title": "Matrices", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Matrix Operations", "Transpose", "Symmetric & Skew Symmetric"]},
-        {"number": 4, "title": "Determinants", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Area of Triangle", "Adjoint and Inverse of Matrix"]},
-        {"number": 5, "title": "Continuity and Differentiability", "status": "not_started", "duration": "40 mins", "mastery": 0, "topics": ["Chain Rule", "Logarithmic Differentiation", "Second Order Derivatives"]},
-        {"number": 6, "title": "Application of Derivatives", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Rate of change", "Increasing/Decreasing functions", "Maxima & Minima"]},
-        {"number": 7, "title": "Integrals", "status": "not_started", "duration": "45 mins", "mastery": 0, "topics": ["Indefinite & Definite Integrals", "Integration by parts/partial fractions"]},
-        {"number": 8, "title": "Application of Integrals", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Area under simple curves", "Area between two curves"]},
-        {"number": 9, "title": "Differential Equations", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Order and degree", "Variable separable", "Linear differential equations"]},
-        {"number": 10, "title": "Vector Algebra", "status": "not_started", "duration": "30 mins", "mastery": 0, "topics": ["Dot product", "Cross product", "Direction cosines"]},
-        {"number": 11, "title": "Three Dimensional Geometry", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Direction ratios", "Equation of line in 3D", "Shortest distance"]},
-        {"number": 12, "title": "Linear Programming", "status": "not_started", "duration": "25 mins", "mastery": 0, "topics": ["LPP formulation", "Graphical solution method"]},
-        {"number": 13, "title": "Probability", "status": "not_started", "duration": "35 mins", "mastery": 0, "topics": ["Conditional probability", "Bayes' Theorem", "Random variable"]},
-    ],
-}
-
-NCERT_CURRICULUM_DATA: dict[int, list[dict[str, Any]]] = {
-    5: [
-        {"name": "Science", "code": "SCI05", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 22, "color": "0xFF10B981", "icon": "science_outlined"},
-        {"name": "Mathematics", "code": "MAT05", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    6: [
-        {"name": "Science", "code": "SCI06", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 11, "color": "0xFF10B981", "icon": "science_outlined"},
-        {"name": "Mathematics", "code": "MAT06", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    7: [
-        {"name": "Science", "code": "SCI07", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFF10B981", "icon": "science_outlined"},
-        {"name": "Mathematics", "code": "MAT07", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    8: [
-        {"name": "Science", "code": "SCI08", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFF10B981", "icon": "science_outlined"},
-        {"name": "Mathematics", "code": "MAT08", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    9: [
-        {"name": "Physics", "code": "PHY09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 4, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 3, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT09", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 12, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    10: [
-        {"name": "Physics", "code": "PHY10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 4, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 4, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 5, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT10", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    11: [
-        {"name": "Physics", "code": "PHY11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 9, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 19, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT11", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-    12: [
-        {"name": "Physics", "code": "PHY12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 14, "color": "0xFF4F46E5", "icon": "science_outlined"},
-        {"name": "Chemistry", "code": "CHE12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 10, "color": "0xFF10B981", "icon": "biotech_outlined"},
-        {"name": "Biology", "code": "BIO12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFF14B8A6", "icon": "nature_outlined"},
-        {"name": "Mathematics", "code": "MAT12", "progress": 0.0, "chaptersCompleted": 0, "totalChapters": 13, "color": "0xFFF59E0B", "icon": "calculate_outlined"},
-    ],
-}
-
-
-@app.get("/catalog/subjects")
-async def get_catalog_subjects(grade: int = Query(9, ge=5, le=12)):
-    subjects = NCERT_CURRICULUM_DATA.get(grade, NCERT_CURRICULUM_DATA[9])
-    res = []
-    for s in subjects:
-        sub_name = s["name"]
-        chapter_count = len(CHAPTERS_BY_GRADE_SUBJECT.get((grade, sub_name), []))
-        item = dict(s)
-        if chapter_count > 0:
-            item["totalChapters"] = chapter_count
-        res.append(item)
-    return res
-
-
-@app.get("/catalog/chapters")
-async def get_catalog_chapters(subject: str = Query("Physics"), grade: int = Query(9)):
-    # 1. Exact match for (grade, subject)
-    for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
-        if g == grade and s.lower() == subject.lower():
-            return ch_list
-
-    # 2. Partial subject match within requested grade
-    for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
-        if g == grade and (s.lower() in subject.lower() or subject.lower() in s.lower()):
-            return ch_list
-
-    # 3. Partial subject match across any grade
-    for (g, s), ch_list in CHAPTERS_BY_GRADE_SUBJECT.items():
-        if s.lower() in subject.lower() or subject.lower() in s.lower():
-            return ch_list
-
-    return []
-
-
-
-@app.get("/api/v1/simulations/{chapter}")
-async def get_chapter_simulation(chapter: str):
-    clean_title = chapter.replace("_", " ").title()
-    return {
-        "chapter": chapter,
-        "title": f"Interactive {clean_title} Lab",
-        "description": f"Adjust key variables in real-time to observe principles of {clean_title}.",
-        "parameters": [
-            {"id": "param1", "name": f"{clean_title} Intensity (I)", "unit": "units", "min": 0.5, "max": 5.0, "default": 2.0, "step": 0.1},
-            {"id": "param2", "name": f"Environmental Factor (k)", "unit": "const", "min": 1.0, "max": 10.0, "default": 5.0, "step": 0.5},
-        ],
-        "formulas": [
-            f"Standard NCERT Equation for {clean_title}",
-            "Parameter Relationship & SI Units",
-        ],
-        "canvasHtml": f"<div id='sim-{chapter}'>Interactive HTML5 Canvas Player</div>",
-    }
-
-
-@app.get("/videos/{chapter}")
-async def get_chapter_videos(chapter: str):
-    clean_title = chapter.replace("_", " ").title()
-    norm_key = chapter.lower().replace("-", "_")
-
-    video_url_map = {
-        "quadratic_equations": "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-        "motion": "https://www.youtube.com/watch?v=tBmavvMwu68",
-        "light_reflection_and_refraction": "https://www.youtube.com/watch?v=Unv471yJc5M",
-        "chemical_reactions_and_equations": "https://www.youtube.com/watch?v=g3E-J6zK_4c",
-        "acids_bases_and_salts": "https://www.youtube.com/watch?v=lDK9QqI3a70",
-        "metals_and_non_metals": "https://www.youtube.com/watch?v=6h2G1u3t2fE",
-        "carbon_and_its_compounds": "https://www.youtube.com/watch?v=Z8m-2Vw_t3k",
-        "electricity": "https://www.youtube.com/watch?v=2k-n4W548J8",
-        "magnetic_effects_of_electric_current": "https://www.youtube.com/watch?v=N4k_KxYV2k8",
-        "gravitation": "https://www.youtube.com/watch?v=n10vV2w6y7I",
-        "work_and_energy": "https://www.youtube.com/watch?v=gB6-xN0dK3w",
-        "sound": "https://www.youtube.com/watch?v=Q3oItpVa9fs",
-        "life_processes": "https://www.youtube.com/watch?v=W32qK1v12v8",
-        "real_numbers": "https://www.youtube.com/watch?v=q6gC1t27iC0",
-        "polynomials": "https://www.youtube.com/watch?v=2vT714K-C8M",
-        "triangles": "https://www.youtube.com/watch?v=Q4W5v_3M220",
-        "atoms_and_molecules": "https://www.youtube.com/watch?v=z166tU_x1b0",
-        "matter_in_our_surroundings": "https://www.youtube.com/watch?v=p8Xy4J103-M",
-    }
-
-    v_url = video_url_map.get(norm_key, f"https://www.youtube.com/results?search_query=NCERT+{quote(clean_title)}")
-
-    return {
-        "chapter": chapter,
-        "currentVideo": {
-            "id": f"v_{chapter}_01",
-            "videoUrl": v_url,
-            "title": f"NCERT Full Chapter Explanation: {clean_title}",
-            "channel": "NCERT Official",
-            "duration": "18:30",
-            "description": f"Complete concept walkthrough and solved NCERT exercise problems for {clean_title}.",
-        },
-        "playlist": [
-            {"id": "v1", "videoUrl": v_url, "title": f"1. Detailed Concepts & Theory of {clean_title}", "channel": "NCERT Official", "duration": "08:15"},
-            {"id": "v2", "videoUrl": v_url, "title": f"2. Core Formulas & Derivations of {clean_title}", "channel": "NCERT Official", "duration": "05:15"},
-            {"id": "v3", "videoUrl": v_url, "title": f"3. Solved Examples & NCERT Exercises", "channel": "NCERT Official", "duration": "05:00"},
-        ],
-        "islAvailable": True,
-        "islVideoId": f"isl_{chapter}",
-        "keyTakeaways": [
-            f"Master core definitions and theoretical foundation of {clean_title}.",
-            "Apply equations and problem-solving steps for NCERT examinations.",
-        ],
-    }
-
-
-@app.get("/quizzes/{chapter}")
-async def get_chapter_quiz(chapter: str):
-    clean_title = chapter.replace("_", " ").title()
-    return {
-        "chapter": chapter,
-        "title": f"NCERT Mastery Quiz: {clean_title}",
-        "totalQuestions": 10,
-        "userMastery": 0,
-        "questions": [
-            {
-                "id": "q1",
-                "question": f"What is the core physical or mathematical principle investigated in {clean_title}?",
-                "options": ["Fundamental System Properties", "Quantitative Relationships", "Applied Practical Models", "All of the above"],
-                "correctIndex": 3,
-                "explanation": f"{clean_title} covers foundational definitions, mathematical relationships, and real-world applications.",
-            },
-            {
-                "id": "q2",
-                "question": f"Which standard SI unit or measurement dimension applies when evaluating concepts in {clean_title}?",
-                "options": ["Standard Metric Units (m, kg, s)", "Dimensionless Ratios", "Derived Operational Units", "Context-dependent SI units"],
-                "correctIndex": 3,
-                "explanation": "Units are determined by the specific physical variables and formulas involved in the topic.",
-            },
-            {
-                "id": "q3",
-                "question": f"In NCERT experiments on {clean_title}, what step ensures experimental precision?",
-                "options": ["Random data sampling", "Controlling environmental variables and repetitions", "Ignoring minor outliers", "Relying strictly on theoretical estimates"],
-                "correctIndex": 1,
-                "explanation": "Controlling variables and taking multiple readings minimizes systematic and random measurement errors.",
-            },
-            {
-                "id": "q4",
-                "question": f"How do the concepts of {clean_title} relate to real-world industrial or daily phenomena?",
-                "options": ["They describe everyday mechanical & chemical interactions", "They optimize technical design and energy efficiency", "They explain natural observational phenomena", "All of the above"],
-                "correctIndex": 3,
-                "explanation": "NCERT concepts connect fundamental science with technological applications and daily observations.",
-            },
-            {
-                "id": "q5",
-                "question": f"Which mathematical formulation or law is central to solving numerical problems in {clean_title}?",
-                "options": ["Linear Proportionality Laws", "Conservation Theorems & Equations", "Rate of Change Principles", "All applicable NCERT laws"],
-                "correctIndex": 3,
-                "explanation": "Problem solving uses state equations, conservation laws, and rate definitions.",
-            },
-            {
-                "id": "q6",
-                "question": f"When analyzing graphical representations for {clean_title}, what does the slope of the curve represent?",
-                "options": ["The rate of change of the dependent variable", "The total integrated quantity", "An arbitrary constant", "The system boundary limit"],
-                "correctIndex": 0,
-                "explanation": "The slope of a plot (Δy / Δx) measures the rate at which the target variable changes relative to the independent parameter.",
-            },
-            {
-                "id": "q7",
-                "question": f"What safety or precautionary procedure is emphasized during laboratory study of {clean_title}?",
-                "options": ["Calibrating instruments before taking readings", "Wearing protective eye & hand gear where required", "Ensuring secure electrical & chemical connections", "All of the above"],
-                "correctIndex": 3,
-                "explanation": "Laboratory safety protocols require equipment calibration and personal protective equipment.",
-            },
-            {
-                "id": "q8",
-                "question": f"What is a common misconception students encounter when learning {clean_title}?",
-                "options": ["Confusing scalar quantities with vector quantities", "Ignoring direction or frame of reference", "Misinterpreting proportional constants", "All of the above"],
-                "correctIndex": 3,
-                "explanation": "Common errors stem from scalar/vector confusion, frame of reference neglect, and unit conversion oversight.",
-            },
-            {
-                "id": "q9",
-                "question": f"How does increasing temperature or energy affect the processes described in {clean_title}?",
-                "options": ["Increases kinetic energy and collision rate", "Reduces molecular stability", "Alters equilibrium states", "Varies depending on the specific system dynamics"],
-                "correctIndex": 3,
-                "explanation": "Thermal and energy changes alter reaction rates, state changes, or resistance according to system thermodynamics.",
-            },
-            {
-                "id": "q10",
-                "question": f"What is the recommended strategy when revising {clean_title} for board examinations?",
-                "options": ["Memorizing definition statements only", "Practicing NCERT exercise problems and drawing labelled diagrams", "Skimming summary tables", "Focusing exclusively on short questions"],
-                "correctIndex": 1,
-                "explanation": "High exam performance relies on thorough numerical practice, clear diagrammatic representation, and NCERT exercise mastery.",
-            },
-        ],
-    }
-
-
-@app.get("/api/user/profile")
-async def get_user_profile():
-    return {
-        "name": "Student User",
-        "email": "student@mentora.in",
-        "grade": 9,
-        "streakDays": 0,
-        "dailyMinsLearned": 0,
-        "dailyGoalMins": 30,
-        "activeSubject": "Science",
-        "activeChapter": "Overview",
-    }
 

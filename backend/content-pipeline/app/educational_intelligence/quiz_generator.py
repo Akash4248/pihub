@@ -45,8 +45,9 @@ class QuizGenerator:
             chapter=metadata.get("chapter"),
             language=metadata.get("language"),
         )
+        ai_quizzes: list[dict[str, Any]] = []
         if ai_result and ai_result.get("items"):
-            return [
+            ai_quizzes = [
                 {
                     "question_type": "mcq",
                     "question": clean_text(str(item.get("question", ""))),
@@ -60,9 +61,18 @@ class QuizGenerator:
                 }
                 for item in ai_result["items"]
                 if clean_text(str(item.get("question", "")))
-            ][:limit]
+            ]
+        if len(ai_quizzes) >= limit:
+            return ai_quizzes[:limit]
 
-        return await self._heuristic_generate(chunks, limit)
+        heuristic_quizzes = await self._heuristic_generate(chunks, limit=limit - len(ai_quizzes))
+        existing_questions = {q["question"].lower() for q in ai_quizzes}
+        for hq in heuristic_quizzes:
+            if hq["question"].lower() not in existing_questions:
+                ai_quizzes.append(hq)
+                existing_questions.add(hq["question"].lower())
+
+        return ai_quizzes[:limit]
 
     async def _heuristic_generate(self, chunks: list[dict[str, Any]], limit: int = 8) -> list[dict[str, Any]]:
         glossary = await self.glossary_extractor.extract(chunks)

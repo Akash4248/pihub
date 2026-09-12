@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from fastapi.responses import HTMLResponse
 from qdrant_client import QdrantClient
 
 from shared.config import get_settings
+from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt
 from shared.curriculum_graph import CurriculumGraph, create_sample_curriculum
 from shared.schemas import (
     ChunkPreview,
@@ -78,56 +80,26 @@ settings = get_settings()
 app = FastAPI(title="content-pipeline")
 
 
-class SimpleEmbeddingModel:
-    def __init__(self, dimension: int = 384) -> None:
-        self.dimension = dimension
-
-    def get_sentence_embedding_dimension(self) -> int:
-        return self.dimension
-
-    def encode(self, texts: list[str] | str, normalize_embeddings: bool = True) -> list[list[float]]:
-        if isinstance(texts, str):
-            texts = [texts]
-        return [self._encode_one(text, normalize_embeddings) for text in texts]
-
-    def _encode_one(self, text: str, normalize_embeddings: bool) -> list[float]:
-        vector = [0.0] * self.dimension
-        tokens = re.findall(r"[A-Za-z0-9']+", text.lower())
-        for token in tokens:
-            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
-            index = int.from_bytes(digest, "big") % self.dimension
-            vector[index] += 1.0
-
-        if normalize_embeddings:
-            norm = math.sqrt(sum(value * value for value in vector))
-            if norm > 0:
-                vector = [value / norm for value in vector]
-
-        return vector
+from shared.embedding_service import EmbeddingModelManager, HashFallbackEmbeddingModel
 
 
 class SentenceTransformerEmbeddingModel:
+    """Proxy embedding model routing calls to shared EmbeddingModelManager singleton."""
+
     def __init__(self, model_name: str, device: str = "cpu", cache_dir: str | None = None) -> None:
         self.model_name = model_name
         self.device = device
         self.cache_dir = Path(cache_dir) if cache_dir else None
-        self._model: Any | None = None
-        self._dimension: int | None = None
+        self._manager = EmbeddingModelManager.get_instance()
 
     def get_sentence_embedding_dimension(self) -> int:
-        self._ensure_loaded()
-        if self._dimension is None:
-            return 384
-        return self._dimension
+        return self._manager.get_dimension()
 
     def encode(self, texts: list[str] | str, normalize_embeddings: bool = True) -> list[list[float]]:
-        self._ensure_loaded()
-        if self._model is None:
-            fallback = SimpleEmbeddingModel()
-            return fallback.encode(texts, normalize_embeddings=normalize_embeddings)
+        model = self._manager.get_model()
         if isinstance(texts, str):
             texts = [texts]
-        embeddings = self._model.encode(
+        embeddings = model.encode(
             texts,
             normalize_embeddings=normalize_embeddings,
             show_progress_bar=False,
@@ -136,22 +108,6 @@ class SentenceTransformerEmbeddingModel:
             embeddings = embeddings.tolist()
         return [[float(value) for value in row] for row in embeddings]
 
-    def _ensure_loaded(self) -> None:
-        if self._model is not None or self._dimension is not None:
-            return
-        try:
-            from sentence_transformers import SentenceTransformer
-        except Exception:
-            self._model = None
-            self._dimension = 384
-            return
-        try:
-            load_target = self._resolve_local_model_path()
-            self._model = SentenceTransformer(str(load_target or self.model_name), device=self.device)
-            self._dimension = int(self._model.get_sentence_embedding_dimension())
-        except Exception:
-            self._model = None
-            self._dimension = 384
 
     def _resolve_local_model_path(self) -> Path | None:
         model_path = Path(self.model_name)
@@ -183,6 +139,7 @@ class Pipeline:
     LEGACY_COLLECTION_NAMES = ("educational_chunks",)
 
     def __init__(self) -> None:
+        self._write_lock = threading.Lock()
         self.client = make_qdrant_client(settings.qdrant_url)
         self.embedding_model: SimpleEmbeddingModel | None = None
         self.local_retrieval_model: Any | None = None
@@ -314,22 +271,23 @@ class Pipeline:
             pass
 
     def reset_rag_state(self) -> dict[str, Any]:
-        logger.info("Resetting RAG collection %s", self.collection_name)
-        try:
-            self.client.delete_collection(collection_name=self.collection_name)
-        except Exception as exc:
-            logger.warning("Could not delete collection %s cleanly: %s", self.collection_name, str(exc)[:300])
-        ensure_collection(self.client, self.collection_name, self._vector_size(), settings.qdrant_url)
-        self.hybrid_store.clear()
-        if self.enable_curriculum_graph_engine:
-            self.relation_graph = {}
-            self.graph_storage.save(self.relation_graph)
-        self.ingestion_log.clear()
-        return {
-            "collection": self.collection_name,
-            "hybrid_snapshot": str(self.retrieval_snapshot_path),
-            "status": "reset",
-        }
+        with self._write_lock:
+            logger.info("Resetting RAG collection %s", self.collection_name)
+            try:
+                self.client.delete_collection(collection_name=self.collection_name)
+            except Exception as exc:
+                logger.warning("Could not delete collection %s cleanly: %s", self.collection_name, str(exc)[:300])
+            ensure_collection(self.client, self.collection_name, self._vector_size(), settings.qdrant_url)
+            self.hybrid_store.clear()
+            if self.enable_curriculum_graph_engine:
+                self.relation_graph = {}
+                self.graph_storage.save(self.relation_graph)
+            self.ingestion_log.clear()
+            return {
+                "collection": self.collection_name,
+                "hybrid_snapshot": str(self.retrieval_snapshot_path),
+                "status": "reset",
+            }
 
     def _collection_point_count(self, collection_name: str) -> int:
         try:
@@ -579,54 +537,57 @@ class Pipeline:
     def _store_chunks(self, chunks: list[dict[str, Any]]) -> None:
         if not chunks:
             return
-        logger.info("Storing %d enriched chunks to vector store", len(chunks))
-        print(f"[store] storing_chunks count={len(chunks)}")
+        with self._write_lock:
+            logger.info("Storing %d enriched chunks to vector store", len(chunks))
+            print(f"[store] storing_chunks count={len(chunks)}")
 
-        texts = [chunk["text"] for chunk in chunks]
-        embedding_texts = []
-        for chunk in chunks:
-            metadata = chunk.get("metadata", {})
-            prefix_parts = [
-                str(metadata.get("grade") or ""),
-                str(metadata.get("subject") or ""),
-                str(metadata.get("chapter") or ""),
-                str(metadata.get("section") or ""),
-                " ".join(metadata.get("topics", [])),
-                " ".join(metadata.get("concepts", [])),
-            ]
-            prefix = " ".join(part for part in prefix_parts if part).strip()
-            embedding_texts.append(f"{prefix}\n\n{chunk['text']}" if prefix else chunk["text"])
-
-        embeddings = self._load_model().encode(embedding_texts, normalize_embeddings=True)
-        logger.info("Generated %d embeddings for %d chunks", len(embeddings), len(chunks))
-        print(f"[store] embeddings_generated count={len(embeddings)}")
-        metadatas = [chunk["metadata"] for chunk in chunks]
-        point_ids = upsert_chunks(self.client, self.collection_name, embeddings, texts, metadatas)
-        logger.info("Upserted %d vectors into collection %s", len(point_ids), self.collection_name)
-        print(f"[store] upserted_vectors count={len(point_ids)} collection={self.collection_name}")
-        try:
-            self.hybrid_store.upsert(
-                [
-                    {
-                        "chunk_id": str(point_ids[idx]),
-                        "text": chunk["text"],
-                        "metadata": {
-                            **chunk["metadata"],
-                            "retrieval_source": "local_hybrid",
-                        },
-                    }
-                    for idx, chunk in enumerate(chunks)
+            texts = [chunk["text"] for chunk in chunks]
+            embedding_texts = []
+            for chunk in chunks:
+                metadata = chunk.get("metadata", {})
+                prefix_parts = [
+                    str(metadata.get("grade") or ""),
+                    str(metadata.get("subject") or ""),
+                    str(metadata.get("chapter") or ""),
+                    str(metadata.get("section") or ""),
+                    " ".join(metadata.get("topics", [])),
+                    " ".join(metadata.get("concepts", [])),
                 ]
-            )
-        except Exception as exc:
-            logger.warning("Hybrid retrieval store update failed: %s", str(exc)[:300])
-        self.curriculum_graph.build_from_chunks(chunks)
-        self.curriculum_graph.save(self.curriculum_graph_path)
-        glossary_entries = self.glossary_extractor._heuristic_extract(chunks) if hasattr(self.glossary_extractor, '_heuristic_extract') else []
-        try:
-            self._rebuild_concept_index(chunks=chunks, glossary_entries=glossary_entries)
-        except Exception:
-            pass
+                prefix = " ".join(part for part in prefix_parts if part).strip()
+                embedding_texts.append(f"{prefix}\n\n{chunk['text']}" if prefix else chunk["text"])
+
+            embeddings = self._load_model().encode(embedding_texts, normalize_embeddings=True)
+            logger.info("Generated %d embeddings for %d chunks", len(embeddings), len(chunks))
+            print(f"[store] embeddings_generated count={len(embeddings)}")
+            metadatas = [chunk["metadata"] for chunk in chunks]
+            point_ids = upsert_chunks(self.client, self.collection_name, embeddings, texts, metadatas)
+            logger.info("Upserted %d vectors into collection %s", len(point_ids), self.collection_name)
+            print(f"[store] upserted_vectors count={len(point_ids)} collection={self.collection_name}")
+            try:
+                self.hybrid_store.upsert(
+                    [
+                        {
+                            "chunk_id": str(point_ids[idx]),
+                            "text": chunk["text"],
+                            "metadata": {
+                                **chunk["metadata"],
+                                "retrieval_source": "local_hybrid",
+                            },
+                        }
+                        for idx, chunk in enumerate(chunks)
+                    ],
+                    vectors=embeddings,
+                )
+
+            except Exception as exc:
+                logger.warning("Hybrid retrieval store update failed: %s", str(exc)[:300])
+            self.curriculum_graph.build_from_chunks(chunks)
+            self.curriculum_graph.save(self.curriculum_graph_path)
+            glossary_entries = self.glossary_extractor._heuristic_extract(chunks) if hasattr(self.glossary_extractor, '_heuristic_extract') else []
+            try:
+                self._rebuild_concept_index(chunks=chunks, glossary_entries=glossary_entries)
+            except Exception:
+                pass
         if self.enable_curriculum_graph_engine:
             self.relation_graph = self.graph_builder.build(chunks, existing=self.relation_graph)
             self.graph_storage.save(self.relation_graph)
@@ -731,63 +692,10 @@ class Pipeline:
             "chunks": enriched_chunks,
         }
 
-    def _split_into_sections(self, raw_text: str) -> list[dict[str, str]]:
-        lines = [line.strip() for line in raw_text.splitlines()]
-        sections: list[dict[str, str]] = []
-        current_title = "Introduction"
-        current_lines: list[str] = []
-
-        def flush() -> None:
-            text = "\n".join(line for line in current_lines if line).strip()
-            if text:
-                sections.append({"title": current_title, "text": text})
-
-        for line in lines:
-            if not line:
-                continue
-            is_heading = line.startswith("#") or (line.isupper() and len(line.split()) <= 8) or line.endswith(":")
-            if is_heading and current_lines:
-                flush()
-                current_title = line.lstrip("# ").strip()
-                current_lines = []
-                continue
-            if is_heading and not current_lines:
-                current_title = line.lstrip("# ").strip()
-                continue
-            current_lines.append(line)
-
-        flush()
-        return sections or [{"title": "Document", "text": raw_text.strip()}]
-
-    def _chunk_text(self, sections: list[dict[str, str]], metadata: Metadata) -> list[dict[str, Any]]:
-        results: list[dict[str, Any]] = []
-        for section in sections:
-            text = section["text"].strip()
-            if not text:
-                continue
-
-            start = 0
-            while start < len(text):
-                end = min(len(text), start + self.chunk_size)
-                chunk_text = text[start:end].strip()
-                if chunk_text:
-                    results.append(
-                        {
-                            "text": chunk_text,
-                            "metadata": {
-                                **metadata.model_dump(exclude_none=True),
-                                "section_title": section["title"],
-                            },
-                        }
-                    )
-                if end >= len(text):
-                    break
-                start = max(end - self.chunk_overlap, start + 1)
-        return results
-
     def ingest_pdf(self, file_name: str, content: bytes, metadata: Metadata, source: str | None = None) -> IngestResponse:
         self.ensure_ready()
-        target_path = self.upload_dir / file_name
+        safe_name = sanitize_safe_filename(file_name)
+        target_path = self.upload_dir / safe_name
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(content)
 
@@ -1366,8 +1274,7 @@ async def reset_rag() -> dict[str, Any]:
 @app.post("/rag/search", response_model=SearchResponse)
 async def rag_search(request: SearchRequest) -> SearchResponse:
     filters = request.metadata.model_dump(exclude_none=True) if request.metadata else None
-    # Limit to 1 result for improved quality (Phase 3, Step 1)
-    limit = 1
+    limit = max(1, min(request.limit, 50))
     return await asyncio.to_thread(pipeline._search, request.query, limit, filters)
 
 
