@@ -91,14 +91,18 @@ class DeviceManager:
         device_id = str(uuid.uuid4())
         auth_token = str(uuid.uuid4())
 
+        meta = {**(metadata or {}), "device_ip": device_ip, "registered_at": int(time.time())}
         device = self.store.register_device(
             device_id=device_id,
             device_name=device_name,
             role=role,
             classroom=classroom_id,
-            metadata={**(metadata or {}), "device_ip": device_ip, "registered_at": int(time.time())},
+            metadata=meta,
             auth_token=auth_token,
         )
+
+        if "student_id" in meta and meta["student_id"]:
+            self.store.map_student_device(device_id, str(meta["student_id"]))
 
         session = DeviceSession(
             session_id=str(uuid.uuid4()),
@@ -168,21 +172,20 @@ class DeviceManager:
         return devices
 
     def get_device_status(self, device_id: str) -> dict[str, Any]:
-        """Get device status"""
-        session = self.active_sessions.get(device_id)
-        if not session:
+        """Get device status with sanitized credentials"""
+        device = self.store.get_device(device_id)
+        if not device:
             return {"status": "unknown"}
 
-        now = int(time.time())
-        time_since_heartbeat = now - session.last_heartbeat
+        sanitized_device = {key: value for key, value in device.items() if key != "auth_token"}
+        sessions = self.store.list_device_sessions(device_id)
+        student_id = self.store.get_student_for_device(device_id)
 
         return {
-            "device_id": device_id,
-            "device_name": session.device_name,
-            "status": session.status,
-            "is_healthy": session.is_healthy(),
-            "time_since_heartbeat": time_since_heartbeat,
-            "consecutive_failures": session.consecutive_failures,
+            "device": sanitized_device,
+            "session": sessions[0] if sessions else None,
+            "trust": self.store.is_device_trusted(device_id),
+            "student_id": student_id,
         }
 
     def add_to_group(self, device_id: str, group_name: str) -> None:

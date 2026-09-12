@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 
 
-SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$")
+SEMVER_PATTERN = re.compile(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:[-+].*)?$")
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,10 @@ class VersionManager:
         match = SEMVER_PATTERN.match(version.strip())
         if not match:
             raise ValueError(f"Invalid semantic version: {version}")
-        return SemVer(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        major = int(match.group(1))
+        minor = int(match.group(2)) if match.group(2) is not None else 0
+        patch = int(match.group(3)) if match.group(3) is not None else 0
+        return SemVer(major, minor, patch)
 
     @classmethod
     def normalize(cls, version: str) -> str:

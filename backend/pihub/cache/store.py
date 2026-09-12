@@ -226,8 +226,53 @@ class PiHubStore:
 
                 create index if not exists idx_quiz_sessions_student
                 on quiz_sessions(student_id, updated_at desc);
+
+                create table if not exists student_device_map (
+                    device_id text primary key,
+                    student_id text unique,
+                    updated_at integer not null
+                );
                 """
             )
+            # Auto-backfill student_device_map from devices metadata if empty
+            cursor = connection.execute("select count(*) from student_device_map")
+            if cursor.fetchone()[0] == 0:
+                connection.execute(
+                    """
+                    insert or ignore into student_device_map (device_id, student_id, updated_at)
+                    select device_id, json_extract(metadata, '$.student_id'), strftime('%s','now')
+                    from devices
+                    where json_extract(metadata, '$.student_id') is not null
+                    """
+                )
+
+    def map_student_device(self, device_id: str, student_id: str) -> None:
+        now = int(time.time())
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into student_device_map (device_id, student_id, updated_at)
+                values (?, ?, ?)
+                on conflict(device_id) do update set student_id=excluded.student_id, updated_at=excluded.updated_at
+                on conflict(student_id) do update set device_id=excluded.device_id, updated_at=excluded.updated_at
+                """,
+                (device_id, student_id, now),
+            )
+
+    def get_student_for_device(self, device_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute("select student_id from student_device_map where device_id = ?", (device_id,)).fetchone()
+            return str(row["student_id"]) if row and row["student_id"] else None
+
+    def get_device_for_student(self, student_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute("select device_id from student_device_map where student_id = ?", (student_id,)).fetchone()
+            return str(row["device_id"]) if row and row["device_id"] else None
+
+    def list_student_device_mappings(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute("select device_id, student_id, updated_at from student_device_map").fetchall()
+            return [dict(row) for row in rows]
 
     def upsert_classroom(self, classroom_name: str | None, teacher_name: str | None, sync_mode: str, metadata: dict[str, Any]) -> dict[str, Any]:
         now = int(time.time())

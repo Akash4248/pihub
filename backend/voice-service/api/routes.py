@@ -1,4 +1,5 @@
-from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+import os
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response, StreamingResponse
 import logging
 import json
@@ -14,6 +15,18 @@ logger = logging.getLogger(__name__)
 seen_sessions = set()
 
 router = APIRouter()
+
+
+def check_voice_enabled():
+    val = os.getenv("VOICE_SERVICE_ENABLED", "true").strip().lower()
+    if val in {"0", "false", "no", "off"}:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "VOICE_SERVICE_DISABLED",
+                "message": "Voice service is disabled in system configuration.",
+            },
+        )
 
 
 def _normalize_language_code(language: str | None) -> str:
@@ -75,13 +88,13 @@ def _normalize_transcript(result: Transcript | dict[str, object], language: str 
     )
 
 
-@router.post("/voice/query", response_model=VoiceQueryResponse, tags=["voice"])
+@router.post("/voice/query", response_model=VoiceQueryResponse, tags=["voice"], dependencies=[Depends(check_voice_enabled)])
 async def voice_query(request: Request, payload: VoiceQueryRequest) -> VoiceQueryResponse:
     gateway = request.app.state.voice_gateway
     return await gateway.query(payload)
 
 
-@router.post("/voice/tts", response_model=TTSResponse, tags=["voice"])
+@router.post("/voice/tts", response_model=TTSResponse, tags=["voice"], dependencies=[Depends(check_voice_enabled)])
 async def voice_tts(request: Request, payload: TTSRequest) -> TTSResponse | StreamingResponse:
     gateway = request.app.state.voice_gateway
     if payload.stream:
@@ -97,7 +110,7 @@ async def voice_tts(request: Request, payload: TTSRequest) -> TTSResponse | Stre
     return await gateway.tts_only(payload)
 
 
-@router.post("/voice/stt", response_model=STTResponse, tags=["voice"])
+@router.post("/voice/stt", response_model=STTResponse, tags=["voice"], dependencies=[Depends(check_voice_enabled)])
 async def voice_stt(
     request: Request,
     language: str | None = None,
@@ -144,6 +157,19 @@ async def voice_metrics(request: Request) -> dict[str, object]:
 
 @router.websocket("/voice/stream")
 async def voice_stream(websocket: WebSocket) -> None:
+    val = os.getenv("VOICE_SERVICE_ENABLED", "true").strip().lower()
+    if val in {"0", "false", "no", "off"}:
+        await websocket.accept()
+        await websocket.send_json({
+            "type": "error",
+            "message": "Voice service is disabled in system configuration."
+        })
+        try:
+            await websocket.close(code=1008)
+        except TypeError:
+            await websocket.close()
+        return
+
     await websocket.accept()
     
     metrics = websocket.app.state.voice_metrics

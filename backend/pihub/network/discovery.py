@@ -37,8 +37,8 @@ class NetworkInterface:
 
 
 @dataclass
-class ClassroomSession:
-    """Classroom network session"""
+class NetworkSession:
+    """Classroom local network session"""
 
     session_id: str
     classroom_name: str
@@ -50,6 +50,10 @@ class ClassroomSession:
     hotspot_enabled: bool
     max_devices: int = 50
     active_devices: int = 0
+
+
+# Alias for backward compatibility
+ClassroomSession = NetworkSession
 
 
 class NetworkDiscovery:

@@ -7,6 +7,7 @@ filename path traversal protection, and safe streaming file upload handling.
 import os
 import re
 import secrets
+import hmac
 import logging
 from pathlib import Path
 from typing import Optional, AsyncGenerator
@@ -17,11 +18,47 @@ import jwt
 
 logger = logging.getLogger(__name__)
 
-# Fallback auto-generated random keys if environment variables are not set or default
-_GLOBAL_FALLBACK_JWT_SECRET = os.getenv("JWT_SECRET_KEY")
-if not _GLOBAL_FALLBACK_JWT_SECRET or _GLOBAL_FALLBACK_JWT_SECRET in ["change-me", "default-secret-key-change-in-production"]:
-    _GLOBAL_FALLBACK_JWT_SECRET = secrets.token_hex(32)
-    logger.warning("JWT_SECRET_KEY was not set or insecure default. Auto-generated temporary 256-bit secret key.")
+
+def _get_or_create_fallback_jwt_secret() -> str:
+    env_secret = os.getenv("JWT_SECRET_KEY")
+    insecure_defaults = {"change-me", "default-secret-key-change-in-production", "change-me-super-secret-jwt-key-min32chars"}
+    if env_secret and env_secret not in insecure_defaults:
+        return env_secret
+
+    key_dir = Path(".local_run")
+    key_dir.mkdir(parents=True, exist_ok=True)
+    key_file = key_dir / "jwt_secret.key"
+
+    if key_file.exists():
+        try:
+            stored_secret = key_file.read_text(encoding="utf-8").strip()
+            if stored_secret and len(stored_secret) >= 32:
+                try:
+                    os.chmod(str(key_file), 0o600)
+                except Exception:
+                    pass
+                return stored_secret
+        except Exception:
+            pass
+
+    secret = secrets.token_hex(32)
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        fd = os.open(str(key_file), flags, 0o600)
+        with open(fd, "w", encoding="utf-8") as f:
+            f.write(secret)
+        try:
+            os.chmod(str(key_file), 0o600)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning(f"Could not persist JWT key to {key_file}: {e}")
+
+    return secret
+
+
+# Fallback auto-generated/persisted random keys if environment variables are not set or default
+_GLOBAL_FALLBACK_JWT_SECRET = _get_or_create_fallback_jwt_secret()
 
 _GLOBAL_INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY")
 if not _GLOBAL_INTERNAL_SERVICE_KEY or _GLOBAL_INTERNAL_SERVICE_KEY in ["change-me"]:
@@ -32,10 +69,11 @@ JWT_ALGORITHM = "HS256"
 security_bearer = HTTPBearer(auto_error=False)
 
 def get_jwt_secret_key() -> str:
-    secret = os.getenv("JWT_SECRET_KEY", _GLOBAL_FALLBACK_JWT_SECRET)
-    if secret in ["change-me", "default-secret-key-change-in-production"]:
-        return _GLOBAL_FALLBACK_JWT_SECRET
-    return secret
+    secret = os.getenv("JWT_SECRET_KEY")
+    insecure_defaults = {"change-me", "default-secret-key-change-in-production", "change-me-super-secret-jwt-key-min32chars"}
+    if secret and secret not in insecure_defaults:
+        return secret
+    return _get_or_create_fallback_jwt_secret()
 
 def get_internal_service_key() -> str:
     key = os.getenv("INTERNAL_SERVICE_KEY", _GLOBAL_INTERNAL_SERVICE_KEY)
@@ -82,7 +120,7 @@ async def verify_internal_api_key(
     This guarantees both external user auth and inter-service communication work cleanly locally and under Docker.
     """
     expected_key = get_internal_service_key()
-    if x_internal_key and x_internal_key == expected_key:
+    if x_internal_key and hmac.compare_digest(x_internal_key, expected_key):
         return True
     
     if credentials:

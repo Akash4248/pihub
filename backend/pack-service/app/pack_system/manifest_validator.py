@@ -23,9 +23,15 @@ class ManifestValidator:
 
     def validate(self, manifest: dict[str, Any]) -> tuple[bool, list[str]]:
         errors: list[str] = []
+        pack_type = (manifest.get("generation_metadata") or {}).get("pack_type")
+        pack_id = manifest.get("pack_id", "")
+        is_language_pack = pack_type == "language" or pack_id.startswith("lang_")
+
         for field_name in self.required_fields:
             if field_name not in manifest:
                 errors.append(f"missing:{field_name}")
+            elif not is_language_pack and field_name in ("grade", "subject") and manifest[field_name] is None:
+                errors.append(f"null:{field_name}")
 
         version = manifest.get("version")
         if isinstance(version, str):

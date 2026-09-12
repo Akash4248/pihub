@@ -36,15 +36,20 @@ class Hostapd:
         hw_mode: str = "g",
     ) -> str:
         """Generate hostapd configuration"""
+        clean_ssid = ssid.replace("\r", "").replace("\n", "")
+        clean_passphrase = passphrase.replace("\r", "").replace("\n", "")
+        if not clean_ssid or not clean_passphrase:
+            raise ValueError("SSID and passphrase must be non-empty and cannot contain newlines")
+
         config = f"""
 interface={self.interface}
 driver=nl80211
-ssid={ssid}
+ssid={clean_ssid}
 hw_mode={hw_mode}
 channel={channel}
 wmm_enabled=1
 wpa=2
-wpa_passphrase={passphrase}
+wpa_passphrase={clean_passphrase}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 wpa_ptk_rekey=600

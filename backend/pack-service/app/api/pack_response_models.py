@@ -59,6 +59,10 @@ class ManifestResponse(BaseModel):
     artifact_counts: dict[str, int] = Field(default_factory=dict)
     generation_metadata: dict[str, Any] = Field(default_factory=dict)
     quality_scores: dict[str, float] = Field(default_factory=dict)
+    archive_path: str | None = None
+    compressed_size_mb: float | None = None
+    archive_exists: bool = False
+
 
 
 class PackListItem(BaseModel):

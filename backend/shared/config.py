@@ -1,7 +1,27 @@
+import os
+from pathlib import Path
 from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _resolve_storage_path(env_var_name: str, default_path: str, fallback_relative_path: str) -> str:
+    val = os.getenv(env_var_name)
+    if val:
+        return val
+    target = Path(default_path)
+    try:
+        if target.exists():
+            return default_path
+        parent = target.parent
+        if parent.exists() and os.access(parent, os.W_OK):
+            return default_path
+    except Exception:
+        pass
+
+    local_dir = Path(".local_run") / fallback_relative_path
+    return str(local_dir.resolve())
 
 
 class Settings(BaseSettings):
@@ -21,7 +41,7 @@ class Settings(BaseSettings):
     voice_service_url: str = Field(default="http://voice-service:8050", alias="VOICE_SERVICE_URL")
     voice_service_required: bool = Field(default=False, alias="VOICE_SERVICE_REQUIRED")
     voice_service_enabled: bool = Field(default=False, alias="VOICE_SERVICE_ENABLED")
-    gateway_http_timeout_seconds: float = Field(default=900.0, alias="GATEWAY_HTTP_TIMEOUT_SECONDS")
+    gateway_http_timeout_seconds: float = Field(default=120.0, alias="GATEWAY_HTTP_TIMEOUT_SECONDS")
     jwt_secret_key: str = Field(default="change-me-super-secret-jwt-key-min32chars", alias="JWT_SECRET_KEY")
     allow_anonymous_dev: bool = Field(default=True, alias="ALLOW_ANONYMOUS_DEV")
     database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@db:5432/pihub", alias="DATABASE_URL")
@@ -42,18 +62,18 @@ class Settings(BaseSettings):
 
     embedding_model_name: str = Field(default="BAAI/bge-m3", alias="EMBEDDING_MODEL_NAME")
     embedding_device: str = Field(default="cpu", alias="EMBEDDING_DEVICE")
-    embedding_cache_dir: str = Field(default="/shared/models/sentence-transformers/embedding", alias="EMBEDDING_CACHE_DIR")
+    embedding_cache_dir: str = Field(default_factory=lambda: _resolve_storage_path("EMBEDDING_CACHE_DIR", "/shared/models/sentence-transformers/embedding", "models/sentence-transformers/embedding"), alias="EMBEDDING_CACHE_DIR")
     local_retrieval_model_name: str = Field(default="BAAI/bge-m3", alias="LOCAL_RETRIEVAL_MODEL_NAME")
     local_retrieval_device: str = Field(default="cpu", alias="LOCAL_RETRIEVAL_DEVICE")
-    local_retrieval_cache_dir: str = Field(default="/shared/models/sentence-transformers/retrieval", alias="LOCAL_RETRIEVAL_CACHE_DIR")
+    local_retrieval_cache_dir: str = Field(default_factory=lambda: _resolve_storage_path("LOCAL_RETRIEVAL_CACHE_DIR", "/shared/models/sentence-transformers/retrieval", "models/sentence-transformers/retrieval"), alias="LOCAL_RETRIEVAL_CACHE_DIR")
     embedding_fallback: str = Field(default="none", alias="EMBEDDING_FALLBACK") # none|hash
 
 
-    upload_dir: str = Field(default="/shared/uploads", alias="UPLOAD_DIR")
-    work_dir: str = Field(default="/shared/work", alias="WORK_DIR")
-    content_dir: str = Field(default="/shared/content", alias="CONTENT_DIR")
-    curriculum_graph_path: str = Field(default="/shared/work/curriculum_graph.json", alias="CURRICULUM_GRAPH_PATH")
-    curriculum_relation_graph_path: str = Field(default="/shared/work/curriculum_relation_graph.json", alias="CURRICULUM_RELATION_GRAPH_PATH")
+    upload_dir: str = Field(default_factory=lambda: _resolve_storage_path("UPLOAD_DIR", "/shared/uploads", "uploads"), alias="UPLOAD_DIR")
+    work_dir: str = Field(default_factory=lambda: _resolve_storage_path("WORK_DIR", "/shared/work", "work"), alias="WORK_DIR")
+    content_dir: str = Field(default_factory=lambda: _resolve_storage_path("CONTENT_DIR", "/shared/content", "content"), alias="CONTENT_DIR")
+    curriculum_graph_path: str = Field(default_factory=lambda: _resolve_storage_path("CURRICULUM_GRAPH_PATH", "/shared/work/curriculum_graph.json", "work/curriculum_graph.json"), alias="CURRICULUM_GRAPH_PATH")
+    curriculum_relation_graph_path: str = Field(default_factory=lambda: _resolve_storage_path("CURRICULUM_RELATION_GRAPH_PATH", "/shared/work/curriculum_relation_graph.json", "work/curriculum_relation_graph.json"), alias="CURRICULUM_RELATION_GRAPH_PATH")
     enable_auto_ingestion: bool = Field(default=False, alias="ENABLE_AUTO_INGESTION")
     enable_ai_artifact_generation: bool = Field(default=True, alias="ENABLE_AI_ARTIFACT_GENERATION")
     enable_semantic_educational_chunking: bool = Field(default=True, alias="ENABLE_SEMANTIC_EDUCATIONAL_CHUNKING")
@@ -61,7 +81,7 @@ class Settings(BaseSettings):
     enable_educational_retrieval_engine: bool = Field(default=True, alias="ENABLE_EDUCATIONAL_RETRIEVAL_ENGINE")
     
     # Pack Management
-    pack_storage_path: str = Field(default="/shared/packs", alias="PACK_STORAGE_PATH")
+    pack_storage_path: str = Field(default_factory=lambda: _resolve_storage_path("PACK_STORAGE_PATH", "/shared/packs", "packs"), alias="PACK_STORAGE_PATH")
     pack_service_url: str = Field(default="http://pack-service:8030", alias="PACK_SERVICE_URL")
     
     # Pi Cache Settings
@@ -82,11 +102,11 @@ class Settings(BaseSettings):
     classroom_id: str = Field(default="class_001", alias="CLASSROOM_ID")
     
     # Curriculum Builder Settings
-    textbooks_root: str = Field(default="/home/akash/Desktop/PIHUB/TEXTBOOKS", alias="TEXTBOOKS_ROOT")
-    curriculum_build_dir: str = Field(default="/shared/curriculum", alias="CURRICULUM_BUILD_DIR")
-    curriculum_manifest_path: str = Field(default="/shared/curriculum/curriculum_manifest.json", alias="CURRICULUM_MANIFEST_PATH")
-    pack_registry_path: str = Field(default="/shared/curriculum/pack_registry.json", alias="PACK_REGISTRY_PATH")
-    enrichment_registry_path: str = Field(default="/shared/curriculum/enrichment_registry.json", alias="ENRICHMENT_REGISTRY_PATH")
+    textbooks_root: str = Field(default_factory=lambda: _resolve_storage_path("TEXTBOOKS_ROOT", "/home/akash/Desktop/PIHUB/TEXTBOOKS", "textbooks"), alias="TEXTBOOKS_ROOT")
+    curriculum_build_dir: str = Field(default_factory=lambda: _resolve_storage_path("CURRICULUM_BUILD_DIR", "/shared/curriculum", "curriculum"), alias="CURRICULUM_BUILD_DIR")
+    curriculum_manifest_path: str = Field(default_factory=lambda: _resolve_storage_path("CURRICULUM_MANIFEST_PATH", "/shared/curriculum/curriculum_manifest.json", "curriculum/curriculum_manifest.json"), alias="CURRICULUM_MANIFEST_PATH")
+    pack_registry_path: str = Field(default_factory=lambda: _resolve_storage_path("PACK_REGISTRY_PATH", "/shared/curriculum/pack_registry.json", "curriculum/pack_registry.json"), alias="PACK_REGISTRY_PATH")
+    enrichment_registry_path: str = Field(default_factory=lambda: _resolve_storage_path("ENRICHMENT_REGISTRY_PATH", "/shared/curriculum/enrichment_registry.json", "curriculum/enrichment_registry.json"), alias="ENRICHMENT_REGISTRY_PATH")
     curriculum_version: str = Field(default="1.0.0", alias="CURRICULUM_VERSION")
     max_concurrent_compilation_tasks: int = Field(default=2, alias="MAX_CONCURRENT_COMPILATION_TASKS")
     enable_gemma_content_generation: bool = Field(default=True, alias="ENABLE_GEMMA_CONTENT_GENERATION")
@@ -107,7 +127,7 @@ class Settings(BaseSettings):
 
     # Offline media store (downloaded + compressed videos/images)
     enable_media_download: bool = Field(default=True, alias="ENABLE_MEDIA_DOWNLOAD")
-    media_storage_path: str = Field(default="/shared/media", alias="MEDIA_STORAGE_PATH")
+    media_storage_path: str = Field(default_factory=lambda: _resolve_storage_path("MEDIA_STORAGE_PATH", "/shared/media", "media"), alias="MEDIA_STORAGE_PATH")
     media_download_timeout_seconds: float = Field(default=180.0, alias="MEDIA_DOWNLOAD_TIMEOUT_SECONDS")
     media_max_video_height: int = Field(default=480, alias="MEDIA_MAX_VIDEO_HEIGHT")
     media_video_crf: int = Field(default=28, alias="MEDIA_VIDEO_CRF")  # H.264 CRF: visually lossless-ish, small
@@ -136,11 +156,17 @@ class Settings(BaseSettings):
 
     def validate_security_config(self) -> None:
         insecure_keys = {"change-me", "change-me-super-secret-jwt-key-min32chars", "default-secret-key-change-in-production"}
-        if not self.allow_anonymous_dev and self.jwt_secret_key in insecure_keys:
-            raise RuntimeError(
-                "Insecure JWT_SECRET_KEY set in production environment. "
-                "Set a secure JWT_SECRET_KEY environment variable or set ALLOW_ANONYMOUS_DEV=true for local dev."
-            )
+        if not self.allow_anonymous_dev:
+            if self.jwt_secret_key in insecure_keys:
+                raise RuntimeError(
+                    "Insecure JWT_SECRET_KEY set in production environment. "
+                    "Set a secure JWT_SECRET_KEY environment variable or set ALLOW_ANONYMOUS_DEV=true for local dev."
+                )
+            if self.minio_access_key in {"minioadmin", "minio"} or self.minio_secret_key in {"minioadmin", "minio"}:
+                raise RuntimeError(
+                    "Insecure MINIO credentials set in production environment. "
+                    "Set MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables or set ALLOW_ANONYMOUS_DEV=true for local dev."
+                )
 
 
 @lru_cache(maxsize=1)

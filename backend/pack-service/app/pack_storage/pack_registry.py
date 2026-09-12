@@ -41,6 +41,7 @@ class PackRegistry:
         self.store.remove(pack_id, version)
 
     def search(self, **criteria: Any) -> list[dict[str, Any]]:
+        from ..pack_system.version_manager import VersionManager
         records = self.store.list()
         results: list[dict[str, Any]] = []
         for record in records:
@@ -48,7 +49,17 @@ class PackRegistry:
             for key, expected in criteria.items():
                 if expected is None:
                     continue
-                if record.get(key) != expected:
+                actual = record.get(key)
+                if key == "version" and isinstance(expected, str) and isinstance(actual, str):
+                    try:
+                        if VersionManager.normalize(actual) != VersionManager.normalize(expected):
+                            matched = False
+                            break
+                    except ValueError:
+                        if actual != expected:
+                            matched = False
+                            break
+                elif actual != expected:
                     matched = False
                     break
             if matched:

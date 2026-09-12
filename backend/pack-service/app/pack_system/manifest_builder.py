@@ -5,7 +5,7 @@ from typing import Any
 
 from .checksum_generator import ChecksumGenerator
 from .version_manager import VersionManager
-from shared.text_normalization import normalize_curriculum_name
+from shared.text_normalization import normalize_curriculum_name, normalize_language_code
 
 
 class ManifestBuilder:
@@ -33,7 +33,7 @@ class ManifestBuilder:
             "grade": grade,
             "subject": normalize_curriculum_name(subject) if subject is not None else None,
             "chapter": normalize_curriculum_name(chapter) if chapter is not None else None,
-            "language": normalize_curriculum_name(language) if language is not None else None,
+            "language": (normalize_language_code(language) or normalize_curriculum_name(language)) if language is not None else None,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "retrieval_index_version": self.retrieval_index_version,
             "artifact_counts": artifact_counts,
