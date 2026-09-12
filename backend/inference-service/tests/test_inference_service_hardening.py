@@ -52,3 +52,33 @@ def test_session_manager_lru_eviction():
     assert len(sm._sessions) == 3
     assert sm.get(s1.session_id) is None
     assert sm.get(s4.session_id) is not None
+
+
+def test_search_context_returns_tuple_on_error():
+    import asyncio
+    from app.main import _search_context, manager
+
+    # Mock error response from content-pipeline
+    async def mock_post(*args, **kwargs):
+        class MockResponse:
+            is_error = True
+            text = "Service Unavailable"
+        return MockResponse()
+
+    original_post = manager.http.post
+    manager.http.post = mock_post
+
+    async def _test():
+        res = await _search_context("photosynthesis", 5, {})
+        assert isinstance(res, tuple)
+        assert len(res) == 2
+        chunks, error_flag = res
+        assert chunks == []
+        assert error_flag is True
+
+    try:
+        asyncio.run(_test())
+    finally:
+        manager.http.post = original_post
+
+
