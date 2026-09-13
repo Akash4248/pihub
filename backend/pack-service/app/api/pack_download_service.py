@@ -22,7 +22,11 @@ class PackDownloadService:
         if not archive_path:
             raise HTTPException(status_code=404, detail="Pack archive not found")
 
-        path = Path(archive_path)
+        path = Path(archive_path).resolve()
+        base_dir = Path(settings.pack_storage_path).resolve()
+        if not path.is_relative_to(base_dir):
+            raise HTTPException(status_code=403, detail="Access denied: invalid file path outside storage directory")
+
         if not path.exists():
             raise HTTPException(status_code=404, detail="Pack archive file missing")
 

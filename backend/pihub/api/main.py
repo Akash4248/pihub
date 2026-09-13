@@ -194,7 +194,7 @@ def update_classroom(payload: ClassroomUpdateRequest, _: None = Depends(require_
 def list_devices() -> dict[str, Any]:
     devices = []
     for device in store.list_devices():
-        devices.append({key: value for key, value in device.items() if key != "auth_token"})
+        devices.append({key: value for key, value in device.items() if key not in ("auth_token", "auth_token_hash")})
     return {"devices": devices}
 
 

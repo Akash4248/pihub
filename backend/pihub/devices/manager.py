@@ -122,8 +122,7 @@ class DeviceManager:
 
     def heartbeat(self, device_id: str, auth_token: str) -> bool:
         """Process device heartbeat"""
-        device = self.store.get_device(device_id)
-        if not device or device.get("auth_token") != auth_token:
+        if not self.store.verify_device_token(device_id, auth_token):
             return False
 
         self.store.heartbeat(device_id)
@@ -140,8 +139,7 @@ class DeviceManager:
 
     def handle_reconnect(self, device_id: str, auth_token: str) -> dict[str, Any]:
         """Handle device reconnection"""
-        device = self.store.get_device(device_id)
-        if not device or device.get("auth_token") != auth_token:
+        if not self.store.verify_device_token(device_id, auth_token):
             return {"status": "error", "message": "Invalid device"}
 
         session = self.active_sessions.get(device_id)
@@ -177,7 +175,7 @@ class DeviceManager:
         if not device:
             return {"status": "unknown"}
 
-        sanitized_device = {key: value for key, value in device.items() if key != "auth_token"}
+        sanitized_device = {key: value for key, value in device.items() if key not in ("auth_token", "auth_token_hash")}
         sessions = self.store.list_device_sessions(device_id)
         student_id = self.store.get_student_for_device(device_id)
 

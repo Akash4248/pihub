@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import time
 import uuid
@@ -70,10 +71,17 @@ class CacheManager:
                 pass
 
     def _save_cache_metadata(self) -> None:
-        """Persist cache metadata"""
+        """Persist cache metadata atomically"""
         metadata_file = self.metadata_dir / "cache_index.json"
         data = [asdict(entry) for entry in self.cache_index.values()]
-        metadata_file.write_text(json.dumps(data, indent=2))
+        tmp_file = metadata_file.with_suffix(".tmp")
+        tmp_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        try:
+            with open(tmp_file, "r") as f:
+                os.fsync(f.fileno())
+        except Exception:
+            pass
+        tmp_file.replace(metadata_file)
 
     def _get_cache_usage(self) -> int:
         """Get total cache usage in bytes"""

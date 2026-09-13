@@ -83,6 +83,7 @@ class ExperimentRegistry:
             id=manifest.id,
             title=manifest.title,
             subject=manifest.subject,
+            category=experiment.category,
             chapter=manifest.chapter,
             topic=manifest.topic,
             difficulty=manifest.difficulty,

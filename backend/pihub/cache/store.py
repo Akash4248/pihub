@@ -1,11 +1,15 @@
-from __future__ import annotations
-
+import hashlib
+import hmac
 import json
 import sqlite3
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class PiHubStore:
@@ -32,14 +36,25 @@ class PiHubStore:
                     device_name text not null,
                     role text not null,
                     classroom text,
-                    auth_token text not null,
+                    auth_token_hash text,
                     status text not null,
                     metadata text not null,
                     created_at integer not null,
                     updated_at integer not null,
                     last_seen integer
                 );
+                """
+            )
+            cols = [row[1] for row in connection.execute("pragma table_info(devices)").fetchall()]
+            if "auth_token_hash" not in cols:
+                connection.execute("alter table devices add column auth_token_hash text")
+            if "auth_token" in cols:
+                rows = connection.execute("select device_id, auth_token from devices where auth_token is not null and (auth_token_hash is null or auth_token_hash = '')").fetchall()
+                for r in rows:
+                    connection.execute("update devices set auth_token_hash = ? where device_id = ?", (_hash_token(r["auth_token"]), r["device_id"]))
 
+            connection.executescript(
+                """
                 create table if not exists classroom (
                     id integer primary key check (id = 1),
                     classroom_name text,
@@ -310,23 +325,59 @@ class PiHubStore:
     ) -> dict[str, Any]:
         now = int(time.time())
         device_id = device_id or str(uuid.uuid4())
+        token_hash = _hash_token(auth_token)
         with self._connect() as connection:
-            connection.execute(
-                """
-                insert into devices (device_id, device_name, role, classroom, auth_token, status, metadata, created_at, updated_at, last_seen)
-                values (?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
-                """,
-                (device_id, device_name, role, classroom, auth_token, json.dumps(metadata), now, now, now),
-            )
+            cols = [r[1] for r in connection.execute("pragma table_info(devices)").fetchall()]
+            if "auth_token" in cols and "auth_token_hash" in cols:
+                connection.execute(
+                    """
+                    insert into devices (device_id, device_name, role, classroom, auth_token, auth_token_hash, status, metadata, created_at, updated_at, last_seen)
+                    values (?, ?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+                    """,
+                    (device_id, device_name, role, classroom, token_hash, token_hash, json.dumps(metadata), now, now, now),
+                )
+            elif "auth_token_hash" in cols:
+                connection.execute(
+                    """
+                    insert into devices (device_id, device_name, role, classroom, auth_token_hash, status, metadata, created_at, updated_at, last_seen)
+                    values (?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+                    """,
+                    (device_id, device_name, role, classroom, token_hash, json.dumps(metadata), now, now, now),
+                )
+            else:
+                connection.execute(
+                    """
+                    insert into devices (device_id, device_name, role, classroom, auth_token, status, metadata, created_at, updated_at, last_seen)
+                    values (?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+                    """,
+                    (device_id, device_name, role, classroom, token_hash, json.dumps(metadata), now, now, now),
+                )
         return {
             "device_id": device_id,
             "device_name": device_name,
             "role": role,
             "status": "online",
             "auth_token": auth_token,
+            "auth_token_hash": token_hash,
             "classroom": classroom,
             "metadata": metadata,
         }
+
+    def verify_device_token(self, device_id: str, auth_token: str) -> bool:
+        if not auth_token:
+            return False
+        device = self.get_device(device_id)
+        if not device:
+            return False
+        stored_hash = device.get("auth_token_hash")
+        if not stored_hash:
+            # Fallback for legacy rows if auth_token still stored in plaintext
+            legacy_token = device.get("auth_token")
+            if legacy_token:
+                return hmac.compare_digest(auth_token, legacy_token)
+            return False
+        incoming_hash = _hash_token(auth_token)
+        return hmac.compare_digest(incoming_hash, stored_hash)
 
     def list_devices(self) -> list[dict[str, Any]]:
         with self._connect() as connection:

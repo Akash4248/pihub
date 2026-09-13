@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from qdrant_client import QdrantClient
 
 from shared.config import get_settings
-from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt
+from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely
 from shared.curriculum_graph import CurriculumGraph, create_sample_curriculum
 from shared.schemas import (
     ChunkPreview,
@@ -1225,7 +1225,10 @@ async def ingest_pdf(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid metadata: {exc}") from exc
 
-    content = await file.read()
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
     return await asyncio.to_thread(pipeline.ingest_pdf, file.filename or "upload.pdf", content, metadata_model, source)
 
 
@@ -1239,7 +1242,10 @@ async def ingest_textbook(
         metadata_model = Metadata.model_validate_json(metadata)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid metadata: {exc}") from exc
-    content = await file.read()
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
     return await asyncio.to_thread(pipeline.ingest_pdf, file.filename or "upload.pdf", content, metadata_model, source)
 
 try:
