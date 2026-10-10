@@ -13,7 +13,7 @@ from app.context.pack_context_provider import PackContextProvider
 from app.language.language_adapter import LanguageAdapter
 from app.monitoring.tutor_monitor import TutorLatencyBreakdown
 from app.sessions.session_manager import SessionManager
-from app.tutor.prompting import append_experiment_context, append_language_instruction
+from app.tutor.prompting import append_experiment_context, append_language_instruction, append_no_context_note
 
 
 BuildSystemPromptFn = Callable[[Any, str], str]
@@ -78,7 +78,7 @@ class TutorOrchestrator:
 
         system_prompt = self.build_system_prompt(request, getattr(request, "hint_style", "guided"))
         if not context_results:
-            system_prompt += "\n[Note: No relevant educational context was found. Answer based on your knowledge.]"
+            system_prompt = append_no_context_note(system_prompt)
         system_prompt = append_language_instruction(system_prompt, self.language_adapter.prompt_instruction(target_language))
 
         user_prompt = self.build_user_prompt(request, context_results)

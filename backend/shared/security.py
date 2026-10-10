@@ -182,25 +182,40 @@ def validate_pdf_upload(filename: str | None, content: bytes) -> str:
         )
     return safe_name
 
+# Single source of truth for prompt-injection tokens. Inference-service and
+# gateway both sanitize against this list — keep it in sync in one place.
+LLM_INJECTION_TOKENS: tuple[str, ...] = (
+    "<|im_start|>", "<|im_end|>", "<|endoftext|>",
+    "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
+    "### Instruction:", "### System:", "### Response:",
+    "SYSTEM:", "USER:", "ASSISTANT:",
+)
+
 def sanitize_llm_prompt(user_text: str) -> str:
     """
     Sanitizes user prompt inputs to prevent ChatML / LLM system prompt injection attacks.
-    Strips system control tags like `<|im_start|>`, `<|im_end|>`, `[INST]`, `[/INST]`.
+    NFKC-normalizes, strips control chars, removes injection tokens
+    (case-insensitive), and collapses whitespace.
     """
     if not user_text:
         return ""
-    
-    cleaned = user_text
-    injection_patterns = [
-        r"<\|im_start\|>",
-        r"<\|im_end\|>",
-        r"<\|endoftext\|>",
-        r"\[INST\]",
-        r"\[/INST\]",
-        r"<<SYS>>",
-        r"<</SYS>>",
-    ]
-    for pattern in injection_patterns:
-        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
-    
-    return cleaned.strip()
+
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKC", user_text)
+    cleaned_chars: list[str] = []
+    for char in normalized:
+        category = unicodedata.category(char)
+        if char in {"\n", "\r", "\t"}:
+            cleaned_chars.append("\n" if char != "\t" else " ")
+            continue
+        if category.startswith("C"):
+            continue
+        cleaned_chars.append(char)
+
+    cleaned = "".join(cleaned_chars)
+    for token in LLM_INJECTION_TOKENS:
+        cleaned = re.sub(re.escape(token), "", cleaned, flags=re.IGNORECASE)
+
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in cleaned.splitlines()]
+    return "\n".join(lines).strip()

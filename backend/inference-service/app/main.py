@@ -26,7 +26,9 @@ from app.evaluation import evaluate_answer
 from app.language import LanguageAdapter
 from app.orchestration import TutorOrchestrator
 from app.sessions import SessionManager
+from app.tutor import RELEVANCE_INSTRUCTION, append_no_context_note
 from shared.config import get_settings as get_shared_settings
+from shared.security import LLM_INJECTION_TOKENS
 from shared.text_normalization import language_display_name, normalize_language_code
 from shared.topic_normalization import normalize_subject, normalize_topic
 
@@ -307,9 +309,14 @@ class PromptCache:
 
 class ModelManager:
     def __init__(self, settings: Settings) -> None:
+        import threading
+
         self.settings = settings
         self.model_path = Path(settings.llama_model_path)
         self.server_process: subprocess.Popen[str] | None = None
+        # Guards check-and-spawn in start_server (sync method, may race across
+        # concurrent health() callers).
+        self._spawn_lock = threading.Lock()
         self.http = httpx.AsyncClient(timeout=180.0)
         self.chat_prompt_cache = PromptCache(settings.llama_prompt_cache_size)
         self.artifact_prompt_cache = PromptCache(settings.llama_prompt_cache_size)
@@ -325,9 +332,12 @@ class ModelManager:
         return self.server_process is not None and self.server_process.poll() is None
 
     def start_server(self) -> None:
-        if self.is_ready() or not self.model_path.exists():
-            return
+        with self._spawn_lock:
+            if self.is_ready() or not self.model_path.exists():
+                return
+            self._spawn_server_locked()
 
+    def _spawn_server_locked(self) -> None:
         import shutil
         server_bin = shutil.which("llama-server") or "llama-server"
 
@@ -394,16 +404,15 @@ app = FastAPI(title="inference-service", lifespan=lifespan)
 
 
 @app.middleware("http")
-async def log_request_body(request: Request, call_next):
-    if request.url.path == "/ai/tutor":
-        body = await request.body()
-        logger.info("[TUTOR] RAW_REQUEST=%s", body.decode("utf-8", errors="ignore"))
-
-        async def receive():
-            return {"type": "http.request", "body": body, "more_body": False}
-
-        request = Request(request.scope, receive)
-
+async def log_request_metadata(request: Request, call_next):
+    # Never log request bodies: /ai/* payloads carry student prompts (PII).
+    if request.url.path.startswith("/ai/"):
+        logger.info(
+            "[TUTOR] REQUEST method=%s path=%s content_length=%s",
+            request.method,
+            request.url.path,
+            request.headers.get("content-length", "?"),
+        )
     return await call_next(request)
 
 
@@ -436,49 +445,47 @@ def datetime_now_utc() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
-def _metrics_summary() -> dict[str, Any]:
-    metrics = list(tutor_metrics)
-    if not metrics:
-        return {
-            "count": 0,
-            "averages": {},
-            "recent": [],
-        }
-    numeric_keys = ("retrieval_ms", "rerank_ms", "llm_ms", "total_ms", "chunks_retrieved", "chunks_used")
+def _summarize_records(
+    records: list[dict[str, Any]],
+    numeric_keys: tuple[str, ...],
+    recent_n: int,
+    with_fallback_counts: bool = False,
+) -> dict[str, Any]:
+    if not records:
+        return {"count": 0, "averages": {}, "recent": []}
     averages = {
-        key: round(sum(float(metric.get(key, 0.0)) for metric in metrics) / len(metrics), 2)
+        key: round(sum(float(metric.get(key, 0.0)) for metric in records) / len(records), 2)
         for key in numeric_keys
     }
-    return {
-        "count": len(metrics),
+    summary: dict[str, Any] = {
+        "count": len(records),
         "averages": averages,
-        "recent": metrics[:20],
+        "recent": records[:recent_n],
     }
+    if with_fallback_counts:
+        fallback_counts: dict[str, int] = {}
+        for metric in records:
+            reason = str(metric.get("fallback_reason") or "none")
+            fallback_counts[reason] = fallback_counts.get(reason, 0) + 1
+        summary["fallback_counts"] = fallback_counts
+    return summary
+
+
+def _metrics_summary() -> dict[str, Any]:
+    return _summarize_records(
+        list(tutor_metrics),
+        ("retrieval_ms", "rerank_ms", "llm_ms", "total_ms", "chunks_retrieved", "chunks_used"),
+        20,
+    )
 
 
 def _retrieval_metrics_summary() -> dict[str, Any]:
-    metrics = list(retrieval_metrics)
-    if not metrics:
-        return {
-            "count": 0,
-            "averages": {},
-            "recent": [],
-        }
-    numeric_keys = ("retrieval_ms", "chunks_retrieved", "chunks_used")
-    averages = {
-        key: round(sum(float(metric.get(key, 0.0)) for metric in metrics) / len(metrics), 2)
-        for key in numeric_keys
-    }
-    fallback_counts: dict[str, int] = {}
-    for metric in metrics:
-        reason = str(metric.get("fallback_reason") or "none")
-        fallback_counts[reason] = fallback_counts.get(reason, 0) + 1
-    return {
-        "count": len(metrics),
-        "averages": averages,
-        "fallback_counts": fallback_counts,
-        "recent": metrics[:40],
-    }
+    return _summarize_records(
+        list(retrieval_metrics),
+        ("retrieval_ms", "chunks_retrieved", "chunks_used"),
+        40,
+        with_fallback_counts=True,
+    )
 
 
 def _grade_instructions(grade: int | None) -> str:
@@ -524,14 +531,10 @@ def _sanitize_prompt_text(value: Any) -> str:
         cleaned.append(char)
 
     sanitized = "".join(cleaned)
-    # Strip dangerous LLM control tokens and injection headers to prevent prompt injection
-    injection_tokens = [
-        "<|im_start|>", "<|im_end|>", "<|endoftext|>",
-        "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
-        "### Instruction:", "### System:", "### Response:",
-        "SYSTEM:", "USER:", "ASSISTANT:"
-    ]
-    for token in injection_tokens:
+    # Strip dangerous LLM control tokens and injection headers to prevent
+    # prompt injection. Token list is shared (shared.security) so the gateway
+    # edge filter and this filter can never diverge.
+    for token in LLM_INJECTION_TOKENS:
         sanitized = re.sub(re.escape(token), "", sanitized, flags=re.IGNORECASE)
 
     sanitized_lines = [re.sub(r"[ \t]+", " ", line).strip() for line in sanitized.splitlines()]
@@ -552,7 +555,7 @@ def _build_system_prompt(request: ChatRequest, style: str) -> str:
         _sanitize_prompt_text(f"Language: {_language_label(language or request.language)} ({language or 'en'})"),
         _sanitize_prompt_text(f"Teaching style: {style}"),
         _sanitize_prompt_text(_language_instruction(language)),
-        _sanitize_prompt_text("IMPORTANT: Use provided context only if it is relevant and accurate."),
+        _sanitize_prompt_text(RELEVANCE_INSTRUCTION),
         _sanitize_prompt_text("If context is not helpful, answer directly based on educational knowledge."),
     ]
     return "\n".join(parts)
@@ -1048,14 +1051,16 @@ async def _chat_completion(
         full_response = ""
         # Tracks what has been emitted to compute incremental deltas
         emitted = ""
-        queue: asyncio.Queue[str | None] = asyncio.Queue()
+        # Bounded: producer blocks when full, so a fast upstream can never
+        # OOM the gateway while a slow client drains.
+        queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=1000)
         stream_closed = asyncio.Event()
 
         async def read_upstream() -> None:
             try:
                 async with asyncio.timeout(settings.inference_queue_timeout_seconds):
                     async with manager.semaphore:
-                        async with manager.http.stream("POST", f"{base_url}/v1/chat/completions", json=payload, timeout=180.0) as streamed:
+                        async with manager.http.stream("POST", f"{base_url}/v1/chat/completions", json=payload, timeout=settings.inference_queue_timeout_seconds) as streamed:
                             async for line in streamed.aiter_lines():
                                 await queue.put(line)
             except Exception as exc:
@@ -1157,84 +1162,42 @@ async def retrieval_metrics_endpoint() -> dict[str, Any]:
     return _retrieval_metrics_summary()
 
 
-@app.post("/ai/content/summary", response_model=SummarySchema)
-async def generate_summary(request: ContentGenerationRequest) -> SummarySchema:
-    return await _generate_content_json(
-        "summary",
-        request,
-        SummarySchema,
-        '{"title": string, "summary": string, "keyPoints": string[], "importantFacts": string[]}',
+# Single table for the 8 artifact generators. Rows differ only in
+# (route suffix, artifact name, response schema, schema hint) — handlers are
+# built by _make_content_endpoint so response models stay explicit per route.
+_CONTENT_ARTIFACTS: tuple[tuple[str, str, Any, str], ...] = (
+    ("summary", "summary", SummarySchema,
+     '{"title": string, "summary": string, "keyPoints": string[], "importantFacts": string[]}'),
+    ("chapter-notes", "chapter notes", ChapterNotesSchema,
+     '{"chapter_title": string, "one_sentence_summary": string, "core_points": string[], "important_formulas": string[], "experiments": string[], "key_terms": string[], "misconceptions": string[], "real_world_applications": string[], "quiz_focus": string[]}'),
+    ("flashcards", "flashcards", FlashcardsSchema,
+     '{"items": [{"question": string, "answer": string, "difficulty": "easy|medium|hard"}]}'),
+    ("quiz", "quiz", QuizSchema,
+     '{"items": [{"question": string, "options": [string, string, string, string], "answer": string, "explanation": string}]}'),
+    ("glossary", "glossary", GlossarySchema,
+     '{"items": [{"term": string, "definition": string}]}'),
+    ("learning-objectives", "learning-objectives", LearningObjectivesSchema,
+     '{"items": [{"objective": string}]}'),
+    ("misconceptions", "misconceptions", MisconceptionsSchema,
+     '{"items": [{"misconception": string, "correction": string, "why_students_confuse_it": string}]}'),
+    ("applications", "applications", ApplicationsSchema,
+     '{"items": [{"concept": string, "real_world_use": string, "explanation": string}]}'),
+)
+
+
+def _make_content_endpoint(artifact: str, schema: Any, hint: str):
+    async def endpoint(request: ContentGenerationRequest):
+        return await _generate_content_json(artifact, request, schema, hint)
+
+    endpoint.__name__ = f"generate_{artifact.replace(' ', '_').replace('-', '_')}"
+    return endpoint
+
+
+for _suffix, _artifact, _schema, _hint in _CONTENT_ARTIFACTS:
+    app.post(f"/ai/content/{_suffix}", response_model=_schema)(
+        _make_content_endpoint(_artifact, _schema, _hint)
     )
-
-
-@app.post("/ai/content/chapter-notes", response_model=ChapterNotesSchema)
-async def generate_chapter_notes(request: ContentGenerationRequest) -> ChapterNotesSchema:
-    return await _generate_content_json(
-        "chapter notes",
-        request,
-        ChapterNotesSchema,
-        '{"chapter_title": string, "one_sentence_summary": string, "core_points": string[], "important_formulas": string[], "experiments": string[], "key_terms": string[], "misconceptions": string[], "real_world_applications": string[], "quiz_focus": string[]}',
-    )
-
-
-@app.post("/ai/content/flashcards", response_model=FlashcardsSchema)
-async def generate_flashcards(request: ContentGenerationRequest) -> FlashcardsSchema:
-    return await _generate_content_json(
-        "flashcards",
-        request,
-        FlashcardsSchema,
-        '{"items": [{"question": string, "answer": string, "difficulty": "easy|medium|hard"}]}',
-    )
-
-
-@app.post("/ai/content/quiz", response_model=QuizSchema)
-async def generate_quiz(request: ContentGenerationRequest) -> QuizSchema:
-    return await _generate_content_json(
-        "quiz",
-        request,
-        QuizSchema,
-        '{"items": [{"question": string, "options": [string, string, string, string], "answer": string, "explanation": string}]}',
-    )
-
-
-@app.post("/ai/content/glossary", response_model=GlossarySchema)
-async def generate_glossary(request: ContentGenerationRequest) -> GlossarySchema:
-    return await _generate_content_json(
-        "glossary",
-        request,
-        GlossarySchema,
-        '{"items": [{"term": string, "definition": string}]}',
-    )
-
-
-@app.post("/ai/content/learning-objectives", response_model=LearningObjectivesSchema)
-async def generate_learning_objectives(request: ContentGenerationRequest) -> LearningObjectivesSchema:
-    return await _generate_content_json(
-        "learning-objectives",
-        request,
-        LearningObjectivesSchema,
-        '{"items": [{"objective": string}]}',
-    )
-
-
-@app.post("/ai/content/misconceptions", response_model=MisconceptionsSchema)
-async def generate_misconceptions(request: ContentGenerationRequest) -> MisconceptionsSchema:
-    return await _generate_content_json(
-        "misconceptions",
-        request,
-        MisconceptionsSchema,
-        '{"items": [{"misconception": string, "correction": string, "why_students_confuse_it": string}]}',
-    )
-
-
-@app.post("/ai/content/applications", response_model=ApplicationsSchema)
-async def generate_applications(request: ContentGenerationRequest) -> ApplicationsSchema:
-    return await _generate_content_json(
-        "applications",
-        request,
-        ApplicationsSchema,
-        '{"items": [{"concept": string, "real_world_use": string, "explanation": string}]}',
-    )
+del _suffix, _artifact, _schema, _hint
 
 
 @app.get("/ai/health", response_model=HealthResponse)
@@ -1250,7 +1213,7 @@ async def ai_chat(request: ChatRequest) -> InferenceResponse:
     # If no relevant context found, indicate this in system prompt
     system_prompt = _build_system_prompt(request, "direct tutoring")
     if not context:
-        system_prompt += "\n[Note: No relevant educational context was found. Answer based on your knowledge.]"
+        system_prompt = append_no_context_note(system_prompt)
     
     user_prompt = _build_user_prompt(request, context)
     answer = await _chat_completion(system_prompt, user_prompt, request, stream=False)
