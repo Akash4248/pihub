@@ -4,6 +4,8 @@
 graphify-out/
 backend/.env
 .env
+.env.local
+backend/.env.local
 .env.example.bak
 TEXTBOOKS/
 KANNADA_MEDIUM/

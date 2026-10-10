@@ -16,8 +16,9 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="${PWD}"
 
-LOG_DIR="${ROOT}/.local_run/logs"
-PID_DIR="${ROOT}/.local_run/pids"
+LOG_DIR="${LOG_DIR:-$ROOT/.local_run/logs}"
+PID_DIR="${PID_DIR:-$ROOT/.local_run/pids}"
+PIHUB_DATA_ROOT="${PIHUB_DATA_ROOT:-$ROOT/.local_run}"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ── Resolve Python ────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ if [[ ! -f "$PY" ]]; then
   exit 1
 fi
 # Local substitutes for the Docker volume mounts so native runs don't need root.
-mkdir -p "$ROOT/.local_run"/{uploads,work,media,packs,textbooks,models/gemma4_audio,models/sentence-transformers/embedding,models/sentence-transformers/retrieval,content,curriculum,pihub_packs,pihub_cache,pihub_storage,pihub_logs}
-mkdir -p "$ROOT/.local_run/packs/pdf_manifests"
+mkdir -p "$PIHUB_DATA_ROOT"/{uploads,work,media,packs,textbooks,models/gemma4_audio,models/sentence-transformers/embedding,models/sentence-transformers/retrieval,content,curriculum,pihub_packs,pihub_cache,pihub_storage,pihub_logs}
+mkdir -p "$PIHUB_DATA_ROOT/packs/pdf_manifests"
 
 # service name -> "dir : module:app : port"
 # Each service is run from its own directory so `from app...` resolves
@@ -82,35 +83,35 @@ start_service() {
   echo ">> starting $name on :$port"
   cd "$dir"
   PYTHONPATH="$ROOT:$ROOT/shared:${PWD}:${PWD}/.." \
-  UPLOAD_DIR="$ROOT/.local_run/uploads" \
-  WORK_DIR="$ROOT/.local_run/work" \
-  MEDIA_STORAGE_PATH="$ROOT/.local_run/media" \
-  PACK_STORAGE_PATH="$ROOT/.local_run/packs" \
-  CONTENT_DIR="$ROOT/.local_run/content" \
-  CURRICULUM_GRAPH_PATH="$ROOT/.local_run/work/curriculum_graph.json" \
-  CURRICULUM_RELATION_GRAPH_PATH="$ROOT/.local_run/work/curriculum_relation_graph.json" \
-  CURRICULUM_BUILD_DIR="$ROOT/.local_run/curriculum" \
-  CURRICULUM_MANIFEST_PATH="$ROOT/.local_run/curriculum/curriculum_manifest.json" \
-  PACKS_DIR="$ROOT/.local_run/pihub_packs" \
-  PDF_LIBRARY_PATH="$ROOT/.local_run/textbooks" \
-  PDF_MANIFEST_PATH="$ROOT/.local_run/packs/pdf_manifests/pdf_manifest.json" \
-  PIHUB_DB_PATH="$ROOT/.local_run/pihub.sqlite3" \
-  CACHE_DIR="$ROOT/.local_run/pihub_cache" \
-  STORAGE_DIR="$ROOT/.local_run/pihub_storage" \
-  LOGS_DIR="$ROOT/.local_run/pihub_logs" \
-  GEMMA_MODEL_CACHE_DIR="$ROOT/.local_run/models/gemma4_audio" \
-  EMBEDDING_CACHE_DIR="$ROOT/.local_run/models/sentence-transformers/embedding" \
-  LOCAL_RETRIEVAL_CACHE_DIR="$ROOT/.local_run/models/sentence-transformers/retrieval" \
+  UPLOAD_DIR="${UPLOAD_DIR:-$PIHUB_DATA_ROOT/uploads}" \
+  WORK_DIR="${WORK_DIR:-$PIHUB_DATA_ROOT/work}" \
+  MEDIA_STORAGE_PATH="${MEDIA_STORAGE_PATH:-$PIHUB_DATA_ROOT/media}" \
+  PACK_STORAGE_PATH="${PACK_STORAGE_PATH:-$PIHUB_DATA_ROOT/packs}" \
+  CONTENT_DIR="${CONTENT_DIR:-$PIHUB_DATA_ROOT/content}" \
+  CURRICULUM_GRAPH_PATH="${CURRICULUM_GRAPH_PATH:-$PIHUB_DATA_ROOT/work/curriculum_graph.json}" \
+  CURRICULUM_RELATION_GRAPH_PATH="${CURRICULUM_RELATION_GRAPH_PATH:-$PIHUB_DATA_ROOT/work/curriculum_relation_graph.json}" \
+  CURRICULUM_BUILD_DIR="${CURRICULUM_BUILD_DIR:-$PIHUB_DATA_ROOT/curriculum}" \
+  CURRICULUM_MANIFEST_PATH="${CURRICULUM_MANIFEST_PATH:-$PIHUB_DATA_ROOT/curriculum/curriculum_manifest.json}" \
+  PACKS_DIR="${PACKS_DIR:-$PIHUB_DATA_ROOT/pihub_packs}" \
+  PDF_LIBRARY_PATH="${PDF_LIBRARY_PATH:-$PIHUB_DATA_ROOT/textbooks}" \
+  PDF_MANIFEST_PATH="${PDF_MANIFEST_PATH:-$PIHUB_DATA_ROOT/packs/pdf_manifests/pdf_manifest.json}" \
+  PIHUB_DB_PATH="${PIHUB_DB_PATH:-$PIHUB_DATA_ROOT/pihub.sqlite3}" \
+  CACHE_DIR="${CACHE_DIR:-$PIHUB_DATA_ROOT/pihub_cache}" \
+  STORAGE_DIR="${STORAGE_DIR:-$PIHUB_DATA_ROOT/pihub_storage}" \
+  LOGS_DIR="${LOGS_DIR:-$PIHUB_DATA_ROOT/pihub_logs}" \
+  GEMMA_MODEL_CACHE_DIR="${GEMMA_MODEL_CACHE_DIR:-$PIHUB_DATA_ROOT/models/gemma4_audio}" \
+  EMBEDDING_CACHE_DIR="${EMBEDDING_CACHE_DIR:-$PIHUB_DATA_ROOT/models/sentence-transformers/embedding}" \
+  LOCAL_RETRIEVAL_CACHE_DIR="${LOCAL_RETRIEVAL_CACHE_DIR:-$PIHUB_DATA_ROOT/models/sentence-transformers/retrieval}" \
   EMBEDDING_FALLBACK="${EMBEDDING_FALLBACK:-hash}" \
-  CONTENT_GENERATION_BACKEND="llama" \
-  LLAMA_MODEL_PATH="$ROOT/inference-service/models/model.gguf" \
-  CONTENT_PIPELINE_URL="http://localhost:8001" \
-  INFERENCE_SERVICE_URL="http://localhost:8010" \
-  PIHUB_URL="http://localhost:8020" \
-  PACK_SERVICE_URL="http://localhost:8030" \
-  EXPERIMENT_SERVICE_URL="http://localhost:8040" \
-  QDRANT_URL="http://localhost:6333" \
-  MONGO_URL="mongodb://localhost:27017" \
+  CONTENT_GENERATION_BACKEND="${CONTENT_GENERATION_BACKEND:-llama}" \
+  LLAMA_MODEL_PATH="${LLAMA_MODEL_PATH:-$ROOT/inference-service/models/model.gguf}" \
+  CONTENT_PIPELINE_URL="${CONTENT_PIPELINE_URL:-http://localhost:8001}" \
+  INFERENCE_SERVICE_URL="${INFERENCE_SERVICE_URL:-http://localhost:8010}" \
+  PIHUB_URL="${PIHUB_URL:-http://localhost:8020}" \
+  PACK_SERVICE_URL="${PACK_SERVICE_URL:-http://localhost:8030}" \
+  EXPERIMENT_SERVICE_URL="${EXPERIMENT_SERVICE_URL:-http://localhost:8040}" \
+  QDRANT_URL="${QDRANT_URL:-http://localhost:6333}" \
+  MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" \
     setsid "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
     >"$LOG_DIR/$name.log" 2>&1 &
   pid=$!
