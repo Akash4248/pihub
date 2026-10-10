@@ -174,6 +174,31 @@ def test_ai_chat_empty_prompt_returns_422():
     assert client.post("/ai/chat", json={"prompt": "  "}).status_code == 422
 
 
+def test_upload_downstream_outage_returns_503_not_500():
+    import httpx
+
+    internal_key = get_internal_service_key()
+
+    class OutageHttp:
+        async def request(self, method, url, **kwargs):
+            raise AssertionError("should not be called")
+
+        async def post(self, url, **kwargs):
+            raise httpx.ConnectError("All connection attempts failed")
+
+        async def get(self, url, **kwargs):
+            raise httpx.ConnectError("All connection attempts failed")
+
+    app.state.http = OutageHttp()
+
+    response = client.post(
+        "/upload",
+        headers={"X-Internal-Service-Key": internal_key},
+        files={"file": ("test.pdf", b"%PDF-1.4 test content", "application/pdf")},
+    )
+    assert response.status_code == 503
+
+
 def test_content_upload_alias_redirects_to_upload():
     internal_key = get_internal_service_key()
     response = client.post(

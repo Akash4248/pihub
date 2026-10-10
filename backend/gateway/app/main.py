@@ -1089,12 +1089,15 @@ async def upload_content(
         chunks.append(chunk)
     content = b"".join(chunks)
 
-    response = await app.state.http.post(
-        f"{settings.content_pipeline_url}/ingest/pdf",
-        data={"metadata": metadata.model_dump_json()},
-        files={"file": (safe_name, content, file.content_type or "application/pdf")},
-        timeout=INGEST_PROXY_TIMEOUT,
-    )
+    try:
+        response = await app.state.http.post(
+            f"{settings.content_pipeline_url}/ingest/pdf",
+            data={"metadata": metadata.model_dump_json()},
+            files={"file": (safe_name, content, file.content_type or "application/pdf")},
+            timeout=INGEST_PROXY_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}") from exc
     if response.is_error:
         raise HTTPException(status_code=response.status_code, detail=response.text[:2000])
     return response.json()
@@ -1112,12 +1115,15 @@ async def ingest_pdf(
     async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
         chunks.append(chunk)
     content = b"".join(chunks)
-    response = await app.state.http.post(
-        f"{settings.content_pipeline_url}/ingest/pdf",
-        data={"metadata": metadata, "source": source},
-        files={"file": (safe_name, content, file.content_type or "application/pdf")},
-        timeout=INGEST_PROXY_TIMEOUT,
-    )
+    try:
+        response = await app.state.http.post(
+            f"{settings.content_pipeline_url}/ingest/pdf",
+            data={"metadata": metadata, "source": source},
+            files={"file": (safe_name, content, file.content_type or "application/pdf")},
+            timeout=INGEST_PROXY_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}") from exc
     if response.is_error:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
@@ -1134,12 +1140,15 @@ async def ingest_textbook(
     async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
         chunks.append(chunk)
     content = b"".join(chunks)
-    response = await app.state.http.post(
-        f"{settings.content_pipeline_url}/ingest/textbook",
-        data={"metadata": metadata, "source": source or "textbook"},
-        files={"file": (safe_name, content, file.content_type or "application/pdf")},
-        timeout=INGEST_PROXY_TIMEOUT,
-    )
+    try:
+        response = await app.state.http.post(
+            f"{settings.content_pipeline_url}/ingest/textbook",
+            data={"metadata": metadata, "source": source or "textbook"},
+            files={"file": (safe_name, content, file.content_type or "application/pdf")},
+            timeout=INGEST_PROXY_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}") from exc
     if response.is_error:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
