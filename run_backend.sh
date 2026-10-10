@@ -91,6 +91,7 @@ start_service() {
     CACHE_DIR="${ROOT_DIR}/.local_run/pihub_cache" \
     STORAGE_DIR="${ROOT_DIR}/.local_run/pihub_storage" \
     LOGS_DIR="${ROOT_DIR}/.local_run/pihub_logs" \
+    ALLOW_ANONYMOUS_DEV="true" \
       setsid "${PY}" -m uvicorn "${mod}:${appobj}" --app-dir "${target_dir}" --host "${bind_host}" --port "${port}" >"${log_file}" 2>&1 &
 
     local pid=$!

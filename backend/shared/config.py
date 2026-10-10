@@ -42,8 +42,12 @@ class Settings(BaseSettings):
     voice_service_required: bool = Field(default=False, alias="VOICE_SERVICE_REQUIRED")
     voice_service_enabled: bool = Field(default=False, alias="VOICE_SERVICE_ENABLED")
     gateway_http_timeout_seconds: float = Field(default=120.0, alias="GATEWAY_HTTP_TIMEOUT_SECONDS")
+    discovery_port: int = Field(default=47890, alias="DISCOVERY_PORT")
     jwt_secret_key: str = Field(default="change-me-super-secret-jwt-key-min32chars", alias="JWT_SECRET_KEY")
-    allow_anonymous_dev: bool = Field(default=True, alias="ALLOW_ANONYMOUS_DEV")
+    # Fail-closed by default: production denies anonymous service calls unless
+    # explicitly opted into dev mode. Local `run_backend.sh` exports
+    # ALLOW_ANONYMOUS_DEV=true so laptop dev keeps working.
+    allow_anonymous_dev: bool = Field(default=False, alias="ALLOW_ANONYMOUS_DEV")
     database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@db:5432/pihub", alias="DATABASE_URL")
 
 
