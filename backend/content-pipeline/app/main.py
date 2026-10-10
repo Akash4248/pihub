@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from qdrant_client import QdrantClient
 
 from shared.config import get_settings
-from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely
+from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely, validate_pdf_upload
 from shared.curriculum_graph import CurriculumGraph, create_sample_curriculum
 from shared.schemas import (
     ChunkPreview,
@@ -142,7 +142,6 @@ class Pipeline:
         self._write_lock = threading.Lock()
         self.client = make_qdrant_client(settings.qdrant_url)
         self.embedding_model: SimpleEmbeddingModel | None = None
-        self.local_retrieval_model: Any | None = None
         self.collection_name = settings.qdrant_collection
         self.upload_dir = Path(settings.upload_dir)
         self.work_dir = Path(settings.work_dir)
@@ -211,17 +210,6 @@ class Pipeline:
             )
         return self.embedding_model
 
-    def _load_local_retrieval_model(self) -> Any | None:
-        if self.local_retrieval_model is None:
-            model = SentenceTransformerEmbeddingModel(
-                settings.local_retrieval_model_name,
-                settings.local_retrieval_device,
-                settings.local_retrieval_cache_dir,
-            )
-            model._ensure_loaded()
-            self.local_retrieval_model = model if model._model is not None else None
-        return self.local_retrieval_model
-
     def _vector_size(self) -> int:
         return self._load_model().get_sentence_embedding_dimension()
 
@@ -267,8 +255,8 @@ class Pipeline:
                 self.hybrid_store.load_snapshot()
             if not self.hybrid_store.is_ready():
                 self._hydrate_hybrid_store()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Hybrid store hydration failed — search degraded: %s", str(exc)[:300])
 
     def reset_rag_state(self) -> dict[str, Any]:
         with self._write_lock:
@@ -674,14 +662,15 @@ class Pipeline:
         enriched_chunks = self._enrich_chunks(chunks, base_metadata)
         self._store_chunks(enriched_chunks)
 
-        self.ingestion_log.append(
-            {
-                "file_name": file_path.name,
-                "source_path": str(file_path),
-                "chunks_created": len(enriched_chunks),
-                "metadata": base_metadata,
-            }
-        )
+        with self._write_lock:
+            self.ingestion_log.append(
+                {
+                    "file_name": file_path.name,
+                    "source_path": str(file_path),
+                    "chunks_created": len(enriched_chunks),
+                    "metadata": base_metadata,
+                }
+            )
 
         return {
             "file_name": file_path.name,
@@ -1229,7 +1218,8 @@ async def ingest_pdf(
     async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
         chunks.append(chunk)
     content = b"".join(chunks)
-    return await asyncio.to_thread(pipeline.ingest_pdf, file.filename or "upload.pdf", content, metadata_model, source)
+    safe_name = validate_pdf_upload(file.filename, content)
+    return await asyncio.to_thread(pipeline.ingest_pdf, safe_name, content, metadata_model, source)
 
 
 @app.post("/ingest/textbook", response_model=IngestResponse)
@@ -1246,7 +1236,8 @@ async def ingest_textbook(
     async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
         chunks.append(chunk)
     content = b"".join(chunks)
-    return await asyncio.to_thread(pipeline.ingest_pdf, file.filename or "upload.pdf", content, metadata_model, source)
+    safe_name = validate_pdf_upload(file.filename, content)
+    return await asyncio.to_thread(pipeline.ingest_pdf, safe_name, content, metadata_model, source)
 
 try:
     from pydantic import BaseModel

@@ -7,7 +7,9 @@ try:
 except ImportError:
     Template = None
 
-_REPORTS_ROOT = Path("/shared/work/reports")
+# Resolved from WORK_DIR (exported by run_backend.sh / compose) so bare
+# Pipeline() works outside Docker; falls back to the legacy /shared path.
+_REPORTS_ROOT = Path(os.environ.get("WORK_DIR", "/shared/work")) / "reports"
 
 
 def _load_json(path):

@@ -10,6 +10,7 @@ from shared.security import (
     verify_internal_api_key,
     sanitize_safe_filename,
     sanitize_llm_prompt,
+    validate_pdf_upload,
 )
 
 
@@ -70,6 +71,24 @@ def test_storage_path_fallback_resolution(monkeypatch, tmp_path):
 def test_gateway_http_timeout_seconds_default():
     settings = Settings()
     assert settings.gateway_http_timeout_seconds == 120.0
+
+
+def test_allow_anonymous_dev_defaults_fail_closed(monkeypatch):
+    # Code default must be fail-closed; the suite conftest opts into dev
+    # mode via env, so clear it to inspect the baked-in default.
+    monkeypatch.delenv("ALLOW_ANONYMOUS_DEV", raising=False)
+    assert Settings().allow_anonymous_dev is False
+
+
+def test_validate_pdf_upload_sanitizes_and_checks_magic():
+    assert validate_pdf_upload("../../etc/passwd", b"%PDF-1.4 test") == "passwd"
+    assert validate_pdf_upload(None, b"  %PDF-1.4 test") == "upload.pdf"
+    with pytest.raises(HTTPException) as exc:
+        validate_pdf_upload("notes.pdf", b"not a pdf at all")
+    assert exc.value.status_code == 400
+    with pytest.raises(HTTPException) as exc:
+        validate_pdf_upload("notes.pdf", b"")
+    assert exc.value.status_code == 400
 
 
 @pytest.mark.anyio

@@ -169,6 +169,19 @@ async def read_file_chunks_safely(
             )
         yield chunk
 
+def validate_pdf_upload(filename: str | None, content: bytes) -> str:
+    """
+    Sanitize an uploaded filename and verify PDF magic bytes.
+    Returns the safe filename. Raises 400 on traversal residue or non-PDF content.
+    """
+    safe_name = sanitize_safe_filename(filename or "upload.pdf")
+    if not content.lstrip().startswith(b"%PDF"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not a PDF (missing %PDF header).",
+        )
+    return safe_name
+
 def sanitize_llm_prompt(user_text: str) -> str:
     """
     Sanitizes user prompt inputs to prevent ChatML / LLM system prompt injection attacks.
