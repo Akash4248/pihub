@@ -27,13 +27,15 @@ class PackValidator:
 
     def validate(self, manifest: dict[str, Any], artifacts: dict[str, Any], quality_scores: dict[str, float] | None = None) -> PackValidationResult:
         errors: list[str] = []
+        warnings: list[str] = []
         manifest_valid, manifest_errors = self.manifest_validator.validate(manifest)
         if not manifest_valid:
             errors.extend(manifest_errors)
 
-        retrieval_valid, retrieval_errors = self.retrieval_validator.validate(manifest, artifacts)
+        retrieval_valid, retrieval_errors, retrieval_warnings = self.retrieval_validator.validate(manifest, artifacts)
         if not retrieval_valid:
             errors.extend(retrieval_errors)
+        warnings.extend(retrieval_warnings)
 
         glossary_valid, glossary_errors = self.glossary_validator.validate(artifacts.get("glossary", []))
         if not glossary_valid:
@@ -52,4 +54,4 @@ class PackValidator:
             if not score_valid:
                 errors.extend(score_errors)
 
-        return PackValidationResult(valid=not errors, errors=errors)
+        return PackValidationResult(valid=not errors, errors=errors, warnings=warnings)

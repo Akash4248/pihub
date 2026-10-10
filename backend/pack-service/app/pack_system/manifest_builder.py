@@ -5,11 +5,12 @@ from typing import Any
 
 from .checksum_generator import ChecksumGenerator
 from .version_manager import VersionManager
+from shared.pack_version import RETRIEVAL_INDEX_VERSION
 from shared.text_normalization import normalize_curriculum_name, normalize_language_code
 
 
 class ManifestBuilder:
-    def __init__(self, retrieval_index_version: str = "v2") -> None:
+    def __init__(self, retrieval_index_version: str = RETRIEVAL_INDEX_VERSION) -> None:
         self.retrieval_index_version = retrieval_index_version
 
     def build(

@@ -8,12 +8,13 @@ from typing import Any
 
 from ..pack_system.manifest_builder import ManifestBuilder
 from ..pack_system.manifest_validator import ManifestValidator
+from shared.pack_version import RETRIEVAL_INDEX_VERSION
 from .pack_locator import PackLocator
 from .pack_registry import PackRegistry
 
 
 class PackRepository:
-    def __init__(self, storage_root: Path, retrieval_index_version: str = "v2") -> None:
+    def __init__(self, storage_root: Path, retrieval_index_version: str = RETRIEVAL_INDEX_VERSION) -> None:
         self.storage_root = storage_root
         self.storage_root.mkdir(parents=True, exist_ok=True)
         self.locator = PackLocator(storage_root)

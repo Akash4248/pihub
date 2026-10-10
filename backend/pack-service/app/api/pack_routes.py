@@ -163,8 +163,9 @@ def benchmark_pack(pack_id: str, request: Request, version: str | None = Query(d
     record = _repository(request).get_pack(pack_id, version)
     if record is None:
         raise HTTPException(status_code=404, detail="Pack not found")
-    packs = _repository(request).list_packs()
-    return _benchmark_runner(request).run(packs).model_dump()
+    # Scope to the requested pack: benchmarking the whole library here made
+    # pack_id a mere existence check and hid per-pack regressions.
+    return _benchmark_runner(request).run([record]).model_dump()
 
 
 @router.get("/packs/{pack_id}/evaluation")
