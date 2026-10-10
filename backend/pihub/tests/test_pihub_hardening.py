@@ -75,6 +75,82 @@ def test_student_device_map_sqlite():
         assert mappings[0]["student_id"] == "student-abc"
 
 
+def test_create_pack_rejects_bad_metadata_json():
+    client = TestClient(app)
+    resp = client.post(
+        "/packs",
+        headers={"x-pihub-token": settings.admin_token},
+        files={"file": ("pack.zip", b"PK\x03\x04" + b"0" * 64, "application/zip")},
+        data={"pack_name": "p1", "metadata": "{not-json"},
+    )
+    assert resp.status_code == 400
+    assert "metadata" in resp.json()["detail"].lower()
+
+
+def test_create_pack_rejects_non_zip():
+    client = TestClient(app)
+    resp = client.post(
+        "/packs",
+        headers={"x-pihub-token": settings.admin_token},
+        files={"file": ("evil.exe", b"MZ" + b"0" * 64, "application/octet-stream")},
+        data={"pack_name": "p1", "metadata": "{}"},
+    )
+    assert resp.status_code == 400
+
+
+def test_atomic_write_json_roundtrip():
+    from shared.file_utils import atomic_write_json
+    import json
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        target = Path(tmp_dir) / "state.json"
+        atomic_write_json(target, {"a": 1})
+        assert json.loads(target.read_text()) == {"a": 1}
+        atomic_write_json(target, {"a": 2})
+        assert json.loads(target.read_text()) == {"a": 2}
+        leftovers = list(Path(tmp_dir).glob("*.part"))
+        assert leftovers == []
+
+
+def test_legacy_auth_token_column_migrated_to_hash():
+    import sqlite3
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "legacy.sqlite3"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "create table devices (device_id text primary key, device_name text not null,"
+            " role text not null, classroom text, auth_token text, status text not null,"
+            " metadata text not null, created_at integer not null, updated_at integer not null,"
+            " last_seen integer)"
+        )
+        conn.execute(
+            "insert into devices values ('d1', 'Tablet', 'student', 'R1', 'plain-secret',"
+            " 'online', '{}', 1, 1, 1)"
+        )
+        conn.commit()
+        conn.close()
+
+        migrated = PiHubStore(str(db_path))
+        cols = [
+            r[1]
+            for r in __import__("sqlite3").connect(str(db_path)).execute("pragma table_info(devices)").fetchall()
+        ]
+        assert "auth_token" not in cols
+        assert "auth_token_hash" in cols
+        assert migrated.verify_device_token("d1", "plain-secret") is True
+        assert migrated.verify_device_token("d1", "wrong") is False
+        device = migrated.get_device("d1")
+        assert "auth_token" not in device
+
+
+def test_host_url_defaults_to_hotspot_gateway(monkeypatch):
+    monkeypatch.delenv("HOST_URL", raising=False)
+    from shared.config import Settings
+
+    assert Settings().host_url == "http://192.168.42.1:8000"
+
+
 def test_device_status_strips_auth_token():
     client = TestClient(app)
 

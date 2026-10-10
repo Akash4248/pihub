@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from shared.file_utils import atomic_write_json, atomic_write_text
+
 
 class Hostapd:
     """hostapd configuration and management"""
@@ -70,7 +72,7 @@ ieee80211d=1
 
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            self.config_file.write_text(config)
+            atomic_write_text(self.config_file, config)
             return {
                 "status": "ok",
                 "interface": self.interface,
@@ -132,7 +134,7 @@ log-facility=/var/log/dnsmasq.log
 
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            self.config_file.write_text(config)
+            atomic_write_text(self.config_file, config)
             return {
                 "status": "ok",
                 "interface": self.interface,
@@ -185,13 +187,13 @@ class HotspotNetworking:
                 pass
 
     def _save_state(self) -> None:
-        """Persist hotspot state"""
+        """Persist hotspot state (crash-safe: tmp + fsync + rename)"""
         data = {
             "hotspot_enabled": self.hotspot_enabled,
             "last_updated": int(time.time()),
             "interface": self.interface,
         }
-        self.state_file.write_text(json.dumps(data, indent=2))
+        atomic_write_json(self.state_file, data)
 
     def setup_hotspot(
         self,

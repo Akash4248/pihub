@@ -1,11 +1,14 @@
 import hashlib
 import hmac
 import json
+import logging
 import sqlite3
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 def _hash_token(token: str) -> str:
@@ -52,6 +55,12 @@ class PiHubStore:
                 rows = connection.execute("select device_id, auth_token from devices where auth_token is not null and (auth_token_hash is null or auth_token_hash = '')").fetchall()
                 for r in rows:
                     connection.execute("update devices set auth_token_hash = ? where device_id = ?", (_hash_token(r["auth_token"]), r["device_id"]))
+                # All secrets are hashes now: drop the legacy plaintext column
+                # so no future code path can read or leak raw tokens.
+                try:
+                    connection.execute("alter table devices drop column auth_token")
+                except Exception as exc:
+                    logger.warning("Could not drop legacy devices.auth_token column: %s", exc)
 
             connection.executescript(
                 """
@@ -371,10 +380,6 @@ class PiHubStore:
             return False
         stored_hash = device.get("auth_token_hash")
         if not stored_hash:
-            # Fallback for legacy rows if auth_token still stored in plaintext
-            legacy_token = device.get("auth_token")
-            if legacy_token:
-                return hmac.compare_digest(auth_token, legacy_token)
             return False
         incoming_hash = _hash_token(auth_token)
         return hmac.compare_digest(incoming_hash, stored_hash)
@@ -398,6 +403,9 @@ class PiHubStore:
         return self._row_to_device(row) if row else None
 
     def _row_to_device(self, row: sqlite3.Row) -> dict[str, Any]:
+        # NOTE: the legacy auth_token column (if present on old databases)
+        # holds hashes only after migration; API list/status routes strip it
+        # before responding, while registration returns it exactly once.
         return {
             **dict(row),
             "metadata": json.loads(row["metadata"] or "{}"),

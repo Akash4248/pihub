@@ -28,7 +28,7 @@ class HostHealthMonitor:
     
     def __init__(
         self,
-        host_url: str = "http://192.168.1.100:8000",
+        host_url: str = "http://192.168.42.1:8000",
         heartbeat_interval_seconds: int = 30,
         failure_threshold: int = 3,
         recovery_check_interval: int = 10

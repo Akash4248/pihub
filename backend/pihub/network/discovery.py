@@ -21,6 +21,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from shared.file_utils import atomic_write_json
+
 
 @dataclass
 class NetworkInterface:
@@ -74,9 +76,9 @@ class NetworkDiscovery:
             self._session = ClassroomSession(**data)
 
     def _save_session(self) -> None:
-        """Persist classroom session"""
+        """Persist classroom session (crash-safe: tmp + fsync + rename)"""
         if self._session:
-            self.session_file.write_text(json.dumps(asdict(self._session), indent=2))
+            atomic_write_json(self.session_file, asdict(self._session))
 
     def get_local_interfaces(self) -> list[NetworkInterface]:
         """Discover local network interfaces"""

@@ -95,7 +95,9 @@ class Settings(BaseSettings):
     
     # Sync Engine Settings
     sync_interval_minutes: int = Field(default=60, alias="SYNC_INTERVAL_MINUTES")
-    host_url: str = Field(default="http://192.168.1.100", alias="HOST_URL")
+    # Classroom hotspot gateway (see pihub/deployment/hotspot.py subnet
+    # 192.168.42.0/24). Override with HOST_URL for laptop/docker setups.
+    host_url: str = Field(default="http://192.168.42.1:8000", alias="HOST_URL")
     
     # Failover Settings
     heartbeat_interval_seconds: int = Field(default=30, alias="HEARTBEAT_INTERVAL_SECONDS")

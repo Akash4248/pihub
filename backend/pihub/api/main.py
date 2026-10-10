@@ -6,6 +6,7 @@ import logging
 import os
 import uuid
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,8 @@ from devices.manager import DeviceManager
 from distribution.pack_manager import PackDistributionManager
 from monitoring.health import HealthMonitor
 from network.discovery import ClassroomIntranet, NetworkDiscovery
-from sync.manager import build_sync_manifest, checksum_bytes, validate_pack_file
+from shared.security import read_file_chunks_safely
+from sync.manager import build_sync_manifest
 from sync.sync_engine import SyncEngine
 from deployment.hotspot import HotspotNetworking
 from deployment.startup import DeploymentAutomation
@@ -65,7 +67,9 @@ class Settings:
 import hmac
 
 settings = Settings()
-ALLOW_ANONYMOUS_DEV = os.getenv("ALLOW_ANONYMOUS_DEV", "true").lower() == "true"
+# Fail-closed by default (run_backend.sh exports ALLOW_ANONYMOUS_DEV=true
+# for local dev, matching shared.config).
+ALLOW_ANONYMOUS_DEV = os.getenv("ALLOW_ANONYMOUS_DEV", "false").lower() == "true"
 if not ALLOW_ANONYMOUS_DEV:
     if settings.admin_token in ("change-me", "") or settings.device_token_secret in ("change-me-too", ""):
         raise ValueError("Production deployment requires non-default PIHUB_ADMIN_TOKEN and PIHUB_DEVICE_TOKEN_SECRET")
@@ -209,7 +213,9 @@ def register_device(payload: DeviceRegisterRequest) -> DeviceResponse:
     )
     device = store.get_device(device_id)
     classroom_intranet.announce_device(device_id, payload.device_name, device.get("metadata", {}).get("device_ip", "0.0.0.0"), 8000)
-    return DeviceResponse(**device)
+    # The plaintext token is shown exactly once here from the fresh secret —
+    # never read back from storage (only hashes live in the DB).
+    return DeviceResponse(**{**device, "auth_token": token})
 
 
 @app.post("/devices/{device_id}/heartbeat")
@@ -250,6 +256,11 @@ def list_packs() -> dict[str, Any]:
     return {"packs": store.list_packs(), "cached": pack_manager.list_cached_packs()}
 
 
+# Packs are legitimately large: cap streaming at 1 GiB (enforced DURING the
+# upload so a bigger body can never sit in RAM), not after a full read.
+PACK_MAX_BYTES = 1024 * 1024 * 1024
+
+
 @app.post("/packs")
 async def create_pack(
     file: UploadFile = File(...),
@@ -261,14 +272,42 @@ async def create_pack(
     metadata: str = Form(default="{}"),
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
-    data = await file.read()
-    validate_pack_file(file.filename or pack_name, data)
+    try:
+        metadata_dict = json.loads(metadata)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {exc}") from exc
     safe_filename = Path(file.filename or f"{pack_name or 'pack'}.zip").name
+    if not safe_filename.lower().endswith((".zip", ".pack")):
+        raise HTTPException(status_code=400, detail="Packs must be packaged as .zip or .pack files")
     target_path = (settings.packs_dir / safe_filename).resolve()
     packs_dir_res = settings.packs_dir.resolve()
     if not target_path.is_relative_to(packs_dir_res):
         raise HTTPException(status_code=400, detail="Invalid filename: path traversal attempt")
-    target_path.write_bytes(data)
+    # Stream straight to a temp sibling (never full body in RAM), then validate.
+    tmp_path = target_path.with_name(target_path.name + ".part")
+    digest = hashlib.sha256()
+    size_bytes = 0
+    try:
+        with open(tmp_path, "wb") as sink:
+            async for chunk in read_file_chunks_safely(file, max_bytes=PACK_MAX_BYTES):
+                sink.write(chunk)
+                digest.update(chunk)
+                size_bytes += len(chunk)
+            sink.flush()
+            os.fsync(sink.fileno())
+    except HTTPException:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    if safe_filename.lower().endswith(".zip") and not zipfile.is_zipfile(tmp_path):
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise HTTPException(status_code=400, detail="Invalid zip pack file")
+    os.replace(tmp_path, target_path)
     pack_record = store.add_pack(
         {
             "pack_name": pack_name or safe_filename,
@@ -277,9 +316,9 @@ async def create_pack(
             "grade": grade,
             "chapter": chapter,
             "file_path": str(target_path),
-            "checksum": checksum_bytes(data),
-            "size_bytes": len(data),
-            "metadata": json.loads(metadata),
+            "checksum": digest.hexdigest(),
+            "size_bytes": size_bytes,
+            "metadata": metadata_dict,
         }
     )
     pack_manager.cache_pack(
@@ -288,7 +327,7 @@ async def create_pack(
         pack_record["version"],
         str(target_path),
         pack_record["checksum"],
-        len(data),
+        size_bytes,
         subject,
         grade,
         chapter,
