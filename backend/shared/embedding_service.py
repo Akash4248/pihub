@@ -47,8 +47,100 @@ class HashFallbackEmbeddingModel:
         return self.dimension
 
 
+class LlamaServerEmbeddingModel:
+    """BGE-M3 (or compatible) embeddings via llama.cpp `/v1/embeddings`.
+
+    No torch/transformers required — works anywhere llama-server runs
+    (laptop, server, Pi). Same `encode` interface as SentenceTransformer.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        model: str = "bge-m3",
+        timeout_seconds: float = 60.0,
+        batch_size: int = 32,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout_seconds = timeout_seconds
+        self.batch_size = batch_size
+        self._client: Any = None
+        self._dimension: Optional[int] = None
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            import httpx
+
+            self._client = httpx.Client(base_url=self.base_url, timeout=self.timeout_seconds)
+        return self._client
+
+    def _embed_batch(self, texts: List[str]) -> List[List[float]]:
+        payload: dict[str, Any] = {"input": texts}
+        if self.model:
+            payload["model"] = self.model
+        try:
+            response = self._get_client().post("/v1/embeddings", json=payload)
+        except Exception as exc:
+            raise RuntimeError(f"llama-server embeddings unreachable at {self.base_url}: {exc}") from exc
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"llama-server embeddings failed ({response.status_code}): {response.text[:300]}"
+            )
+        try:
+            items = sorted(response.json()["data"], key=lambda d: d["index"])
+            vectors = [list(map(float, item["embedding"])) for item in items]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(f"Malformed embeddings response from {self.base_url}: {exc}") from exc
+        if not vectors or any(len(v) != len(vectors[0]) for v in vectors):
+            raise RuntimeError(f"Inconsistent embedding dims from {self.base_url}")
+        if self._dimension is None:
+            self._dimension = len(vectors[0])
+        elif len(vectors[0]) != self._dimension:
+            raise RuntimeError(
+                f"Embedding dim changed mid-run ({self._dimension} -> {len(vectors[0])})"
+            )
+        return vectors
+
+    def encode(
+        self,
+        sentences: Any,
+        batch_size: int = 32,
+        show_progress_bar: bool = False,
+        normalize_embeddings: bool = False,
+    ) -> List[List[float]]:
+        if isinstance(sentences, str):
+            input_list = [sentences]
+        else:
+            input_list = [str(t or "") for t in sentences]
+        step = max(1, batch_size or self.batch_size)
+        vectors: List[List[float]] = []
+        for start in range(0, len(input_list), step):
+            vectors.extend(self._embed_batch(input_list[start:start + step]))
+        if normalize_embeddings:
+            normalized: List[List[float]] = []
+            for v in vectors:
+                norm = sum(x * x for x in v) ** 0.5
+                normalized.append([x / norm for x in v] if norm > 0 else v)
+            return normalized
+        return vectors
+
+    def get_sentence_embedding_dimension(self) -> int:
+        if self._dimension is None:
+            self.encode(["dimension probe"])
+        assert self._dimension is not None
+        return self._dimension
+
+    def get_embedding_dimension(self) -> int:
+        return self.get_sentence_embedding_dimension()
+
+
 class EmbeddingModelManager:
-    """Thread-safe lazy singleton for BGE-M3 sentence transformers.
+    """Thread-safe lazy singleton for embeddings.
+
+    Backend selection via EMBEDDING_BACKEND ("auto"|"llama_server"|"sentence_transformers"):
+    - auto: llama-server first, sentence-transformers second (zero-downtime cutover).
+    - Either explicit value pins that backend (failure raises, or hashes iff EMBEDDING_FALLBACK=hash).
 
     Features:
     - Double-checked locking via threading.Lock() to load weights exactly once.
@@ -92,6 +184,30 @@ class EmbeddingModelManager:
 
     def _load_model(self) -> None:
         settings = get_settings()
+        backend = getattr(settings, "embedding_backend", "auto").lower()
+        if backend == "llama_server":
+            self._load_llama_server(settings)
+        elif backend == "sentence_transformers":
+            self._load_sentence_transformers(settings)
+        else:
+            try:
+                self._load_llama_server(settings)
+            except Exception as exc:
+                logger.warning("llama-server embeddings unavailable (%s); trying sentence-transformers", exc)
+                self._load_sentence_transformers(settings)
+
+    def _load_llama_server(self, settings: Any) -> None:
+        base_url = getattr(settings, "llama_server_url", "http://127.0.0.1:8081")
+        model_name = getattr(settings, "embedding_llama_model", "bge-m3")
+        logger.info("Using llama-server embeddings at %s (model=%s)...", base_url, model_name)
+        model = LlamaServerEmbeddingModel(base_url=base_url, model=model_name)
+        self._dimension = model.get_sentence_embedding_dimension()
+        self._model = model
+        self._model_name = f"llama-server:{model_name}"
+        self._is_degraded = False
+        logger.info("llama-server embeddings ready (dim=%d)", self._dimension)
+
+    def _load_sentence_transformers(self, settings: Any) -> None:
         model_name = settings.embedding_model_name
         cache_dir = settings.embedding_cache_dir
 

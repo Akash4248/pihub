@@ -80,6 +80,115 @@ def test_allow_anonymous_dev_defaults_fail_closed(monkeypatch):
     assert Settings().allow_anonymous_dev is False
 
 
+def _fake_llama_client(vectors, status=200):
+    class FakeResponse:
+        status_code = status
+        text = "ok" if status == 200 else "boom"
+
+        def json(self):
+            return {"data": [{"index": i, "embedding": v} for i, v in enumerate(vectors)]}
+
+    class FakeClient:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, path, json=None):
+            self.calls.append((path, json))
+            return FakeResponse()
+
+    return FakeClient()
+
+
+def test_llama_server_embeddings_encode_and_normalize():
+    from shared.embedding_service import LlamaServerEmbeddingModel
+
+    model = LlamaServerEmbeddingModel(base_url="http://x:8081", model="bge-m3")
+    model._client = _fake_llama_client([[3.0, 4.0], [1.0, 0.0]])
+    out = model.encode(["a", "b"], normalize_embeddings=True)
+    assert len(out) == 2 and len(out[0]) == 2
+    assert abs(sum(x * x for x in out[0]) - 1.0) < 1e-6
+    assert out[1] == [1.0, 0.0]
+    assert model.get_sentence_embedding_dimension() == 2
+
+
+def test_llama_server_embeddings_batch_and_dim_guard():
+    from shared.embedding_service import LlamaServerEmbeddingModel
+
+    model = LlamaServerEmbeddingModel(base_url="http://x:8081", batch_size=1)
+    model._client = _fake_llama_client([[9.0, 9.0]])
+    out = model.encode(["a", "b", "c"], batch_size=1)
+    assert out == [[9.0, 9.0]] * 3  # 3 texts, 1 per batch
+    assert len(model._client.calls) == 3
+
+    bad = LlamaServerEmbeddingModel(base_url="http://x:8081")
+    bad._client = _fake_llama_client([[1.0]])
+    bad._dimension = 2  # server suddenly returns a different width
+    with pytest.raises(RuntimeError):
+        bad.encode(["a", "b"])
+
+
+def test_llama_server_embeddings_http_error_raises():
+    from shared.embedding_service import LlamaServerEmbeddingModel
+
+    model = LlamaServerEmbeddingModel(base_url="http://x:8081")
+    model._client = _fake_llama_client([], status=503)
+    with pytest.raises(RuntimeError):
+        model.encode(["a"])
+
+
+def test_embedding_manager_selects_llama_backend(monkeypatch):
+    from shared.config import Settings
+    from shared import embedding_service
+    from shared.embedding_service import EmbeddingModelManager, LlamaServerEmbeddingModel
+
+    created = {}
+
+    class FakeLlama:
+        def __init__(self, base_url, model):
+            created.update(base_url=base_url, model=model)
+
+        def get_sentence_embedding_dimension(self):
+            return 1024
+
+    monkeypatch.setattr(
+        embedding_service,
+        "get_settings",
+        lambda: Settings(
+            EMBEDDING_BACKEND="llama_server",
+            LLAMA_SERVER_URL="http://y:8081",
+            EMBEDDING_LLAMA_MODEL="bge-m3",
+        ),
+    )
+    monkeypatch.setattr(embedding_service, "LlamaServerEmbeddingModel", FakeLlama)
+    manager = EmbeddingModelManager()
+    manager._load_model()
+    assert created == {"base_url": "http://y:8081", "model": "bge-m3"}
+    assert manager._dimension == 1024
+    assert isinstance(manager._model, FakeLlama)
+
+
+def test_embedding_manager_auto_falls_back_then_raises(monkeypatch):
+    from shared.config import Settings
+    from shared import embedding_service
+    from shared.embedding_service import EmbeddingModelManager
+
+    class BrokenLlama:
+        def __init__(self, base_url, model):
+            raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(
+        embedding_service, "get_settings", lambda: Settings(EMBEDDING_BACKEND="auto")
+    )
+    monkeypatch.setattr(embedding_service, "LlamaServerEmbeddingModel", BrokenLlama)
+    manager = EmbeddingModelManager()
+    # sentence-transformers/torch are absent here, so both backends fail loud
+    # (EMBEDDING_FALLBACK defaults to none) instead of silently hashing.
+    manager._load_model()
+    assert manager._model is None
+    with pytest.raises(RuntimeError):
+        manager.get_model()
+
+
 def test_validate_pdf_upload_sanitizes_and_checks_magic():
     assert validate_pdf_upload("../../etc/passwd", b"%PDF-1.4 test") == "passwd"
     assert validate_pdf_upload(None, b"  %PDF-1.4 test") == "upload.pdf"
