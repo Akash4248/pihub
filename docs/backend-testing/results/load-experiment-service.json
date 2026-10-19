@@ -1,0 +1,25 @@
+{
+  "requests": 5691,
+  "success": 5691,
+  "errors": 0,
+  "error_rate": 0.0,
+  "rps": 568.38,
+  "concurrency": 10,
+  "elapsed_s": 10.013,
+  "latency_ms": {
+    "min": 12.11,
+    "mean": 17.49,
+    "p50": 16.99,
+    "p90": 20.24,
+    "p95": 21.95,
+    "p99": 27.28,
+    "max": 59.32
+  },
+  "status_counts": {
+    "200": 5691
+  },
+  "service": "experiment-service",
+  "base": "http://localhost:8040",
+  "path": "/health",
+  "kind": "load"
+}

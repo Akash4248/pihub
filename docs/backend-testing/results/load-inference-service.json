@@ -1,0 +1,25 @@
+{
+  "requests": 12914,
+  "success": 12914,
+  "errors": 0,
+  "error_rate": 0.0,
+  "rps": 1290.73,
+  "concurrency": 10,
+  "elapsed_s": 10.005,
+  "latency_ms": {
+    "min": 5.37,
+    "mean": 7.64,
+    "p50": 7.46,
+    "p90": 8.43,
+    "p95": 8.91,
+    "p99": 10.45,
+    "max": 39.82
+  },
+  "status_counts": {
+    "200": 12914
+  },
+  "service": "inference-service",
+  "base": "http://localhost:8010",
+  "path": "/ai/health",
+  "kind": "load"
+}

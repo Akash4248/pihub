@@ -1,0 +1,25 @@
+{
+  "requests": 8146,
+  "success": 8146,
+  "errors": 0,
+  "error_rate": 0.0,
+  "rps": 814.11,
+  "concurrency": 10,
+  "elapsed_s": 10.006,
+  "latency_ms": {
+    "min": 4.01,
+    "mean": 12.15,
+    "p50": 11.78,
+    "p90": 15.03,
+    "p95": 16.28,
+    "p99": 19.76,
+    "max": 59.46
+  },
+  "status_counts": {
+    "200": 8146
+  },
+  "service": "pihub",
+  "base": "http://localhost:8020",
+  "path": "/health",
+  "kind": "load"
+}

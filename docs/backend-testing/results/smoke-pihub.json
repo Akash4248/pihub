@@ -1,0 +1,104 @@
+{
+  "service": "pihub",
+  "base": "http://localhost:8020",
+  "checks": {
+    "health": {
+      "status": 200,
+      "latency_ms": 5.0,
+      "body": {
+        "status": "idle",
+        "service": "pihub",
+        "checks": {
+          "status": "idle",
+          "uptime_hours": 0.02277777777777778,
+          "devices": {
+            "total": 0,
+            "online": 0,
+            "offline": 0
+          },
+          "sync": {
+            "pending": 0,
+            "in_progress": 0,
+            "completed": 0
+          },
+          "cache": {
+            "total_packs": 0,
+            "total_size_mb": 0.0
+          },
+          "backend": {
+            "available": true,
+            "offline_mode": false,
+            "pending_pushes": 0
+          }
+        }
+      }
+    }
+  },
+  "openapi": {
+    "reachable": true,
+    "route_count": 67,
+    "routes": [
+      "/",
+      "/backend/health",
+      "/backend/status",
+      "/backend/sync",
+      "/backend/sync-now",
+      "/broadcast/pack/{pack_id}",
+      "/cache/health",
+      "/cache/stats",
+      "/classroom",
+      "/dashboard",
+      "/deployment/backend/connectivity",
+      "/deployment/backend/deferred-status",
+      "/deployment/backend/resumable-syncs",
+      "/deployment/cache/cleanup",
+      "/deployment/cache/storage",
+      "/deployment/cache/validation",
+      "/deployment/hotspot/devices",
+      "/deployment/hotspot/health",
+      "/deployment/hotspot/recover",
+      "/deployment/hotspot/setup",
+      "/deployment/load/record-snapshot",
+      "/deployment/load/statistics",
+      "/deployment/load/status",
+      "/deployment/metrics/classroom",
+      "/deployment/metrics/classroom-summary",
+      "/deployment/metrics/network",
+      "/deployment/metrics/sync",
+      "/deployment/packs/broadcast",
+      "/deployment/packs/validate/{pack_id}",
+      "/deployment/packs/versions/{pack_id}",
+      "/deployment/startup/containers",
+      "/deployment/startup/containers/{container_name}/restart",
+      "/deployment/startup/validate",
+      "/deployment/status",
+      "/deployment/sync/diagnostics",
+      "/deployment/sync/health",
+      "/deployment/sync/interrupted",
+      "/deployment/sync/queue/size",
+      "/deployment/validation/deployment",
+      "/deployment/validation/hotspot",
+      "/deployment/validation/scenarios",
+      "/devices",
+      "/devices/{device_id}/heartbeat",
+      "/devices/{device_id}/reconnect",
+      "/devices/{device_id}/status",
+      "/devices/{device_id}/trust",
+      "/health",
+      "/health/diagnostics",
+      "/health/resources",
+      "/network/devices",
+      "/network/session",
+      "/network/status",
+      "/packs",
+      "/packs/{pack_id}",
+      "/packs/{pack_id}/distribution",
+      "/packs/{pack_id}/download",
+      "/progress",
+      "/progress/{student_id}",
+      "/quiz-sessions",
+      "/quiz-sessions/student/{student_id}"
+    ]
+  },
+  "ok": true
+}

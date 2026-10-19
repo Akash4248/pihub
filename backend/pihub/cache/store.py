@@ -3,6 +3,7 @@ import hmac
 import json
 import logging
 import sqlite3
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -19,15 +20,32 @@ class PiHubStore:
     def __init__(self, db_path: str) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._local = threading.local()
+        self._enable_wal()
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _enable_wal(self) -> None:
+        # Switch the database to WAL once, at startup. Re-issuing
+        # `PRAGMA journal_mode = WAL` on every request raced under concurrency
+        # and caused sporadic `SQLITE_CANTOPEN: unable to open database file`.
         connection = sqlite3.connect(self.db_path, timeout=10.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode = WAL;")
-        connection.execute("PRAGMA busy_timeout = 10000;")
-        connection.execute("PRAGMA synchronous = NORMAL;")
-        connection.execute("PRAGMA foreign_keys = ON;")
+        try:
+            connection.execute("PRAGMA journal_mode = WAL;")
+        finally:
+            connection.close()
+
+    def _connect(self) -> sqlite3.Connection:
+        # One reusable connection per worker thread. FastAPI runs sync endpoints
+        # in a thread pool, so this avoids opening a fresh SQLite handle (and
+        # re-running WAL setup) on every single request.
+        connection = getattr(self._local, "connection", None)
+        if connection is None:
+            connection = sqlite3.connect(self.db_path, timeout=10.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout = 10000;")
+            connection.execute("PRAGMA synchronous = NORMAL;")
+            connection.execute("PRAGMA foreign_keys = ON;")
+            self._local.connection = connection
         return connection
 
     def _init_db(self) -> None:

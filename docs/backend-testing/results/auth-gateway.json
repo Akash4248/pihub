@@ -1,0 +1,20 @@
+{
+  "service": "gateway",
+  "base": "http://localhost:8000",
+  "protected_endpoint": "/packs",
+  "checks": {
+    "without_credentials": {
+      "status": 401,
+      "rejected": true
+    },
+    "with_internal_key": {
+      "status": 200,
+      "accepted": true
+    },
+    "with_wrong_key": {
+      "status": 401,
+      "rejected": true
+    }
+  },
+  "ok": true
+}

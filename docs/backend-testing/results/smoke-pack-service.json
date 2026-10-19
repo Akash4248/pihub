@@ -1,0 +1,54 @@
+{
+  "service": "pack-service",
+  "base": "http://localhost:8030",
+  "checks": {
+    "health": {
+      "status": 200,
+      "latency_ms": 3.94,
+      "body": {
+        "status": "ok",
+        "service": "pack-management",
+        "checks": {
+          "storage_ready": true,
+          "version": "2.0.0"
+        }
+      }
+    }
+  },
+  "openapi": {
+    "reachable": true,
+    "route_count": 29,
+    "routes": [
+      "/analytics/pack-coverage",
+      "/api/v1/pdf/book/{grade}/{subject}",
+      "/api/v1/pdf/catalog",
+      "/api/v1/pdf/chapter/{chapter_id}",
+      "/api/v1/pdf/chapter/{chapter_id}/metadata",
+      "/api/v1/pdf/file/{book_id}",
+      "/api/v1/pdf/resolve",
+      "/api/v1/pdf/scan",
+      "/debug/packs/{pack_id}",
+      "/debug/packs/{pack_id}/validation",
+      "/debug/reports/{pack_id}",
+      "/health",
+      "/packs",
+      "/packs/coverage",
+      "/packs/generate",
+      "/packs/import/generated",
+      "/packs/import/phet",
+      "/packs/list",
+      "/packs/multilingual/plan",
+      "/packs/search",
+      "/packs/{pack_id}",
+      "/packs/{pack_id}/benchmark",
+      "/packs/{pack_id}/download",
+      "/packs/{pack_id}/evaluation",
+      "/packs/{pack_id}/manifest",
+      "/packs/{pack_id}/preview",
+      "/packs/{pack_id}/validate",
+      "/sync/delta",
+      "/sync/manifest"
+    ]
+  },
+  "ok": true
+}

@@ -1,0 +1,42 @@
+{
+  "service": "inference-service",
+  "base": "http://localhost:8010",
+  "checks": {
+    "health": {
+      "status": 200,
+      "latency_ms": 4.02,
+      "body": {
+        "status": "degraded",
+        "service": "inference-service",
+        "checks": {
+          "model_path": "/models/model.gguf",
+          "server": {
+            "status": "missing_model"
+          }
+        }
+      }
+    }
+  },
+  "openapi": {
+    "reachable": true,
+    "route_count": 15,
+    "routes": [
+      "/ai/chat",
+      "/ai/content/applications",
+      "/ai/content/chapter-notes",
+      "/ai/content/flashcards",
+      "/ai/content/glossary",
+      "/ai/content/learning-objectives",
+      "/ai/content/misconceptions",
+      "/ai/content/quiz",
+      "/ai/content/summary",
+      "/ai/health",
+      "/ai/tutor",
+      "/ai/tutor/debug",
+      "/ai/tutor/evaluate",
+      "/metrics/retrieval",
+      "/metrics/tutor"
+    ]
+  },
+  "ok": true
+}

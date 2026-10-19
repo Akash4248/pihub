@@ -1,0 +1,25 @@
+{
+  "requests": 16379,
+  "success": 16379,
+  "errors": 0,
+  "error_rate": 0.0,
+  "rps": 1636.94,
+  "concurrency": 10,
+  "elapsed_s": 10.006,
+  "latency_ms": {
+    "min": 2.67,
+    "mean": 6.05,
+    "p50": 5.88,
+    "p90": 7.11,
+    "p95": 7.59,
+    "p99": 8.77,
+    "max": 70.57
+  },
+  "status_counts": {
+    "200": 16379
+  },
+  "service": "pack-service",
+  "base": "http://localhost:8030",
+  "path": "/health",
+  "kind": "load"
+}

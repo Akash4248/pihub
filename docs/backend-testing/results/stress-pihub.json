@@ -1,0 +1,115 @@
+{
+  "service": "pihub",
+  "base": "http://localhost:8020",
+  "path": "/health",
+  "kind": "stress",
+  "levels": [
+    {
+      "requests": 3569,
+      "success": 3569,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 713.73,
+      "concurrency": 1,
+      "elapsed_s": 5.0,
+      "latency_ms": {
+        "min": 0.99,
+        "mean": 1.36,
+        "p50": 1.32,
+        "p90": 1.59,
+        "p95": 1.71,
+        "p99": 2.0,
+        "max": 5.21
+      },
+      "status_counts": {
+        "200": 3569
+      }
+    },
+    {
+      "requests": 3867,
+      "success": 3867,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 773.09,
+      "concurrency": 5,
+      "elapsed_s": 5.002,
+      "latency_ms": {
+        "min": 1.97,
+        "mean": 6.39,
+        "p50": 6.2,
+        "p90": 8.14,
+        "p95": 8.72,
+        "p99": 10.16,
+        "max": 35.32
+      },
+      "status_counts": {
+        "200": 3867
+      }
+    },
+    {
+      "requests": 3780,
+      "success": 3780,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 755.03,
+      "concurrency": 10,
+      "elapsed_s": 5.006,
+      "latency_ms": {
+        "min": 4.55,
+        "mean": 13.09,
+        "p50": 12.77,
+        "p90": 16.31,
+        "p95": 17.53,
+        "p99": 21.21,
+        "max": 50.53
+      },
+      "status_counts": {
+        "200": 3780
+      }
+    },
+    {
+      "requests": 3768,
+      "success": 3768,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 749.54,
+      "concurrency": 25,
+      "elapsed_s": 5.027,
+      "latency_ms": {
+        "min": 12.73,
+        "mean": 33.12,
+        "p50": 32.6,
+        "p90": 37.66,
+        "p95": 39.56,
+        "p99": 52.97,
+        "max": 70.13
+      },
+      "status_counts": {
+        "200": 3768
+      }
+    },
+    {
+      "requests": 3794,
+      "success": 3794,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 751.64,
+      "concurrency": 50,
+      "elapsed_s": 5.048,
+      "latency_ms": {
+        "min": 12.72,
+        "mean": 66.01,
+        "p50": 65.17,
+        "p90": 71.97,
+        "p95": 78.6,
+        "p99": 99.94,
+        "max": 107.23
+      },
+      "status_counts": {
+        "200": 3794
+      }
+    }
+  ],
+  "breaking_point_concurrency": null,
+  "p95_limit_ms": 2000.0
+}

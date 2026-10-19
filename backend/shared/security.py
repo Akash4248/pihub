@@ -226,7 +226,16 @@ class InternalAuthMiddleware:
         self.extra_check = extra_check
 
     def _is_public(self, path: str) -> bool:
-        return any(path == p or path.startswith(p) for p in self.public_prefixes)
+        for prefix in self.public_prefixes:
+            # "/" must be an EXACT match. Using startswith("/") would mark every
+            # path public and silently disable authentication for the service.
+            if prefix == "/":
+                if path == "/":
+                    return True
+                continue
+            if path == prefix or path.startswith(prefix):
+                return True
+        return False
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":

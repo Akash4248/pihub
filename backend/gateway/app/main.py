@@ -994,8 +994,11 @@ async def tutor_capabilities() -> dict[str, bool]:
 
 async def _safe_http_get_json(url: str, timeout: float = 3.0) -> tuple[bool, Any]:
 
+    # Downstream services enforce fail-closed auth; the health fan-out must
+    # authenticate with the internal service key (Qdrant simply ignores it).
+    headers = {"X-Internal-Service-Key": get_internal_service_key()}
     try:
-        resp = await app.state.http.get(url, timeout=timeout)
+        resp = await app.state.http.get(url, timeout=timeout, headers=headers)
         if resp.is_error:
             try:
                 return False, resp.json()

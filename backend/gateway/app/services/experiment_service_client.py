@@ -9,6 +9,8 @@ from typing import Any
 import httpx
 from fastapi import HTTPException
 
+from shared.security import get_internal_service_key
+
 
 logger = logging.getLogger("gateway.experiment_service")
 
@@ -71,9 +73,19 @@ class ExperimentServiceClient:
         self.timeout_seconds = timeout_seconds
         self.retries = retries
 
+    @staticmethod
+    def _auth_headers() -> dict[str, str]:
+        # experiment-service enforces fail-closed auth; gateway hops must
+        # authenticate with the shared internal service key.
+        return {"X-Internal-Service-Key": get_internal_service_key()}
+
     async def health(self) -> dict[str, Any]:
         try:
-            response = await self.http.get(f"{self.base_url}/experiments", timeout=self.timeout_seconds)
+            response = await self.http.get(
+                f"{self.base_url}/experiments",
+                timeout=self.timeout_seconds,
+                headers=self._auth_headers(),
+            )
             healthy = response.is_success
             logger.info("[EXPERIMENT_GATEWAY] SERVICE_HEALTH healthy=%s status=%s", healthy, response.status_code)
             return {"healthy": healthy, "status_code": response.status_code}
@@ -153,6 +165,7 @@ class ExperimentServiceClient:
                     params=params,
                     json=json,
                     timeout=self.timeout_seconds,
+                    headers=self._auth_headers(),
                 )
                 latency_ms = (time.perf_counter() - started) * 1000
                 self.metrics.record(path, method, response.status_code, latency_ms, analytics=analytics)

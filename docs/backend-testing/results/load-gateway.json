@@ -1,0 +1,25 @@
+{
+  "requests": 167,
+  "success": 167,
+  "errors": 0,
+  "error_rate": 0.0,
+  "rps": 16.19,
+  "concurrency": 10,
+  "elapsed_s": 10.317,
+  "latency_ms": {
+    "min": 369.67,
+    "mean": 610.69,
+    "p50": 587.66,
+    "p90": 663.05,
+    "p95": 734.43,
+    "p99": 1065.63,
+    "max": 1118.88
+  },
+  "status_counts": {
+    "200": 167
+  },
+  "service": "gateway",
+  "base": "http://localhost:8000",
+  "path": "/health",
+  "kind": "load"
+}

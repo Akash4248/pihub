@@ -401,7 +401,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="inference-service", lifespan=lifespan)
-app.add_middleware(InternalAuthMiddleware)
+app.add_middleware(
+    InternalAuthMiddleware,
+    # /ai/health is the container/orchestrator liveness probe and is read-only;
+    # the default public prefixes only cover /health, so it must be listed here.
+    public_prefixes=(
+        "/health", "/healthz", "/ready", "/readyz", "/livez", "/ping",
+        "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
+        "/ai/health",
+    ),
+)
 
 
 @app.middleware("http")

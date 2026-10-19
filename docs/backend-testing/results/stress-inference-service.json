@@ -1,0 +1,115 @@
+{
+  "service": "inference-service",
+  "base": "http://localhost:8010",
+  "path": "/ai/health",
+  "kind": "stress",
+  "levels": [
+    {
+      "requests": 4913,
+      "success": 4913,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 982.42,
+      "concurrency": 1,
+      "elapsed_s": 5.001,
+      "latency_ms": {
+        "min": 0.69,
+        "mean": 0.98,
+        "p50": 0.94,
+        "p90": 1.16,
+        "p95": 1.26,
+        "p99": 1.54,
+        "max": 3.14
+      },
+      "status_counts": {
+        "200": 4913
+      }
+    },
+    {
+      "requests": 5766,
+      "success": 5766,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 1152.78,
+      "concurrency": 5,
+      "elapsed_s": 5.002,
+      "latency_ms": {
+        "min": 2.34,
+        "mean": 4.25,
+        "p50": 4.09,
+        "p90": 4.95,
+        "p95": 5.31,
+        "p99": 6.31,
+        "max": 33.73
+      },
+      "status_counts": {
+        "200": 5766
+      }
+    },
+    {
+      "requests": 6093,
+      "success": 6093,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 1217.29,
+      "concurrency": 10,
+      "elapsed_s": 5.005,
+      "latency_ms": {
+        "min": 2.46,
+        "mean": 8.1,
+        "p50": 7.87,
+        "p90": 8.98,
+        "p95": 9.51,
+        "p99": 11.48,
+        "max": 39.84
+      },
+      "status_counts": {
+        "200": 6093
+      }
+    },
+    {
+      "requests": 6083,
+      "success": 6083,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 1212.41,
+      "concurrency": 25,
+      "elapsed_s": 5.017,
+      "latency_ms": {
+        "min": 3.87,
+        "mean": 20.46,
+        "p50": 19.95,
+        "p90": 22.07,
+        "p95": 23.97,
+        "p99": 28.68,
+        "max": 50.69
+      },
+      "status_counts": {
+        "200": 6083
+      }
+    },
+    {
+      "requests": 6170,
+      "success": 6170,
+      "errors": 0,
+      "error_rate": 0.0,
+      "rps": 1224.01,
+      "concurrency": 50,
+      "elapsed_s": 5.041,
+      "latency_ms": {
+        "min": 4.26,
+        "mean": 40.51,
+        "p50": 39.94,
+        "p90": 44.5,
+        "p95": 46.71,
+        "p99": 54.49,
+        "max": 65.17
+      },
+      "status_counts": {
+        "200": 6170
+      }
+    }
+  ],
+  "breaking_point_concurrency": null,
+  "p95_limit_ms": 2000.0
+}
