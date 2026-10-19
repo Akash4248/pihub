@@ -22,6 +22,7 @@ backend/voice-service/models/
 .local_run/
 backend/.local_run/
 backend/.local_run_env
+backend/.cp_audit.key
 backend/_depcheck.py
 backend/content-pipeline/_dbgpath.py
 *.sqlite3-shm

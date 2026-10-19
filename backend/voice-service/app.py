@@ -19,6 +19,10 @@ from stt import get_stt_engine
 from streaming import VoiceStreamer
 from tts import get_tts_engine
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shared.security import InternalAuthMiddleware  # noqa: E402
+
 
 def create_app() -> FastAPI:
     @asynccontextmanager
@@ -65,6 +69,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(InternalAuthMiddleware)
 
     audio_root = Path(os.getenv("VOICE_AUDIO_ROOT", "/tmp/idp_voice_audio"))
     manifest_path = os.getenv("VOICE_AUDIO_MANIFEST", "")

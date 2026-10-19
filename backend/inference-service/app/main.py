@@ -28,7 +28,7 @@ from app.orchestration import TutorOrchestrator
 from app.sessions import SessionManager
 from app.tutor import RELEVANCE_INSTRUCTION, append_no_context_note
 from shared.config import get_settings as get_shared_settings
-from shared.security import LLM_INJECTION_TOKENS
+from shared.security import LLM_INJECTION_TOKENS, InternalAuthMiddleware
 from shared.text_normalization import language_display_name, normalize_language_code
 from shared.topic_normalization import normalize_subject, normalize_topic
 
@@ -401,6 +401,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="inference-service", lifespan=lifespan)
+app.add_middleware(InternalAuthMiddleware)
 
 
 @app.middleware("http")

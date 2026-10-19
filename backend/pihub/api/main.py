@@ -30,7 +30,7 @@ from devices.manager import DeviceManager
 from distribution.pack_manager import PackDistributionManager
 from monitoring.health import HealthMonitor
 from network.discovery import ClassroomIntranet, NetworkDiscovery
-from shared.security import read_file_chunks_safely
+from shared.security import read_file_chunks_safely, InternalAuthMiddleware
 from sync.manager import build_sync_manifest
 from sync.sync_engine import SyncEngine
 from deployment.hotspot import HotspotNetworking
@@ -114,6 +114,15 @@ transfer_stress_test = TransferStressTest()
 recovery_scenarios = RecoveryScenarios()
 
 app = FastAPI(title="pihub")
+# pihub uses its own admin/device token scheme; accept those in addition to the
+# shared internal key / JWT so edge-device flows keep working while anonymous
+# access is still rejected.
+app.add_middleware(
+    InternalAuthMiddleware,
+    extra_check=lambda h: (
+        bool(h.get("x-pihub-token")) and hmac.compare_digest(h["x-pihub-token"], settings.admin_token)
+    ) or bool(h.get("x-device-token")),
+)
 
 
 def _log_tag(path: str) -> str:

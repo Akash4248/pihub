@@ -10,20 +10,26 @@ from pathlib import Path
 from typing import Any
 
 import logging
+import os
+import time
+from collections import deque
+from datetime import datetime, timezone
 
 from dataclasses import dataclass
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from qdrant_client import QdrantClient
 
 from shared.config import get_settings
-from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely, validate_pdf_upload
+from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely, validate_pdf_upload, InternalAuthMiddleware, require_admin
 from shared.curriculum_graph import CurriculumGraph, create_sample_curriculum
 from shared.schemas import (
     ChunkPreview,
     DebugRetrievalRequest,
     DirectoryIngestRequest,
+    DirectoryIngestResponse,
+    DirectoryIngestStatus,
     EducationalResource,
     HealthResponse,
     IngestResponse,
@@ -37,6 +43,59 @@ from shared.text_normalization import normalize_curriculum_name, normalize_langu
 from shared.vector_store import build_filter, ensure_collection, make_qdrant_client, upsert_chunks
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+# In-process RAG observability. Records one entry per retrieval request so the
+# console log stream and /rag/metrics can report latency + accuracy proxies.
+rag_metrics: deque[dict[str, Any]] = deque(maxlen=500)
+_rag_metrics_lock = threading.Lock()
+
+
+def _record_rag_metric(metric: dict[str, Any]) -> None:
+    with _rag_metrics_lock:
+        rag_metrics.appendleft({"recorded_at": datetime.now(timezone.utc).isoformat(), **metric})
+
+
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    k = int(round((p / 100.0) * (len(ordered) - 1)))
+    return round(ordered[k], 2)
+
+
+def _rag_metrics_summary() -> dict[str, Any]:
+    with _rag_metrics_lock:
+        metrics = list(rag_metrics)
+    if not metrics:
+        return {"count": 0, "latency_ms": {}, "quality": {}, "recent": []}
+    lat = [float(m.get("total_ms", 0.0)) for m in metrics]
+    embed = [float(m.get("embed_ms", 0.0)) for m in metrics]
+    retrieve = [float(m.get("retrieve_ms", 0.0)) for m in metrics]
+    rerank = [float(m.get("rerank_ms", 0.0)) for m in metrics]
+    non_empty = [m for m in metrics if int(m.get("results_returned", 0)) > 0]
+    return {
+        "count": len(metrics),
+        "latency_ms": {
+            "avg": round(sum(lat) / len(lat), 2),
+            "p50": _percentile(lat, 50),
+            "p95": _percentile(lat, 95),
+            "p99": _percentile(lat, 99),
+            "embed_avg": round(sum(embed) / len(embed), 2),
+            "retrieve_avg": round(sum(retrieve) / len(retrieve), 2),
+            "rerank_avg": round(sum(rerank) / len(rerank), 2),
+        },
+        "quality": {
+            "non_empty_rate": round(100.0 * len(non_empty) / len(metrics), 2),
+            "avg_candidates": round(sum(float(m.get("candidates", 0)) for m in metrics) / len(metrics), 2),
+            "avg_results": round(sum(float(m.get("results_returned", 0)) for m in metrics) / len(metrics), 2),
+            "avg_top_score": round(sum(float(m.get("top_score", 0.0)) for m in metrics) / len(metrics), 3),
+        },
+        "recent": metrics[:40],
+    }
 
 
 def _sanitize_pack_id(s: str) -> str:
@@ -78,6 +137,7 @@ from app.generated_pack_ingestor import GeneratedPackIngestor
 
 settings = get_settings()
 app = FastAPI(title="content-pipeline")
+app.add_middleware(InternalAuthMiddleware)
 
 
 from shared.embedding_service import EmbeddingModelManager, HashFallbackEmbeddingModel
@@ -696,14 +756,78 @@ class Pipeline:
             metadata=result["metadata"],
         )
 
-    def ingest_textbook_directory(self, directory: Path, recursive: bool = True, source: str | None = None) -> dict[str, Any]:
+    def _directory_checkpoint_path(self, directory: Path, recursive: bool) -> Path:
+        key = hashlib.sha1(
+            f"{self.collection_name}|{directory}|{recursive}".encode("utf-8")
+        ).hexdigest()[:16]
+        return self.work_dir / "ingest_checkpoints" / f"{key}.json"
+
+    def _load_ingest_checkpoint(self, directory: Path, recursive: bool) -> dict[str, Any]:
+        checkpoint = self._directory_checkpoint_path(directory, recursive)
+        if not checkpoint.exists():
+            return {"checkpoint": checkpoint, "completed": set(), "updated_at": None}
+        try:
+            payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+            if payload.get("collection") == self.collection_name and payload.get("directory") == str(directory):
+                return {
+                    "checkpoint": checkpoint,
+                    "completed": set(payload.get("completed", [])),
+                    "updated_at": payload.get("updated_at"),
+                }
+        except Exception as exc:
+            logger.warning("Ignoring unreadable ingest checkpoint %s: %s", checkpoint, exc)
+        return {"checkpoint": checkpoint, "completed": set(), "updated_at": None}
+
+    def _save_ingest_checkpoint(
+        self, checkpoint: Path, directory: Path, recursive: bool, files: list[Path], completed: set[str]
+    ) -> None:
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "collection": self.collection_name,
+            "directory": str(directory),
+            "recursive": recursive,
+            "total_files": len(files),
+            "completed": sorted(completed),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        tmp = checkpoint.with_name(checkpoint.name + ".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, checkpoint)
+
+    def ingest_textbook_directory(
+        self,
+        directory: Path,
+        recursive: bool = True,
+        source: str | None = None,
+        restart: bool = False,
+    ) -> dict[str, Any]:
         self.ensure_ready()
         directory = self._resolve_content_path(str(directory))
         pattern = "**/*.pdf" if recursive else "*.pdf"
+        files = sorted(directory.glob(pattern))
+
+        state = self._load_ingest_checkpoint(directory, recursive)
+        checkpoint = state["checkpoint"]
+        completed: set[str] = set() if restart else set(state["completed"])
+        resumed = bool(completed)
+
+        def _persist() -> None:
+            self._save_ingest_checkpoint(checkpoint, directory, recursive, files, completed)
+
         results: list[dict[str, Any]] = []
         total_chunks = 0
+        skipped = 0
+        remaining = sum(1 for f in files if str(f) not in completed)
+        logger.info(
+            "Directory ingest: dir=%s total=%d already_done=%d remaining=%d resume=%s restart=%s",
+            directory, len(files), len(completed), remaining, resumed, restart,
+        )
 
-        for file_path in sorted(directory.glob(pattern)):
+        for file_path in files:
+            source_path = str(file_path)
+            if source_path in completed:
+                skipped += 1
+                continue
             try:
                 result = self._ingest_textbook_path(file_path, metadata=None, source=source or "directory")
                 results.append({
@@ -713,15 +837,27 @@ class Pipeline:
                     "metadata": result["metadata"].model_dump(),
                 })
                 total_chunks += result["chunks_created"]
+                completed.add(source_path)
+                _persist()
+                logger.info(
+                    "Ingested %s (%d chunks) — %d/%d files complete",
+                    file_path.name, result["chunks_created"], len(completed), len(files),
+                )
             except Exception as exc:
-                results.append({"file_name": file_path.name, "source_path": str(file_path), "error": str(exc)})
+                logger.exception("Failed to ingest %s", file_path)
+                results.append({"file_name": file_path.name, "source_path": source_path, "error": str(exc)})
 
+        _persist()
         return {
             "directory": str(directory),
             "recursive": recursive,
             "files_processed": len(results),
+            "files_skipped": skipped,
+            "total_files": len(files),
             "chunks_created": total_chunks,
             "collection": self.collection_name,
+            "resumed": resumed,
+            "restart": restart,
             "results": results,
         }
 
@@ -783,8 +919,11 @@ class Pipeline:
         boost_terms = self._query_boost_terms(query, inferred_topics, prerequisite_topics, related_topics)
         qfilter = build_filter(requested_filters)
         expanded_query = " ".join(part for part in [query, " ".join(boost_terms)] if part).strip()
+        _embed_start = time.perf_counter()
         query_vector = self._load_model().encode([expanded_query or query], normalize_embeddings=True)[0]
+        embed_ms = (time.perf_counter() - _embed_start) * 1000
 
+        _dense_start = time.perf_counter()
         dense_hits = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector,
@@ -802,6 +941,7 @@ class Pipeline:
                 with_payload=True,
             )
             dense_filter_fallback_used = True
+        dense_ms = (time.perf_counter() - _dense_start) * 1000
         candidate_hits: list[Any] = [
             {
                 "id": str(hit.id),
@@ -813,6 +953,7 @@ class Pipeline:
             for hit in dense_hits
         ]
 
+        _lexical_start = time.perf_counter()
         lexical_hits = self.hybrid_store.search(
             query=query,
             limit=search_limit,
@@ -828,6 +969,7 @@ class Pipeline:
                 boost_terms=boost_terms,
             )
             lexical_filter_fallback_used = True
+        lexical_ms = (time.perf_counter() - _lexical_start) * 1000
         candidate_hits.extend(lexical_hits)
 
         chapter_candidates: list[str] = []
@@ -877,10 +1019,14 @@ class Pipeline:
             "chapter_candidate_confidence": round(confidence, 3),
             "chapter_hits": chapter_hit_count,
             "boost_terms": boost_terms[:12],
+            "embed_ms": round(embed_ms, 2),
+            "dense_ms": round(dense_ms, 2),
+            "lexical_ms": round(lexical_ms, 2),
         }
         return merged, diagnostics
 
     def _search(self, query: str, limit: int, filters: dict[str, Any] | None = None) -> SearchResponse:
+        _request_start = time.perf_counter()
         self.ensure_ready()
         requested_filters = dict(filters or {})
         routed_filters = dict(requested_filters)
@@ -904,6 +1050,7 @@ class Pipeline:
         if self.enable_educational_retrieval_engine and "topic" in routed_filters and "topic" not in requested_filters:
             routed_filters.pop("topic", None)
 
+        _retrieve_start = time.perf_counter()
         hits, _retrieval_debug = self._retrieve_candidate_hits(
             query=query,
             limit=limit,
@@ -914,6 +1061,9 @@ class Pipeline:
             prerequisite_topics=prerequisite_topics,
             related_topics=related_topics,
         )
+        retrieve_ms = (time.perf_counter() - _retrieve_start) * 1000
+
+        _rerank_start = time.perf_counter()
         if self.enable_educational_retrieval_engine:
             results = self.retrieval_engine.rank(
                 query=query,
@@ -941,7 +1091,43 @@ class Pipeline:
                 for hit in hits
                 if self._lexical_relevance(query, hit) >= score_threshold
             ]
+        rerank_ms = (time.perf_counter() - _rerank_start) * 1000
         results = results[:limit]
+
+        total_ms = (time.perf_counter() - _request_start) * 1000
+        top_score = float(results[0].get("score", 0.0)) if results else 0.0
+        metric = {
+            "query": query,
+            "limit": limit,
+            "filters": requested_filters,
+            "routed_filters": routed_filters,
+            "candidates": len(hits),
+            "results_returned": len(results),
+            "top_score": round(top_score, 4),
+            "embed_ms": round(float(_retrieval_debug.get("embed_ms", 0.0)), 2),
+            "retrieve_ms": round(retrieve_ms, 2),
+            "rerank_ms": round(rerank_ms, 2),
+            "total_ms": round(total_ms, 2),
+            "dense_hits": int(_retrieval_debug.get("dense_hits", 0)),
+            "lexical_hits": int(_retrieval_debug.get("lexical_hits", 0)),
+            "chapter_candidates": _retrieval_debug.get("chapter_candidates", []),
+        }
+        _record_rag_metric(metric)
+        logger.info(
+            "[RAG] query=%r limit=%d filters=%s candidates=%d returned=%d top_score=%.3f "
+            "embed_ms=%.1f retrieve_ms=%.1f rerank_ms=%.1f total_ms=%.1f top_ids=%s",
+            query,
+            limit,
+            requested_filters or {},
+            metric["candidates"],
+            metric["results_returned"],
+            metric["top_score"],
+            metric["embed_ms"],
+            metric["retrieve_ms"],
+            metric["rerank_ms"],
+            metric["total_ms"],
+            [str(r.get("id"))[:8] for r in results[:5]],
+        )
         return SearchResponse(query=query, results=results)
 
     def debug_retrieval(self, query: str, limit: int, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1203,7 +1389,7 @@ def health() -> HealthResponse:
         return HealthResponse(status="degraded", service="content-pipeline", checks=checks)
 
 
-@app.post("/ingest/pdf", response_model=IngestResponse)
+@app.post("/ingest/pdf", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_pdf(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
@@ -1222,7 +1408,7 @@ async def ingest_pdf(
     return await asyncio.to_thread(pipeline.ingest_pdf, safe_name, content, metadata_model, source)
 
 
-@app.post("/ingest/textbook", response_model=IngestResponse)
+@app.post("/ingest/textbook", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_textbook(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
@@ -1247,7 +1433,7 @@ except Exception:
 class IngestGeneratedPackRequest(BaseModel):
     pack_id: str
 
-@app.post("/ingest/generated-pack")
+@app.post("/ingest/generated-pack", dependencies=[Depends(require_admin)])
 async def ingest_generated_pack(request: IngestGeneratedPackRequest) -> dict:
     try:
         ingestor = GeneratedPackIngestor(pipeline)
@@ -1257,13 +1443,41 @@ async def ingest_generated_pack(request: IngestGeneratedPackRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/ingest/directory", response_model=IngestResponse)
+@app.post("/ingest/directory", response_model=DirectoryIngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_directory(request: DirectoryIngestRequest) -> dict[str, Any]:
     directory = pipeline._resolve_content_path(request.directory)
-    return await asyncio.to_thread(pipeline.ingest_textbook_directory, directory, request.recursive, request.source)
+    return await asyncio.to_thread(
+        pipeline.ingest_textbook_directory,
+        directory,
+        request.recursive,
+        request.source,
+        request.restart,
+    )
 
 
-@app.post("/admin/reset-rag")
+@app.get("/ingest/status", response_model=DirectoryIngestStatus)
+async def ingest_status(directory: str, recursive: bool = True) -> dict[str, Any]:
+    def _status() -> dict[str, Any]:
+        resolved = pipeline._resolve_content_path(directory)
+        pattern = "**/*.pdf" if recursive else "*.pdf"
+        files = sorted(resolved.glob(pattern))
+        state = pipeline._load_ingest_checkpoint(resolved, recursive)
+        completed = state["completed"]
+        done = sum(1 for f in files if str(f) in completed)
+        return {
+            "directory": str(resolved),
+            "collection": pipeline.collection_name,
+            "total_files": len(files),
+            "completed_files": done,
+            "remaining_files": len(files) - done,
+            "complete": len(files) > 0 and done >= len(files),
+            "updated_at": state.get("updated_at"),
+        }
+
+    return await asyncio.to_thread(_status)
+
+
+@app.post("/admin/reset-rag", dependencies=[Depends(require_admin)])
 async def reset_rag() -> dict[str, Any]:
     return await asyncio.to_thread(pipeline.reset_rag_state)
 
@@ -1290,6 +1504,11 @@ async def rag_chapter(chapter: str, limit: int = 5) -> SearchResponse:
 @app.get("/rag/subject", response_model=SearchResponse)
 async def rag_subject(subject: str, limit: int = 5) -> SearchResponse:
     return await asyncio.to_thread(pipeline._search, subject, limit, {"subject": subject})
+
+
+@app.get("/rag/metrics")
+async def rag_metrics_endpoint() -> dict[str, Any]:
+    return _rag_metrics_summary()
 
 
 @app.get("/debug/curriculum")

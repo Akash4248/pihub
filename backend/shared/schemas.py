@@ -21,6 +21,37 @@ class IngestResponse(BaseModel):
     metadata: Metadata
 
 
+class DirectoryIngestResult(BaseModel):
+    file_name: str
+    source_path: str | None = None
+    chunks_created: int = 0
+    metadata: Metadata | None = None
+    error: str | None = None
+
+
+class DirectoryIngestResponse(BaseModel):
+    directory: str
+    recursive: bool
+    files_processed: int
+    files_skipped: int = 0
+    total_files: int = 0
+    chunks_created: int
+    collection: str
+    resumed: bool = False
+    restart: bool = False
+    results: list[DirectoryIngestResult]
+
+
+class DirectoryIngestStatus(BaseModel):
+    directory: str
+    collection: str
+    total_files: int
+    completed_files: int
+    remaining_files: int
+    complete: bool
+    updated_at: str | None = None
+
+
 class SearchRequest(BaseModel):
     query: str
     limit: int = Field(default=5, ge=1, le=50)
@@ -53,6 +84,7 @@ class DirectoryIngestRequest(BaseModel):
     directory: str
     recursive: bool = True
     source: str | None = None
+    restart: bool = False
 
 
 class DebugRetrievalRequest(BaseModel):

@@ -17,12 +17,16 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from shared.config import get_settings
 from shared.schemas import HealthResponse, IngestResponse, Metadata, SearchRequest, SearchResponse
 from shared.security import (
+    InternalAuthMiddleware,
+    get_internal_service_key,
     read_file_chunks_safely,
+    require_admin,
     sanitize_llm_prompt,
     sanitize_safe_filename,
     verify_internal_api_key,
@@ -95,6 +99,50 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(StructuredLoggingMiddleware)
+app.add_middleware(
+    InternalAuthMiddleware,
+    public_prefixes=(
+        "/health", "/healthz", "/ready", "/readyz", "/livez", "/ping",
+        "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
+        "/auth/register", "/auth/login", "/",
+    ),
+)
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=120)
+    role: str = Field(default="student")
+    grade: int = Field(default=9, ge=0, le=12)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+_SELF_REGISTERABLE_ROLES = {"student", "teacher", "parent"}
+
+
+@app.post("/auth/register")
+async def auth_register(payload: RegisterRequest) -> dict[str, Any]:
+    """Create a user account and return a JWT. Admin roles cannot be self-assigned."""
+    if payload.role not in _SELF_REGISTERABLE_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role for self-registration.")
+    from app.services.auth_service import register_user
+
+    return await asyncio.to_thread(
+        register_user, payload.email, payload.password, payload.full_name, payload.role, payload.grade
+    )
+
+
+@app.post("/auth/login")
+async def auth_login(payload: LoginRequest) -> dict[str, Any]:
+    """Exchange credentials for a JWT."""
+    from app.services.auth_service import authenticate_user
+
+    return await asyncio.to_thread(authenticate_user, payload.email, payload.password)
 
 
 
@@ -126,13 +174,18 @@ async def _proxy_request(
     stream: bool = False,
     timeout: float = DEFAULT_PROXY_TIMEOUT,
 ) -> Any:
+    # Always authenticate gateway->service hops with the internal service key so
+    # downstream services can stay locked down regardless of the caller.
+    proxy_headers = dict(headers or {})
+    proxy_headers.setdefault("X-Internal-Service-Key", get_internal_service_key())
+
     if stream:
-        return await _proxy_stream(base_url, method, path, payload=payload, headers=headers, timeout=timeout)
+        return await _proxy_stream(base_url, method, path, payload=payload, headers=proxy_headers, timeout=timeout)
 
     url = f"{base_url}{path}"
     try:
         response = await app.state.http.request(
-            method, url, json=payload, params=params, headers=headers, files=files,
+            method, url, json=payload, params=params, headers=proxy_headers, files=files,
             timeout=timeout,
         )
     except httpx.RequestError as exc:
@@ -1068,12 +1121,12 @@ async def health() -> dict[str, Any]:
     }
 
 
-@app.post("/content/upload", status_code=301, dependencies=[Depends(verify_internal_api_key)])
+@app.post("/content/upload", status_code=301, dependencies=[Depends(require_admin)])
 async def content_upload_alias() -> RedirectResponse:
     return RedirectResponse(url="/upload", status_code=301)
 
 
-@app.post("/upload", response_model=IngestResponse, dependencies=[Depends(verify_internal_api_key)])
+@app.post("/upload", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def upload_content(
     file: UploadFile = File(...),
     grade: int | None = Form(default=None),
@@ -1104,7 +1157,7 @@ async def upload_content(
 
 
 
-@app.post("/ingest/pdf", response_model=IngestResponse)
+@app.post("/ingest/pdf", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_pdf(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
@@ -1129,7 +1182,7 @@ async def ingest_pdf(
     return response.json()
 
 
-@app.post("/ingest/textbook", response_model=IngestResponse)
+@app.post("/ingest/textbook", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_textbook(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
@@ -1154,34 +1207,89 @@ async def ingest_textbook(
     return response.json()
 
 
-@app.post("/ingest/generated-pack")
+@app.post("/ingest/generated-pack", dependencies=[Depends(require_admin)])
 async def ingest_generated_pack(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_request(settings.content_pipeline_url, "/ingest/generated-pack", method="POST", payload=payload)
 
 
-@app.post("/admin/reset-rag")
+@app.post("/admin/reset-rag", dependencies=[Depends(require_admin)])
 async def reset_rag() -> dict[str, Any]:
     return await _proxy_request(settings.content_pipeline_url, "/admin/reset-rag", method="POST", payload={})
 
 
+async def _forward_rag(
+    *,
+    kind: str,
+    query: str,
+    path: str,
+    method: str,
+    limit: int,
+    payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Proxy a RAG request to content-pipeline, then log + record one metric per request."""
+    started = time.perf_counter()
+    result = await _proxy_request(settings.content_pipeline_url, path, method=method, payload=payload, params=params)
+    total_ms = (time.perf_counter() - started) * 1000
+    results = result.get("results", []) if isinstance(result, dict) else []
+    top_score = float(results[0].get("score", 0.0)) if results else 0.0
+    _record_retrieval_metric({
+        "query": query,
+        "kind": kind,
+        "limit": limit,
+        "results_returned": len(results),
+        "top_score": round(top_score, 4),
+        "chunks_retrieved": len(results),
+        "chunks_used": len(results),
+        "asset_matches": 0,
+        "asset_ms": 0.0,
+        "rag_ms": round(total_ms, 2),
+        "total_ms": round(total_ms, 2),
+        "fallback_reason": None if results else "no_rag_match",
+    })
+    logger.info(
+        "[RAG] kind=%s query=%r limit=%d returned=%d top_score=%.3f total_ms=%.1f top_ids=%s",
+        kind,
+        query,
+        limit,
+        len(results),
+        top_score,
+        total_ms,
+        [str(r.get("id"))[:8] for r in results[:5]],
+    )
+    return result
+
+
 @app.post("/rag/search", response_model=SearchResponse)
 async def rag_search(request: SearchRequest) -> dict[str, Any]:
-    return await _proxy_request(settings.content_pipeline_url, "/rag/search", method="POST", payload=request.model_dump())
+    return await _forward_rag(
+        kind="search", query=request.query, path="/rag/search", method="POST",
+        limit=request.limit, payload=request.model_dump(),
+    )
 
 
 @app.post("/rag/curriculum_search")
 async def rag_curriculum_search(request: SearchRequest) -> dict[str, Any]:
-    return await _proxy_request(settings.content_pipeline_url, "/rag/curriculum_search", method="POST", payload=request.model_dump())
+    return await _forward_rag(
+        kind="curriculum_search", query=request.query, path="/rag/curriculum_search", method="POST",
+        limit=request.limit, payload=request.model_dump(),
+    )
 
 
 @app.get("/rag/chapter", response_model=SearchResponse)
 async def rag_chapter(chapter: str, limit: int = 5) -> dict[str, Any]:
-    return await _proxy_request(settings.content_pipeline_url, "/rag/chapter", method="GET", params={"chapter": chapter, "limit": limit})
+    return await _forward_rag(
+        kind="chapter", query=chapter, path="/rag/chapter", method="GET",
+        limit=limit, params={"chapter": chapter, "limit": limit},
+    )
 
 
 @app.get("/rag/subject", response_model=SearchResponse)
 async def rag_subject(subject: str, limit: int = 5) -> dict[str, Any]:
-    return await _proxy_request(settings.content_pipeline_url, "/rag/subject", method="GET", params={"subject": subject, "limit": limit})
+    return await _forward_rag(
+        kind="subject", query=subject, path="/rag/subject", method="GET",
+        limit=limit, params={"subject": subject, "limit": limit},
+    )
 
 
 def _validate_question(payload: dict[str, Any], *keys: str) -> str:
@@ -2142,8 +2250,16 @@ async def retrieval_metrics_endpoint() -> dict[str, Any]:
         inference = await _get_json(settings.inference_service_url, "/metrics/retrieval")
     except HTTPException as exc:
         inference = {"status": "unavailable", "detail": exc.detail}
+    content_pipeline = {}
+    try:
+        content_pipeline = await _get_json(settings.content_pipeline_url, "/rag/metrics")
+    except HTTPException as exc:
+        content_pipeline = {"status": "unavailable", "detail": exc.detail}
+    except Exception as exc:
+        content_pipeline = {"status": "unavailable", "detail": str(exc)}
     return {
         "gateway": _retrieval_summary(),
+        "content_pipeline": content_pipeline,
         "inference": inference,
     }
 
@@ -2188,7 +2304,7 @@ async def classroom_post(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.pihub_url, "POST", "/classroom", payload)
 
 
-@app.post("/ingest/directory", dependencies=[Depends(verify_internal_api_key)])
+@app.post("/ingest/directory", dependencies=[Depends(require_admin)])
 async def ingest_directory(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.content_pipeline_url, "POST", "/ingest/directory", payload)
 

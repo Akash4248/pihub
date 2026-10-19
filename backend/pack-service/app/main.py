@@ -22,6 +22,7 @@ from app.sync.sync_manifest_generator import SyncManifestGenerator
 from app.validation.pack_validator import PackValidator
 from app.generated_pack_importer import GeneratedPackImporter
 from shared.schemas import HealthResponse
+from shared.security import InternalAuthMiddleware
 from shared.text_normalization import normalize_curriculum_name, normalize_language_code
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ PDF_LIBRARY_PATH = os.getenv("PDF_LIBRARY_PATH") or str(LOCAL_RUN_BASE / "textbo
 PDF_MANIFEST_PATH = os.getenv("PDF_MANIFEST_PATH") or str(Path(PACK_STORAGE_PATH) / "pdf_manifests" / "pdf_manifest.json")
 
 app = FastAPI(title="Pack Management Service", version="2.0.0")
+app.add_middleware(InternalAuthMiddleware)
 
 
 def _pack_generator() -> PackGenerator:

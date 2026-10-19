@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os as _os
+import sys as _sys
 from typing import Optional
 from pydantic import BaseModel
+
+_sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
+from shared.security import InternalAuthMiddleware  # noqa: E402
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +42,7 @@ class HealthResponse(BaseModel):
 
 
 app = FastAPI(title="experiment-service")
+app.add_middleware(InternalAuthMiddleware)
 app.middleware("http")(request_observability_middleware)
 app.middleware("http")(payload_limit_middleware)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
+
+from shared.security import require_admin
 
 from app.models.execution_package import ExecutionPackageRequest
 from app.models.execution_resolution import ExecutionResolutionRequest
@@ -142,7 +144,7 @@ async def manifest_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
     return manifest_version_service.check_compatibility(manifest)
 
 
-@router.post("/manifest/migrate")
+@router.post("/manifest/migrate", dependencies=[Depends(require_admin)])
 async def migrate_manifest(payload: dict[str, Any]) -> dict[str, Any]:
     manifest = payload.get("manifest") if "manifest" in payload else payload
     target_version = str(payload.get("target_version") or manifest_version_service.versions()["current_version"])

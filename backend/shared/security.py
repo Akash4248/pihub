@@ -130,13 +130,150 @@ async def verify_internal_api_key(
         except Exception:
             pass
 
-    # Allow local terminal bypass if explicitly configured for dev mode
-    if os.getenv("ALLOW_ANONYMOUS_DEV", "false").lower() == "true":
-        return True
-
+    # NOTE: ALLOW_ANONYMOUS_DEV intentionally does NOT bypass guarded endpoints.
+    # A missing/invalid credential is always rejected here. (The dev escape hatch
+    # is confined to read-only requests inside InternalAuthMiddleware.)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Unauthorized service request. Missing or invalid authentication token.",
+    )
+
+
+# Methods that never mutate state. Used to bound the dev-only anonymous escape.
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+# Paths that must stay reachable without credentials (probes, docs, metrics).
+PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
+    "/health",
+    "/healthz",
+    "/ready",
+    "/readyz",
+    "/livez",
+    "/ping",
+    "/metrics",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/favicon.ico",
+)
+
+
+def _extract_bearer(headers: dict[str, str]) -> str | None:
+    auth = headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return None
+
+
+def request_is_authenticated(headers: dict[str, str]) -> bool:
+    """True if the request carries a valid internal service key or a valid JWT."""
+    internal_key = headers.get("x-internal-service-key")
+    if internal_key and hmac.compare_digest(internal_key, get_internal_service_key()):
+        return True
+    token = _extract_bearer(headers)
+    if token:
+        try:
+            jwt.decode(token, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
+            return True
+        except jwt.PyJWTError:
+            return False
+    return False
+
+
+def _has_admin_role(payload: dict) -> bool:
+    roles = {str(payload.get("role", "")).lower()}
+    for key in ("roles", "scopes"):
+        value = payload.get(key)
+        if isinstance(value, (list, tuple)):
+            roles.update(str(v).lower() for v in value)
+    return bool(roles & {"admin", "superadmin", "owner", "service"})
+
+
+def _headers_from_scope(scope: dict) -> dict[str, str]:
+    return {
+        k.decode("latin-1").lower(): v.decode("latin-1")
+        for k, v in scope.get("headers", [])
+    }
+
+
+async def _send_json(send, status_code: int, payload: dict) -> None:
+    import json
+
+    body = json.dumps(payload).encode("utf-8")
+    await send({
+        "type": "http.response.start",
+        "status": status_code,
+        "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())],
+    })
+    await send({"type": "http.response.body", "body": body})
+
+
+class InternalAuthMiddleware:
+    """Fail-closed ASGI middleware enforcing authentication on every HTTP route.
+
+    A request is allowed when it is:
+      * a public path (health probes, docs, metrics), or
+      * carrying a valid ``X-Internal-Service-Key`` or Bearer JWT, or
+      * a *read-only* request while ``ALLOW_ANONYMOUS_DEV=true`` (dev escape; never
+        permits mutations, so nothing can be written or deleted anonymously).
+
+    WebSocket and lifespan scopes pass through untouched.
+    """
+
+    def __init__(self, app, public_prefixes: tuple[str, ...] = PUBLIC_PATH_PREFIXES, extra_check=None):
+        self.app = app
+        self.public_prefixes = tuple(public_prefixes)
+        self.extra_check = extra_check
+
+    def _is_public(self, path: str) -> bool:
+        return any(path == p or path.startswith(p) for p in self.public_prefixes)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        path = scope.get("path", "")
+        method = scope.get("method", "GET").upper()
+        if self._is_public(path):
+            return await self.app(scope, receive, send)
+
+        headers = _headers_from_scope(scope)
+        if request_is_authenticated(headers):
+            return await self.app(scope, receive, send)
+
+        if self.extra_check is not None and self.extra_check(headers):
+            return await self.app(scope, receive, send)
+
+        if method in SAFE_METHODS and os.getenv("ALLOW_ANONYMOUS_DEV", "false").lower() == "true":
+            return await self.app(scope, receive, send)
+
+        await _send_json(send, status.HTTP_401_UNAUTHORIZED, {
+            "detail": "Unauthorized. Provide a valid Bearer token or X-Internal-Service-Key.",
+        })
+
+
+async def require_admin(
+    x_internal_key: Optional[str] = Header(None, alias="X-Internal-Service-Key"),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+) -> bool:
+    """Guards destructive/admin operations.
+
+    Accepts the internal service key (service-to-service) or a JWT whose role is
+    administrative. A plain end-user token is NOT sufficient, and the dev escape
+    hatch never applies here — so no anonymous caller can delete or reset data.
+    """
+    if x_internal_key and hmac.compare_digest(x_internal_key, get_internal_service_key()):
+        return True
+    if credentials:
+        try:
+            payload = jwt.decode(credentials.credentials, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
+        except jwt.PyJWTError:
+            payload = None
+        if payload and _has_admin_role(payload):
+            return True
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Administrative privileges required for this operation.",
     )
 
 def sanitize_safe_filename(filename: str) -> str:

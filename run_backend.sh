@@ -36,6 +36,39 @@ mkdir -p "${LOG_DIR}" "${PID_DIR}"
 mkdir -p "${ROOT_DIR}/.local_run"/{uploads,work,media,packs,textbooks,content,curriculum,pihub_packs,pihub_cache,pihub_storage,pihub_logs}
 mkdir -p "${ROOT_DIR}/.local_run/packs/pdf_manifests"
 
+# --- Security: persist a shared JWT signing secret and internal service key ---
+# Services now fail closed (no anonymous bypass); these two secrets authenticate
+# every request (inter-service calls use the key, users get JWTs via /auth/login).
+JWT_SECRET_FILE="${ROOT_DIR}/.local_run/jwt_secret.key"
+INTERNAL_KEY_FILE="${ROOT_DIR}/.local_run/internal_service.key"
+if [[ ! -s "${JWT_SECRET_FILE}" ]]; then
+    "${PY}" -c 'import secrets;print(secrets.token_hex(32))' > "${JWT_SECRET_FILE}"
+    chmod 600 "${JWT_SECRET_FILE}"
+fi
+if [[ ! -s "${INTERNAL_KEY_FILE}" ]]; then
+    "${PY}" -c 'import secrets;print(secrets.token_hex(32))' > "${INTERNAL_KEY_FILE}"
+    chmod 600 "${INTERNAL_KEY_FILE}"
+fi
+export JWT_SECRET_KEY
+JWT_SECRET_KEY="$(cat "${JWT_SECRET_FILE}")"
+export INTERNAL_SERVICE_KEY
+INTERNAL_SERVICE_KEY="$(cat "${INTERNAL_KEY_FILE}")"
+
+# Fail-closed config also refuses default MinIO credentials in non-dev mode.
+MINIO_ACCESS_FILE="${ROOT_DIR}/.local_run/minio_access.key"
+MINIO_SECRET_FILE="${ROOT_DIR}/.local_run/minio_secret.key"
+if [[ ! -s "${MINIO_ACCESS_FILE}" ]]; then
+    "${PY}" -c 'import secrets;print("mentora-"+secrets.token_hex(8))' > "${MINIO_ACCESS_FILE}"
+    chmod 600 "${MINIO_ACCESS_FILE}"
+fi
+if [[ ! -s "${MINIO_SECRET_FILE}" ]]; then
+    "${PY}" -c 'import secrets;print(secrets.token_hex(24))' > "${MINIO_SECRET_FILE}"
+    chmod 600 "${MINIO_SECRET_FILE}"
+fi
+export MINIO_ACCESS_KEY MINIO_SECRET_KEY
+MINIO_ACCESS_KEY="$(cat "${MINIO_ACCESS_FILE}")"
+MINIO_SECRET_KEY="$(cat "${MINIO_SECRET_FILE}")"
+
 # Defined microservices -> "name:dir:module:app_object:port"
 SERVICES=(
   "gateway:gateway:app.main:app:8000"
@@ -91,7 +124,10 @@ start_service() {
     CACHE_DIR="${ROOT_DIR}/.local_run/pihub_cache" \
     STORAGE_DIR="${ROOT_DIR}/.local_run/pihub_storage" \
     LOGS_DIR="${ROOT_DIR}/.local_run/pihub_logs" \
-    ALLOW_ANONYMOUS_DEV="true" \
+    JWT_SECRET_KEY="${JWT_SECRET_KEY}" \
+    INTERNAL_SERVICE_KEY="${INTERNAL_SERVICE_KEY}" \
+    MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY}" \
+    MINIO_SECRET_KEY="${MINIO_SECRET_KEY}" \
       setsid "${PY}" -m uvicorn "${mod}:${appobj}" --app-dir "${target_dir}" --host "${bind_host}" --port "${port}" >"${log_file}" 2>&1 &
 
     local pid=$!
