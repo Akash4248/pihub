@@ -1,1 +1,0 @@
-"""AI manifest validation helpers."""
