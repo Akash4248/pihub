@@ -10,6 +10,7 @@ import json
 import os
 import sqlite3
 import time
+from contextlib import closing
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from fastapi import Header, HTTPException, Request, Security, status
@@ -33,24 +34,28 @@ except (PermissionError, OSError):
     AUTH_DB_PATH = os.path.expanduser("~/.mentora/mentora_users.db")
     os.makedirs(os.path.dirname(AUTH_DB_PATH), exist_ok=True)
 
+def _connect_auth_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(AUTH_DB_PATH, timeout=10)
+    conn.execute("PRAGMA busy_timeout=5000;")
+    return conn
+
 # Initialize Auth SQLite Database
 def _init_auth_db():
-    conn = sqlite3.connect(AUTH_DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL;")
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            role TEXT DEFAULT 'student',  -- 'student', 'teacher', 'parent'
-            grade INTEGER DEFAULT 9,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
+    with closing(_connect_auth_db()) as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                full_name TEXT NOT NULL,
+                role TEXT DEFAULT 'student',  -- 'student', 'teacher', 'parent'
+                grade INTEGER DEFAULT 9,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
 
 _init_auth_db()
 
@@ -138,23 +143,20 @@ def decode_access_token(token: str) -> Optional[dict]:
 
 # User Registration & Auth DB Queries
 def register_user(email: str, password: str, full_name: str, role: str = "student", grade: int = 9) -> Dict[str, Any]:
-    conn = sqlite3.connect(AUTH_DB_PATH)
-    cursor = conn.cursor()
-    
     user_id = f"usr_{os.urandom(8).hex()}"
     pwd_hash = hash_password(password)
-    
-    try:
-        cursor.execute(
-            "INSERT INTO users (id, email, password_hash, full_name, role, grade) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, email.lower().strip(), pwd_hash, full_name, role, grade)
-        )
-        conn.commit()
-    except sqlite3.IntegrityError:
-        conn.close()
-        raise HTTPException(status_code=400, detail="User with this email already exists.")
-    
-    conn.close()
+
+    with closing(_connect_auth_db()) as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO users (id, email, password_hash, full_name, role, grade) VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, email.lower().strip(), pwd_hash, full_name, role, grade)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.rollback()
+            raise HTTPException(status_code=400, detail="User with this email already exists.")
     token = create_access_token({"sub": user_id, "email": email, "role": role, "grade": grade})
     return {
         "user_id": user_id,
@@ -167,12 +169,10 @@ def register_user(email: str, password: str, full_name: str, role: str = "studen
     }
 
 def authenticate_user(email: str, password: str) -> Dict[str, Any]:
-    conn = sqlite3.connect(AUTH_DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT id, password_hash, full_name, role, grade FROM users WHERE email = ?", (email.lower().strip(),))
-    row = cursor.fetchone()
-    conn.close()
+    with closing(_connect_auth_db()) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, password_hash, full_name, role, grade FROM users WHERE email = ?", (email.lower().strip(),))
+        row = cursor.fetchone()
     
     if not row or not verify_password(password, row[1]):
         raise HTTPException(status_code=401, detail="Invalid email or password.")

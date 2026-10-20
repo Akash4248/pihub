@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -58,6 +59,65 @@ class PdfReaderTests(unittest.TestCase):
             self.assertEqual(second["books_discovered"], 1)
             self.assertEqual(second["duplicate_registrations"], 0)
             self.assertEqual(len(repository.list_books()), 1)
+
+    def test_ordinal_grade_social_science_is_registered(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            pdf_path = root / "social" / "class 6th social science" / "economic_activities_around_us.pdf"
+            pdf_path.parent.mkdir(parents=True)
+            pdf_path.write_bytes(PDF_BYTES)
+
+            repository = PdfRepository(root / "pdf_manifest.json", library_root=root)
+            service = PdfRegistrationService(repository, root)
+
+            report = service.scan_library()
+            self.assertEqual(report["pdfs_registered"], 1)
+            self.assertEqual(report["grades"], [6])
+            self.assertEqual(report["subjects"], ["social_science"])
+            reference = repository.resolve_pdf_reference(6, "social science", "Economic Activities Around Us")
+            self.assertIsNotNone(reference)
+            assert reference is not None
+            self.assertEqual(reference.subject, "social_science")
+
+    def test_curriculum_manifest_preserves_canonical_chapter_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            relative_path = "social/class 6th social science/economic_activities_around_us.pdf"
+            pdf_path = root / relative_path
+            pdf_path.parent.mkdir(parents=True)
+            pdf_path.write_bytes(PDF_BYTES)
+            manifest_path = root / "curriculum_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "curriculum_index": {
+                            "grade_6_social_science_english": {
+                                "chapters": [
+                                    {
+                                        "chapter_id": "6_social_science_english_ch000",
+                                        "chapter_name": "Economic Activities Around Us",
+                                        "relative_path": relative_path,
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            repository = PdfRepository(root / "pdf_manifest.json", library_root=root)
+            service = PdfRegistrationService(repository, root, curriculum_manifest_path=manifest_path)
+            service.scan_library()
+
+            reference = repository.get_chapter_pdf("6_social_science_english_ch000")
+            self.assertIsNotNone(reference)
+            assert reference is not None
+            self.assertEqual(reference.chapter_title, "Economic Activities Around Us")
+            self.assertEqual(repository.get_chapter_page_range("6_social_science_english_ch000"), (1, 2))
+            self.assertIsNotNone(
+                repository.resolve_pdf_reference(6, "social science", "Economic Activities Around Us")
+            )
 
 
 if __name__ == "__main__":

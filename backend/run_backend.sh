@@ -19,6 +19,7 @@ ROOT="${PWD}"
 LOG_DIR="${LOG_DIR:-$ROOT/.local_run/logs}"
 PID_DIR="${PID_DIR:-$ROOT/.local_run/pids}"
 PIHUB_DATA_ROOT="${PIHUB_DATA_ROOT:-$ROOT/.local_run}"
+TEXTBOOKS_ROOT="${TEXTBOOKS_ROOT:-$ROOT/../../TEXTBOOKS}"
 mkdir -p "$LOG_DIR" "$PID_DIR"
 
 # ── Resolve Python ────────────────────────────────────────────────────────────
@@ -93,7 +94,8 @@ start_service() {
   CURRICULUM_BUILD_DIR="${CURRICULUM_BUILD_DIR:-$PIHUB_DATA_ROOT/curriculum}" \
   CURRICULUM_MANIFEST_PATH="${CURRICULUM_MANIFEST_PATH:-$PIHUB_DATA_ROOT/curriculum/curriculum_manifest.json}" \
   PACKS_DIR="${PACKS_DIR:-$PIHUB_DATA_ROOT/pihub_packs}" \
-  PDF_LIBRARY_PATH="${PDF_LIBRARY_PATH:-$PIHUB_DATA_ROOT/textbooks}" \
+  TEXTBOOKS_ROOT="${TEXTBOOKS_ROOT}" \
+  PDF_LIBRARY_PATH="${PDF_LIBRARY_PATH:-$TEXTBOOKS_ROOT}" \
   PDF_MANIFEST_PATH="${PDF_MANIFEST_PATH:-$PIHUB_DATA_ROOT/packs/pdf_manifests/pdf_manifest.json}" \
   PIHUB_DB_PATH="${PIHUB_DB_PATH:-$PIHUB_DATA_ROOT/pihub.sqlite3}" \
   CACHE_DIR="${CACHE_DIR:-$PIHUB_DATA_ROOT/pihub_cache}" \

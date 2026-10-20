@@ -10,9 +10,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from shared.chapter_naming import chapter_title_for_pdf  # noqa: E402
+
 
 WORD_RE = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)?")
-CLASS_RE = re.compile(r"\bclass\s*([1-9]|10)\b", re.I)
+CLASS_RE = re.compile(r"\b(?:class|grade)[\s_-]*([1-9]|1[0-2])\b", re.I)
 FORMULA_RE = re.compile(
     r"("
     r"[A-Za-z][A-Za-z0-9_ ()]{0,40}\s*(?:=|∝|≤|≥|<|>)\s*[^.;\n]{1,120}"
@@ -87,12 +93,32 @@ def infer_grade(path: Path) -> str:
     return ""
 
 
+SUBJECT_ALIASES = {
+    "mathematics": "mathematics",
+    "maths": "mathematics",
+    "math": "mathematics",
+    "science": "science",
+    "social": "social_science",
+    "social science": "social_science",
+    "social_science": "social_science",
+    "biology": "biology",
+    "chemistry": "chemistry",
+    "physics": "physics",
+}
+
+
 def infer_subject(path: Path, textbooks_root: Path) -> str:
     try:
         relative = path.relative_to(textbooks_root)
-        return relative.parts[0] if relative.parts else ""
     except ValueError:
-        return path.parent.name
+        relative = path
+    for part in reversed(relative.parts[:-1]):
+        normalized = re.sub(r"[^a-z]+", " ", part.lower())
+        normalized = re.sub(r"\b(?:class|grade|part)\b", " ", normalized)
+        normalized = " ".join(normalized.split())
+        if normalized in SUBJECT_ALIASES:
+            return SUBJECT_ALIASES[normalized]
+    return relative.parent.name
 
 
 def looks_like_heading(text: str, label: str) -> bool:
@@ -333,7 +359,7 @@ def build_structured_chapter(
     metadata = {
         "grade": infer_grade(pdf_path),
         "subject": infer_subject(pdf_path, textbooks_root),
-        "chapter_title": pdf_path.stem,
+        "chapter_title": chapter_title_for_pdf(pdf_path, pdf_path.name),
         "pdf_path": str(pdf_path),
     }
     started = time.perf_counter()
@@ -350,8 +376,8 @@ def build_structured_chapter(
         error = f"{type(exc).__name__}: {exc}"
         raw_document, blocks = extract_blocks_with_pymupdf(pdf_path)
 
-    title = normalize_space(str(raw_document.get("name") or pdf_path.stem))
     chapter_title = metadata["chapter_title"]
+    title = normalize_space(str(raw_document.get("name") or chapter_title))
     sections: list[dict[str, Any]] = []
     current = new_section(chapter_title, 1, 1)
     section_index = 1
@@ -435,7 +461,7 @@ def chapter_output_path(output_dir: Path, chapter: dict[str, Any]) -> Path:
 def chapter_output_path_from_pdf(output_dir: Path, pdf_path: Path, textbooks_root: Path) -> Path:
     grade = f"grade_{infer_grade(pdf_path) or 'unknown'}"
     subject = slugify(infer_subject(pdf_path, textbooks_root) or "unknown")
-    chapter_id = slugify(pdf_path.stem)
+    chapter_id = slugify(chapter_title_for_pdf(pdf_path, pdf_path.name))
     return output_dir / grade / subject / chapter_id / "structured_chapter.json"
 
 
@@ -620,7 +646,7 @@ def main() -> int:
         except Exception as exc:
             failed = {
                 "pdf_path": str(pdf_path),
-                "chapter_title": pdf_path.stem,
+                "chapter_title": chapter_title_for_pdf(pdf_path, pdf_path.name),
                 "grade": infer_grade(pdf_path),
                 "subject": infer_subject(pdf_path, textbooks_root),
                 "failed": True,

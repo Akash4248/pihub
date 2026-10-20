@@ -31,7 +31,7 @@ The Raspberry Pi needs access to the server's files without copying them physica
     ```text
     /home/akash/Desktop/PIHUB/backend/volumes/shared_storage *(rw,sync,no_subtree_check,no_root_squash)
     /home/akash/Desktop/PIHUB/generated_pack *(ro,sync,no_subtree_check,no_root_squash)
-    /home/akash/Desktop/PIHUB/TEXTBOOKS *(ro,sync,no_subtree_check,no_root_squash)
+    /home/akash/Desktop/NOTIMP/TEXTBOOKS *(ro,sync,no_subtree_check,no_root_squash)
     /home/akash/Desktop/PIHUB/phet_downloads *(ro,sync,no_subtree_check,no_root_squash)
     ```
 

@@ -9,6 +9,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = ROOT.parent
 PACK_SERVICE_ROOT = ROOT / "backend" / "pack-service"
 sys.path.insert(0, str(PACK_SERVICE_ROOT))
 sys.path.insert(0, str(ROOT / "backend"))
@@ -88,7 +89,7 @@ def markdown_validation(catalog: dict[str, Any], validation: dict[str, Any]) -> 
 
 
 def main() -> None:
-    textbooks_root = ROOT / "TEXTBOOKS"
+    textbooks_root = REPO_ROOT / "TEXTBOOKS"
     manifest_path = Path("/tmp/pihub_textbook_catalog_manifest.json")
     if manifest_path.exists():
         manifest_path.unlink()
@@ -97,12 +98,12 @@ def main() -> None:
     scan_report = service.rebuild_catalog()
     catalog = service.catalog_payload()
     validation = repository.validate()
-    write_json(ROOT / "textbook_catalog.json", catalog)
-    write_json(ROOT / "textbook_mapping_validation.json", validation)
-    (ROOT / "TEXTBOOK_CATALOG_REPORT.md").write_text(markdown_catalog(catalog, scan_report), encoding="utf-8")
+    write_json(REPO_ROOT / "textbook_catalog.json", catalog)
+    write_json(REPO_ROOT / "textbook_mapping_validation.json", validation)
+    (REPO_ROOT / "TEXTBOOK_CATALOG_REPORT.md").write_text(markdown_catalog(catalog, scan_report), encoding="utf-8")
     validation_markdown, validation_payload = markdown_validation(catalog, validation)
-    (ROOT / "TEXTBOOK_MAPPING_VALIDATION_REPORT.md").write_text(validation_markdown, encoding="utf-8")
-    write_json(ROOT / "textbook_mapping_validation_summary.json", validation_payload)
+    (REPO_ROOT / "TEXTBOOK_MAPPING_VALIDATION_REPORT.md").write_text(validation_markdown, encoding="utf-8")
+    write_json(REPO_ROOT / "textbook_mapping_validation_summary.json", validation_payload)
     print(
         json.dumps(
             {

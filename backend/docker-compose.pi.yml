@@ -138,7 +138,7 @@ volumes:
     driver_opts:
       type: nfs
       o: addr=akash-ubuntu.local,ro,nolock,hard,nointr,nfsvers=4
-      device: ":/home/akash/Desktop/PIHUB/TEXTBOOKS"
+      device: ":/home/akash/Desktop/NOTIMP/TEXTBOOKS"
       
   nfs_phet_downloads:
     driver: local

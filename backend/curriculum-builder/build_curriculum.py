@@ -17,9 +17,11 @@ from pathlib import Path
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from curriculum_manifest_builder import CurriculumManifestBuilder
 from curriculum_scanner import CurriculumScanner
+from shared.textbook_paths import find_textbooks_root as discover_textbooks_root
 
 # Setup logging
 logging.basicConfig(
@@ -42,24 +44,11 @@ def find_textbooks_root(start_path: Path = None) -> Path:
     Raises:
         ValueError: If TEXTBOOKS directory not found
     """
-    if start_path is None:
-        start_path = Path.cwd()
-
-    current = Path(start_path).resolve()
-
-    # Search up to 5 levels
-    for _ in range(5):
-        textbooks = current / "TEXTBOOKS"
-        if textbooks.exists() and textbooks.is_dir():
-            return textbooks
-
-        if current.parent == current:  # Reached root
-            break
-
-        current = current.parent
-
+    textbooks = discover_textbooks_root(start_path)
+    if textbooks:
+        return textbooks
     raise ValueError(
-        "Could not find TEXTBOOKS directory. Please run from within the PIHUB project or specify --textbooks-root."
+        "Could not find TEXTBOOKS directory. Set TEXTBOOKS_ROOT or specify --textbooks-root."
     )
 
 

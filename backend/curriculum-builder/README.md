@@ -339,7 +339,7 @@ The curriculum builder **extends** the system with:
 
 ```bash
 # Add to .env file
-TEXTBOOKS_ROOT=/home/akash/Desktop/PIHUB/TEXTBOOKS
+TEXTBOOKS_ROOT=/home/akash/Desktop/NOTIMP/TEXTBOOKS
 CURRICULUM_BUILD_DIR=/shared/curriculum
 CURRICULUM_MANIFEST_PATH=/shared/curriculum/curriculum_manifest.json
 PACK_REGISTRY_PATH=/shared/curriculum/pack_registry.json
@@ -478,10 +478,10 @@ print(f'Grade 7 packs: {len(registry.get_packs_for_grade(7))}')
 
 ```bash
 # Ensure TEXTBOOKS exists
-ls -la /home/akash/Desktop/PIHUB/TEXTBOOKS
+ls -la /home/akash/Desktop/NOTIMP/TEXTBOOKS
 
 # Explicitly provide path
-python build_curriculum.py --textbooks-root /home/akash/Desktop/PIHUB/TEXTBOOKS
+python build_curriculum.py --textbooks-root /home/akash/Desktop/NOTIMP/TEXTBOOKS
 ```
 
 ### Issue: Permission denied on /shared

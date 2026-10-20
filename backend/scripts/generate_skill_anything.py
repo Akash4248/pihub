@@ -2,7 +2,7 @@ import subprocess
 import os
 import sys
 
-pdf_path = "/home/akash/Desktop/PIHUB/TEXTBOOKS/science/class 10/electricity.pdf"
+pdf_path = "/home/akash/Desktop/NOTIMP/TEXTBOOKS/science/class 10/electricity.pdf"
 output_dir = "/home/akash/Desktop/PIHUB/generated_pack_new/electricity"
 
 cmd = [

@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Set
 from folder_parser import FolderParser
 from language_detector import LanguageDetector
 from subject_mapper import SubjectMapper
+from shared.chapter_naming import CHAPTER
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class CurriculumScanner:
         """
         logger.info(f"Starting curriculum scan: {self.textbooks_root}")
 
-        pdf_files = list(self.textbooks_root.rglob("*.pdf"))
+        pdf_files = sorted(self.textbooks_root.rglob("*.pdf"))
         logger.info(f"Found {len(pdf_files)} PDF files")
 
         for pdf_path in pdf_files:
@@ -68,6 +69,9 @@ class CurriculumScanner:
         """
         try:
             parsed = FolderParser.parse_curriculum_path(pdf_path, self.textbooks_root)
+            if parsed.get("kind", CHAPTER) != CHAPTER:
+                logger.info("Skipping non-chapter PDF (%s): %s", parsed.get("kind"), parsed["relative_path"])
+                return
 
             # Create curriculum key
             curriculum_key = self._create_curriculum_key(parsed)
@@ -78,12 +82,15 @@ class CurriculumScanner:
                     "grade": parsed["grade"],
                     "subject": parsed["subject"],
                     "language": parsed["language"],
+                    "part": parsed.get("part"),
                     "chapters": [],
                 }
 
             # Add chapter
             chapter_entry = {
                 "chapter": parsed["chapter"],
+                "chapter_number": parsed.get("chapter_number"),
+                "kind": parsed.get("kind", CHAPTER),
                 "filename": parsed["filename"],
                 "relative_path": parsed["relative_path"],
                 "part": parsed["part"],

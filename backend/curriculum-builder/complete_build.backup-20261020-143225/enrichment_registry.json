@@ -1,0 +1,551 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "created_at": "2026-05-18T09:37:06.179294",
+    "total_mappings": 35,
+    "total_simulations": 3,
+    "total_experiments": 2,
+    "total_videos": 2,
+    "total_virtual_labs": 2,
+    "total_animations": 2
+  },
+  "simulations": [
+    {
+      "name": "Waves Intro",
+      "url": "https://phet.colorado.edu/en/simulations/filter?subjects=physics&types=html,prototype",
+      "description": "Explore properties of waves",
+      "type": "phet_simulation",
+      "topics": [
+        "waves",
+        "sound",
+        "light"
+      ],
+      "grade_range": [
+        6,
+        10
+      ],
+      "subject": "science"
+    },
+    {
+      "name": "Circuit Construction Kit",
+      "url": "https://phet.colorado.edu/en/simulations/filter?subjects=physics",
+      "description": "Build and analyze circuits",
+      "type": "phet_simulation",
+      "topics": [
+        "electricity",
+        "circuits",
+        "current"
+      ],
+      "grade_range": [
+        8,
+        10
+      ],
+      "subject": "science"
+    },
+    {
+      "name": "Protein Folding",
+      "url": "https://phet.colorado.edu/en/simulations/filter?subjects=biology",
+      "description": "Understand protein structure and folding",
+      "type": "phet_simulation",
+      "topics": [
+        "protein synthesis",
+        "biology",
+        "cell biology"
+      ],
+      "grade_range": [
+        8,
+        10
+      ],
+      "subject": "science"
+    }
+  ],
+  "experiments": [
+    {
+      "name": "Photosynthesis Experiment",
+      "description": "Demonstrate photosynthesis using elodea plant",
+      "materials": [
+        "water plant",
+        "test tube",
+        "light source",
+        "sodium bicarbonate"
+      ],
+      "procedure": [
+        "Place aquatic plant in water with sodium bicarbonate",
+        "Expose to light",
+        "Observe oxygen bubbles",
+        "Compare with dark conditions"
+      ],
+      "type": "experiment",
+      "topics": [
+        "photosynthesis",
+        "plant biology",
+        "oxygen production"
+      ],
+      "grade_range": [
+        6,
+        8
+      ],
+      "subject": "science"
+    },
+    {
+      "name": "Acid-Base Indicators",
+      "description": "Create natural pH indicators from red cabbage",
+      "materials": [
+        "red cabbage",
+        "acids",
+        "bases",
+        "test tubes"
+      ],
+      "procedure": [
+        "Chop red cabbage",
+        "Boil in water",
+        "Use extract as pH indicator",
+        "Test with various acids and bases"
+      ],
+      "type": "experiment",
+      "topics": [
+        "acids and bases",
+        "pH",
+        "chemistry",
+        "indicators"
+      ],
+      "grade_range": [
+        8,
+        10
+      ],
+      "subject": "science"
+    }
+  ],
+  "videos": [
+    {
+      "name": "Quadratic Equations Explained",
+      "url": "https://www.youtube.com/results?search_query=quadratic+equations",
+      "duration_seconds": 600,
+      "description": "Complete explanation of quadratic equations and solutions",
+      "type": "video",
+      "source": "youtube",
+      "topics": [
+        "quadratic equations",
+        "algebra",
+        "polynomials"
+      ],
+      "grade_range": [
+        9,
+        10
+      ],
+      "subject": "mathematics"
+    },
+    {
+      "name": "Introduction to Trigonometry",
+      "url": "https://www.youtube.com/results?search_query=trigonometry+introduction",
+      "duration_seconds": 900,
+      "description": "Learn trigonometric ratios and functions",
+      "type": "video",
+      "source": "youtube",
+      "topics": [
+        "trigonometry",
+        "sine",
+        "cosine",
+        "tangent"
+      ],
+      "grade_range": [
+        9,
+        10
+      ],
+      "subject": "mathematics"
+    }
+  ],
+  "virtual_labs": [
+    {
+      "name": "Plant Anatomy Virtual Lab",
+      "url": "https://www.biologyonline.org/",
+      "description": "Explore plant cell structure and tissues",
+      "type": "virtual_lab",
+      "topics": [
+        "plant biology",
+        "cell structure",
+        "tissues"
+      ],
+      "grade_range": [
+        7,
+        9
+      ],
+      "subject": "science"
+    },
+    {
+      "name": "Chemistry Virtual Lab",
+      "url": "https://www.chemistrylearning.com/",
+      "description": "Perform chemistry experiments safely online",
+      "type": "virtual_lab",
+      "topics": [
+        "chemistry",
+        "reactions",
+        "states of matter"
+      ],
+      "grade_range": [
+        8,
+        10
+      ],
+      "subject": "science"
+    }
+  ],
+  "animations": [
+    {
+      "name": "Water Cycle Animation",
+      "url": "https://www.example.com/water-cycle.mp4",
+      "description": "Animated visualization of the water cycle",
+      "type": "animation",
+      "file_format": "mp4",
+      "topics": [
+        "water cycle",
+        "evaporation",
+        "condensation",
+        "precipitation"
+      ],
+      "grade_range": [
+        5,
+        7
+      ],
+      "subject": "science"
+    },
+    {
+      "name": "Solar System Motion",
+      "url": "https://www.example.com/solar-system.mp4",
+      "description": "Animation of planetary motion around the sun",
+      "type": "animation",
+      "file_format": "mp4",
+      "topics": [
+        "solar system",
+        "planets",
+        "orbits",
+        "astronomy"
+      ],
+      "grade_range": [
+        6,
+        8
+      ],
+      "subject": "science"
+    }
+  ],
+  "concept_mappings": {
+    "waves": {
+      "simulations": [
+        "Waves Intro"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "sound": {
+      "simulations": [
+        "Waves Intro"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "light": {
+      "simulations": [
+        "Waves Intro"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "electricity": {
+      "simulations": [
+        "Circuit Construction Kit"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "circuits": {
+      "simulations": [
+        "Circuit Construction Kit"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "current": {
+      "simulations": [
+        "Circuit Construction Kit"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "protein synthesis": {
+      "simulations": [
+        "Protein Folding"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "biology": {
+      "simulations": [
+        "Protein Folding"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "cell biology": {
+      "simulations": [
+        "Protein Folding"
+      ],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "photosynthesis": {
+      "simulations": [],
+      "experiments": [
+        "Photosynthesis Experiment"
+      ],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "plant biology": {
+      "simulations": [],
+      "experiments": [
+        "Photosynthesis Experiment"
+      ],
+      "videos": [],
+      "virtual_labs": [
+        "Plant Anatomy Virtual Lab"
+      ],
+      "animations": []
+    },
+    "oxygen production": {
+      "simulations": [],
+      "experiments": [
+        "Photosynthesis Experiment"
+      ],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "acids and bases": {
+      "simulations": [],
+      "experiments": [
+        "Acid-Base Indicators"
+      ],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "pH": {
+      "simulations": [],
+      "experiments": [
+        "Acid-Base Indicators"
+      ],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "chemistry": {
+      "simulations": [],
+      "experiments": [
+        "Acid-Base Indicators"
+      ],
+      "videos": [],
+      "virtual_labs": [
+        "Chemistry Virtual Lab"
+      ],
+      "animations": []
+    },
+    "indicators": {
+      "simulations": [],
+      "experiments": [
+        "Acid-Base Indicators"
+      ],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "quadratic equations": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Quadratic Equations Explained"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "algebra": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Quadratic Equations Explained"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "polynomials": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Quadratic Equations Explained"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "trigonometry": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Introduction to Trigonometry"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "sine": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Introduction to Trigonometry"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "cosine": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Introduction to Trigonometry"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "tangent": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [
+        "Introduction to Trigonometry"
+      ],
+      "virtual_labs": [],
+      "animations": []
+    },
+    "cell structure": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [
+        "Plant Anatomy Virtual Lab"
+      ],
+      "animations": []
+    },
+    "tissues": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [
+        "Plant Anatomy Virtual Lab"
+      ],
+      "animations": []
+    },
+    "reactions": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [
+        "Chemistry Virtual Lab"
+      ],
+      "animations": []
+    },
+    "states of matter": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [
+        "Chemistry Virtual Lab"
+      ],
+      "animations": []
+    },
+    "water cycle": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Water Cycle Animation"
+      ]
+    },
+    "evaporation": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Water Cycle Animation"
+      ]
+    },
+    "condensation": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Water Cycle Animation"
+      ]
+    },
+    "precipitation": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Water Cycle Animation"
+      ]
+    },
+    "solar system": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Solar System Motion"
+      ]
+    },
+    "planets": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Solar System Motion"
+      ]
+    },
+    "orbits": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Solar System Motion"
+      ]
+    },
+    "astronomy": {
+      "simulations": [],
+      "experiments": [],
+      "videos": [],
+      "virtual_labs": [],
+      "animations": [
+        "Solar System Motion"
+      ]
+    }
+  }
+}

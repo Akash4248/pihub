@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,7 @@ def _pack_index_entries(path: Path) -> list[dict[str, Any]]:
 def _sqlite_count(db_path: Path, table: str) -> int | None:
     if not db_path.exists():
         return None
-    with sqlite3.connect(db_path) as connection:
+    with closing(sqlite3.connect(db_path)) as connection:
         row = connection.execute(
             "select name from sqlite_master where type = 'table' and name = ?",
             (table,),

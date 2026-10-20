@@ -5,6 +5,11 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from shared.chapter_naming import (
+    chapter_number_for_pdf,
+    chapter_title_for_pdf,
+    classify_pdf_path,
+)
 from shared.text_normalization import normalize_curriculum_name
 
 from .models import PdfChapterMapping
@@ -17,8 +22,16 @@ class ChapterPageMapper:
         chapter_part = self.slug(chapter)
         return f"chapter_{grade}_{self.slug(subject)}_{chapter_part}_{self.slug(language)}"
 
-    def mapping_for_file(self, pdf_path: Path, grade: int, subject: str, language: str = "english") -> PdfChapterMapping:
-        title = self.chapter_title_from_file(pdf_path)
+    def mapping_for_file(
+        self,
+        pdf_path: Path,
+        grade: int,
+        subject: str,
+        language: str = "english",
+        relative_path: str | None = None,
+    ) -> PdfChapterMapping:
+        reference = relative_path or pdf_path.name
+        title = chapter_title_for_pdf(reference, pdf_path.name)
         chapter_id = self.chapter_id(grade, subject, title, language)
         return PdfChapterMapping(
             chapter_id=chapter_id,
@@ -26,7 +39,13 @@ class ChapterPageMapper:
             start_page=1,
             end_page=self.page_count(pdf_path),
             aliases=self.aliases_for(grade, subject, title, language),
-            metadata={"source": "pdf_library_scan", "pdf_file": pdf_path.name},
+            metadata={
+                "source": "pdf_library_scan",
+                "pdf_file": pdf_path.name,
+                "relative_path": reference,
+                "chapter_number": chapter_number_for_pdf(reference, pdf_path.name),
+                "classification": classify_pdf_path(reference),
+            },
         )
 
     def validate_mapping(self, mapping: PdfChapterMapping, page_count: int | None = None) -> tuple[bool, list[str]]:
@@ -57,9 +76,7 @@ class ChapterPageMapper:
 
     @staticmethod
     def chapter_title_from_file(pdf_path: Path) -> str:
-        value = pdf_path.stem.replace("_", " ")
-        value = re.sub(r"\s+", " ", value).strip()
-        return value[:1].upper() + value[1:]
+        return chapter_title_for_pdf(pdf_path.name, pdf_path.name)
 
     @staticmethod
     def slug(value: Any) -> str:

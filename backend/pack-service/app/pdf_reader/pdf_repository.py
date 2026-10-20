@@ -75,16 +75,16 @@ class PdfRepository:
         return books[0] if books else None
 
     def get_books(self, grade: int, subject: str, language: str = "english") -> list[PdfBook]:
-        subject_key = self._key(subject)
+        subject_key = self._subject_key(subject)
         language_key = self._key(language)
         exact = [
             book
             for book in self._books
-            if int(book.grade) == int(grade) and self._key(book.subject) == subject_key and self._key(book.language) == language_key
+            if int(book.grade) == int(grade) and self._subject_key(book.subject) == subject_key and self._key(book.language) == language_key
         ]
         if exact:
             return exact
-        return [book for book in self._books if int(book.grade) == int(grade) and self._key(book.subject) == subject_key]
+        return [book for book in self._books if int(book.grade) == int(grade) and self._subject_key(book.subject) == subject_key]
 
     def get_chapter_pdf(self, chapter_id: str) -> PdfReference | None:
         found = self._chapter_index.get(self._key(chapter_id))
@@ -113,7 +113,7 @@ class PdfRepository:
         ]
         for key in keys:
             reference = self.get_chapter_pdf(key)
-            if reference and int(reference.grade) == int(grade) and self._key(reference.subject) == self._key(subject):
+            if reference and int(reference.grade) == int(grade) and self._subject_key(reference.subject) == self._subject_key(subject):
                 if self._key(reference.language) == self._key(language) or not language:
                     return reference
         book = self.get_book(grade, subject, language)
@@ -166,6 +166,16 @@ class PdfRepository:
             end_page=mapping.end_page,
             metadata={**book.metadata, **mapping.metadata},
         )
+
+    @classmethod
+    def _subject_key(cls, value: Any) -> str:
+        key = cls._key(value)
+        return {
+            "mathematics": "maths",
+            "math": "maths",
+            "social": "social_science",
+            "social science": "social_science",
+        }.get(key, key)
 
     @staticmethod
     def _key(value: Any) -> str:

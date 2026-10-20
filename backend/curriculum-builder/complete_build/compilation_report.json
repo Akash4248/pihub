@@ -1,2251 +1,2251 @@
 {
-  "started_at": "2026-05-18T09:37:06.169843",
-  "completed_at": "2026-05-18T09:37:06.170166",
+  "started_at": "2026-10-20T09:50:24.135293",
+  "completed_at": "2026-10-20T09:50:24.135673",
   "total_tasks": 320,
   "completed": 320,
   "failed": 0,
   "skipped": 0,
-  "duration_seconds": 0.000323,
+  "duration_seconds": 0.00038,
   "stages": {},
   "tasks": [
     {
       "task_id": "task_000001",
-      "grade": 0,
-      "subject": "unknown",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "biology",
+      "chapter": "The Living World",
       "status": "would_compile"
     },
     {
       "task_id": "task_000002",
-      "grade": 0,
-      "subject": "unknown",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "biology",
+      "chapter": "Biological Classification",
       "status": "would_compile"
     },
     {
       "task_id": "task_000003",
-      "grade": 0,
-      "subject": "unknown",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "biology",
+      "chapter": "Plant Kingdom",
       "status": "would_compile"
     },
     {
       "task_id": "task_000004",
-      "grade": 0,
-      "subject": "unknown",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "chemistry",
+      "chapter": "Some Basic Concepts of Chemistry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000005",
-      "grade": 8,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "chemistry",
+      "chapter": "Structure of Atom",
       "status": "would_compile"
     },
     {
       "task_id": "task_000006",
-      "grade": 8,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "chemistry",
+      "chapter": "Classification of Elements and Periodicity in Properties",
       "status": "would_compile"
     },
     {
       "task_id": "task_000007",
-      "grade": 8,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "chemistry",
+      "chapter": "Redox Reactions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000008",
-      "grade": 8,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "chemistry",
+      "chapter": "Organic Chemistry: Some Basic Principles and Techniques",
       "status": "would_compile"
     },
     {
       "task_id": "task_000009",
-      "grade": 8,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "chemistry",
+      "chapter": "Hydrocarbons",
       "status": "would_compile"
     },
     {
       "task_id": "task_000010",
-      "grade": 8,
+      "grade": 11,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Sets",
       "status": "would_compile"
     },
     {
       "task_id": "task_000011",
-      "grade": 8,
+      "grade": 11,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Relations and Functions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000012",
-      "grade": 8,
+      "grade": 11,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Trigonometric Functions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000013",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "physics",
+      "chapter": "Motion in a Straight Line",
       "status": "would_compile"
     },
     {
       "task_id": "task_000014",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "physics",
+      "chapter": "Motion in a Plane",
       "status": "would_compile"
     },
     {
       "task_id": "task_000015",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "physics",
+      "chapter": "Mechanical Properties of Solids",
       "status": "would_compile"
     },
     {
       "task_id": "task_000016",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "physics",
+      "chapter": "Mechanical Properties of Fluids",
       "status": "would_compile"
     },
     {
       "task_id": "task_000017",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 11,
+      "subject": "physics",
+      "chapter": "Thermal Properties of Matter",
       "status": "would_compile"
     },
     {
       "task_id": "task_000018",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "biology",
+      "chapter": "Sexual Reproduction in Flowering Plants",
       "status": "would_compile"
     },
     {
       "task_id": "task_000019",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "biology",
+      "chapter": "Human Reproduction",
       "status": "would_compile"
     },
     {
       "task_id": "task_000020",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "biology",
+      "chapter": "Reproductive Health",
       "status": "would_compile"
     },
     {
       "task_id": "task_000021",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "chemistry",
+      "chapter": "Solutions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000022",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "chemistry",
+      "chapter": "Electrochemistry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000023",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "chemistry",
+      "chapter": "Chemical Kinetics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000024",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "chemistry",
+      "chapter": "Haloalkanes and Haloarenes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000025",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "chemistry",
+      "chapter": "Alcohols, Phenols and Ethers",
       "status": "would_compile"
     },
     {
       "task_id": "task_000026",
-      "grade": 3,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "chemistry",
+      "chapter": "Aldehydes, Ketones and Carboxylic Acids",
       "status": "would_compile"
     },
     {
       "task_id": "task_000027",
-      "grade": 3,
+      "grade": 12,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Relations and Functions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000028",
-      "grade": 7,
+      "grade": 12,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Inverse Trigonometric Functions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000029",
-      "grade": 7,
+      "grade": 12,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Matrices",
       "status": "would_compile"
     },
     {
       "task_id": "task_000030",
-      "grade": 7,
+      "grade": 12,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Integrals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000031",
-      "grade": 7,
+      "grade": 12,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Application of Integrals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000032",
-      "grade": 7,
+      "grade": 12,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Differential Equations",
       "status": "would_compile"
     },
     {
       "task_id": "task_000033",
-      "grade": 7,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "physics",
+      "chapter": "Electric Charges and Fields",
       "status": "would_compile"
     },
     {
       "task_id": "task_000034",
-      "grade": 7,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "physics",
+      "chapter": "Electrostatic Potential and Capacitance",
       "status": "would_compile"
     },
     {
       "task_id": "task_000035",
-      "grade": 7,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "physics",
+      "chapter": "Current Electricity",
       "status": "would_compile"
     },
     {
       "task_id": "task_000036",
-      "grade": 7,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "physics",
+      "chapter": "Ray Optics and Optical Instruments",
       "status": "would_compile"
     },
     {
       "task_id": "task_000037",
-      "grade": 7,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "physics",
+      "chapter": "Wave Optics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000038",
-      "grade": 7,
-      "subject": "mathematics",
-      "chapter": "unknown",
+      "grade": 12,
+      "subject": "physics",
+      "chapter": "Dual Nature of Radiation and Matter",
       "status": "would_compile"
     },
     {
       "task_id": "task_000039",
-      "grade": 7,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Finding the Furry Cat Pre Number Concepts",
       "status": "would_compile"
     },
     {
       "task_id": "task_000040",
-      "grade": 7,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fun with Numbers Numbers 21 to 99",
       "status": "would_compile"
     },
     {
       "task_id": "task_000041",
-      "grade": 7,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "How Do I Spend My Day Time",
       "status": "would_compile"
     },
     {
       "task_id": "task_000042",
-      "grade": 7,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "How Many Addition and Subtraction of Single Digit Numbers",
       "status": "would_compile"
     },
     {
       "task_id": "task_000043",
-      "grade": 7,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "How Many Times Multiplication",
       "status": "would_compile"
     },
     {
       "task_id": "task_000044",
-      "grade": 7,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "How Much Can We Spend Money",
       "status": "would_compile"
     },
     {
       "task_id": "task_000045",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Lina's Family Measurement",
       "status": "would_compile"
     },
     {
       "task_id": "task_000046",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Making 10 Numbers 10 to 20",
       "status": "would_compile"
     },
     {
       "task_id": "task_000047",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Mango Treat Numbers 1 to 9",
       "status": "would_compile"
     },
     {
       "task_id": "task_000048",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "So Many Toys Data Handling",
       "status": "would_compile"
     },
     {
       "task_id": "task_000049",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Utsav Patterns",
       "status": "would_compile"
     },
     {
       "task_id": "task_000050",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Vegetable Farm Addition and Subtraction Up to 20",
       "status": "would_compile"
     },
     {
       "task_id": "task_000051",
-      "grade": 5,
+      "grade": 1,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "What Is Long What Is Round Shapes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000052",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Areas Related to Circles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000053",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Arithmetic Progressions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000054",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Circles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000055",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Coordinate Geometry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000056",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Introduction to Trigonometry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000057",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Pair of Linear Equations in Two Variables",
       "status": "would_compile"
     },
     {
       "task_id": "task_000058",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Polynomials",
       "status": "would_compile"
     },
     {
       "task_id": "task_000059",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Probability",
       "status": "would_compile"
     },
     {
       "task_id": "task_000060",
-      "grade": 5,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Quadratic Equations",
       "status": "would_compile"
     },
     {
       "task_id": "task_000061",
-      "grade": 6,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Real Numbers",
       "status": "would_compile"
     },
     {
       "task_id": "task_000062",
-      "grade": 6,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Some Applications of Trigonometry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000063",
-      "grade": 6,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Statistics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000064",
-      "grade": 6,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Surface Areas and Volumes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000065",
-      "grade": 6,
+      "grade": 10,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Triangles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000066",
-      "grade": 6,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "A Day at the Beach Counting in Groups",
       "status": "would_compile"
     },
     {
       "task_id": "task_000067",
-      "grade": 6,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Data Handling",
       "status": "would_compile"
     },
     {
       "task_id": "task_000068",
-      "grade": 6,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Decoration for Festival Addition and Subtraction",
       "status": "would_compile"
     },
     {
       "task_id": "task_000069",
-      "grade": 6,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fun at the Fair Money",
       "status": "would_compile"
     },
     {
       "task_id": "task_000070",
-      "grade": 6,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fun with Numbers Numbers 1 to 100",
       "status": "would_compile"
     },
     {
       "task_id": "task_000071",
-      "grade": 1,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Grouping and Sharing Multiplication and Division",
       "status": "would_compile"
     },
     {
       "task_id": "task_000072",
-      "grade": 1,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Playing with Lines Orientations of a Line",
       "status": "would_compile"
     },
     {
       "task_id": "task_000073",
-      "grade": 1,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Rani's Gift Measurement",
       "status": "would_compile"
     },
     {
       "task_id": "task_000074",
-      "grade": 1,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Shadow Story Togalu 2d Shapes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000075",
-      "grade": 1,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Shapes Around Us 3d Shapes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000076",
-      "grade": 1,
+      "grade": 2,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Which Season Is It Measurement of Time",
       "status": "would_compile"
     },
     {
       "task_id": "task_000077",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Double Century",
       "status": "would_compile"
     },
     {
       "task_id": "task_000078",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fair Share",
       "status": "would_compile"
     },
     {
       "task_id": "task_000079",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Filling and Lifting",
       "status": "would_compile"
     },
     {
       "task_id": "task_000080",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fun at Class Party",
       "status": "would_compile"
     },
     {
       "task_id": "task_000081",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fun with Shapes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000082",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Give and Take",
       "status": "would_compile"
     },
     {
       "task_id": "task_000083",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "House of Hundreds I",
       "status": "would_compile"
     },
     {
       "task_id": "task_000084",
-      "grade": 1,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "House of Hundreds II",
       "status": "would_compile"
     },
     {
       "task_id": "task_000085",
-      "grade": 10,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Raksha Bandhan",
       "status": "would_compile"
     },
     {
       "task_id": "task_000086",
-      "grade": 10,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "The Surajkund Fair",
       "status": "would_compile"
     },
     {
       "task_id": "task_000087",
-      "grade": 10,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Time Goes On",
       "status": "would_compile"
     },
     {
       "task_id": "task_000088",
-      "grade": 10,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Toy Joy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000089",
-      "grade": 10,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Vacation with My Nani Maa",
       "status": "would_compile"
     },
     {
       "task_id": "task_000090",
-      "grade": 10,
+      "grade": 3,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "What's in a Name",
       "status": "would_compile"
     },
     {
       "task_id": "task_000091",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Data Handling",
       "status": "would_compile"
     },
     {
       "task_id": "task_000092",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Elephants Tigers and Leopards",
       "status": "would_compile"
     },
     {
       "task_id": "task_000093",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Equal Groups",
       "status": "would_compile"
     },
     {
       "task_id": "task_000094",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fun with Symmetry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000095",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Hide and Seek",
       "status": "would_compile"
     },
     {
       "task_id": "task_000096",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Measuring Length",
       "status": "would_compile"
     },
     {
       "task_id": "task_000097",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Pattern Around Us",
       "status": "would_compile"
     },
     {
       "task_id": "task_000098",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Shapes Around Us",
       "status": "would_compile"
     },
     {
       "task_id": "task_000099",
-      "grade": 10,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Sharing and Measuring",
       "status": "would_compile"
     },
     {
       "task_id": "task_000100",
-      "grade": 8,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "The Cleanest Village",
       "status": "would_compile"
     },
     {
       "task_id": "task_000101",
-      "grade": 8,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "The Transport Museum",
       "status": "would_compile"
     },
     {
       "task_id": "task_000102",
-      "grade": 8,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Thousands Around Us",
       "status": "would_compile"
     },
     {
       "task_id": "task_000103",
-      "grade": 8,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Ticking Clocks and Turning Calendar",
       "status": "would_compile"
     },
     {
       "task_id": "task_000104",
-      "grade": 8,
+      "grade": 4,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Weigh It Pour It",
       "status": "would_compile"
     },
     {
       "task_id": "task_000105",
-      "grade": 8,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Angles as Turns",
       "status": "would_compile"
     },
     {
       "task_id": "task_000106",
-      "grade": 8,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Animal Jumps",
       "status": "would_compile"
     },
     {
       "task_id": "task_000107",
-      "grade": 8,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Coconut Farm",
       "status": "would_compile"
     },
     {
       "task_id": "task_000108",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Data Through Pictures",
       "status": "would_compile"
     },
     {
       "task_id": "task_000109",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Far and Near",
       "status": "would_compile"
     },
     {
       "task_id": "task_000110",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fractions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000111",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Grandmother's Quilt",
       "status": "would_compile"
     },
     {
       "task_id": "task_000112",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Maps and Locations",
       "status": "would_compile"
     },
     {
       "task_id": "task_000113",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Racing Seconds",
       "status": "would_compile"
     },
     {
       "task_id": "task_000114",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Shapes and Patterns",
       "status": "would_compile"
     },
     {
       "task_id": "task_000115",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Symmetrical Designs",
       "status": "would_compile"
     },
     {
       "task_id": "task_000116",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "The Dairy Farm",
       "status": "would_compile"
     },
     {
       "task_id": "task_000117",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "We the Travellers I",
       "status": "would_compile"
     },
     {
       "task_id": "task_000118",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "We the Travellers II",
       "status": "would_compile"
     },
     {
       "task_id": "task_000119",
-      "grade": 2,
+      "grade": 5,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Weight and Capacity",
       "status": "would_compile"
     },
     {
       "task_id": "task_000120",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Data Handling and Presentation",
       "status": "would_compile"
     },
     {
       "task_id": "task_000121",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Fractions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000122",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Lines and Angles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000123",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Number Play",
       "status": "would_compile"
     },
     {
       "task_id": "task_000124",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Patterns in Mathematics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000125",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Perimeter and Area",
       "status": "would_compile"
     },
     {
       "task_id": "task_000126",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Playing with Constructions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000127",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Prime Time",
       "status": "would_compile"
     },
     {
       "task_id": "task_000128",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Symmetry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000129",
-      "grade": 4,
+      "grade": 6,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "The Other Side of Zero",
       "status": "would_compile"
     },
     {
       "task_id": "task_000130",
-      "grade": 4,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "A Peek Beyond the Point",
       "status": "would_compile"
     },
     {
       "task_id": "task_000131",
-      "grade": 4,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "A Tale of Three Intersecting Lines",
       "status": "would_compile"
     },
     {
       "task_id": "task_000132",
-      "grade": 4,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Arithmetic Expressions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000133",
-      "grade": 4,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Expressions Using Letter Numbers",
       "status": "would_compile"
     },
     {
       "task_id": "task_000134",
-      "grade": 4,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Large Numbers Around Us",
       "status": "would_compile"
     },
     {
       "task_id": "task_000135",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Number Play",
       "status": "would_compile"
     },
     {
       "task_id": "task_000136",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Parallel and Intersecting Lines",
       "status": "would_compile"
     },
     {
       "task_id": "task_000137",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Working with Fractions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000138",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Another Peek Beyond the Point",
       "status": "would_compile"
     },
     {
       "task_id": "task_000139",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Connecting the Dots",
       "status": "would_compile"
     },
     {
       "task_id": "task_000140",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Constructions and Tilings",
       "status": "would_compile"
     },
     {
       "task_id": "task_000141",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Finding Common Ground",
       "status": "would_compile"
     },
     {
       "task_id": "task_000142",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Finding the Unknown",
       "status": "would_compile"
     },
     {
       "task_id": "task_000143",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Geometric Twins",
       "status": "would_compile"
     },
     {
       "task_id": "task_000144",
-      "grade": 9,
+      "grade": 7,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Operations with Integers",
       "status": "would_compile"
     },
     {
       "task_id": "task_000145",
-      "grade": 9,
+      "grade": 8,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "A Square and a Cube",
       "status": "would_compile"
     },
     {
       "task_id": "task_000146",
-      "grade": 9,
+      "grade": 8,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "A Story of Numbers",
       "status": "would_compile"
     },
     {
       "task_id": "task_000147",
-      "grade": 9,
+      "grade": 8,
       "subject": "mathematics",
-      "chapter": "unknown",
+      "chapter": "Number Play",
       "status": "would_compile"
     },
     {
       "task_id": "task_000148",
-      "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Power Play",
       "status": "would_compile"
     },
     {
       "task_id": "task_000149",
-      "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Proportional Reasoning 1",
       "status": "would_compile"
     },
     {
       "task_id": "task_000150",
-      "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Quadrilaterals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000151",
-      "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "We Distribute Yet Things Multiply",
       "status": "would_compile"
     },
     {
       "task_id": "task_000152",
-      "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Algebra Play",
       "status": "would_compile"
     },
     {
       "task_id": "task_000153",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Area",
       "status": "would_compile"
     },
     {
       "task_id": "task_000154",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Exploring Some Geometric Themes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000155",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Fractions in Disguise",
       "status": "would_compile"
     },
     {
       "task_id": "task_000156",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Proportional Reasoning 2",
       "status": "would_compile"
     },
     {
       "task_id": "task_000157",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "Tales by Dots and Lines",
       "status": "would_compile"
     },
     {
       "task_id": "task_000158",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "mathematics",
+      "chapter": "The Baudhayana Pythagoras Theorem",
       "status": "would_compile"
     },
     {
       "task_id": "task_000159",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Circles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000160",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Coordinate Geometry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000161",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Heron's Formula",
       "status": "would_compile"
     },
     {
       "task_id": "task_000162",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Introduction to Euclid's Geometry",
       "status": "would_compile"
     },
     {
       "task_id": "task_000163",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Linear Equations in Two Variables",
       "status": "would_compile"
     },
     {
       "task_id": "task_000164",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Lines and Angles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000165",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Number Systems",
       "status": "would_compile"
     },
     {
       "task_id": "task_000166",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Polynomials",
       "status": "would_compile"
     },
     {
       "task_id": "task_000167",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Quadrilaterals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000168",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Statistics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000169",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Surface Areas and Volumes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000170",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "mathematics",
+      "chapter": "Triangles",
       "status": "would_compile"
     },
     {
       "task_id": "task_000171",
-      "grade": 7,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Acids Bases and Salts",
       "status": "would_compile"
     },
     {
       "task_id": "task_000172",
-      "grade": 7,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Carbon and Its Compounds",
       "status": "would_compile"
     },
     {
       "task_id": "task_000173",
-      "grade": 7,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Chemical Reactions and Equations",
       "status": "would_compile"
     },
     {
       "task_id": "task_000174",
-      "grade": 7,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Control and Coordination",
       "status": "would_compile"
     },
     {
       "task_id": "task_000175",
-      "grade": 7,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Electricity",
       "status": "would_compile"
     },
     {
       "task_id": "task_000176",
       "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Heredity",
       "status": "would_compile"
     },
     {
       "task_id": "task_000177",
       "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "How Do Organisms Reproduce",
       "status": "would_compile"
     },
     {
       "task_id": "task_000178",
       "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Life Processes",
       "status": "would_compile"
     },
     {
       "task_id": "task_000179",
       "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Light Reflection and Refraction",
       "status": "would_compile"
     },
     {
       "task_id": "task_000180",
       "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Magnetic Effects of Electric Current",
       "status": "would_compile"
     },
     {
       "task_id": "task_000181",
       "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Metals and Non Metals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000182",
-      "grade": 9,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Our Environment",
       "status": "would_compile"
     },
     {
       "task_id": "task_000183",
-      "grade": 9,
+      "grade": 10,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Human Eye and the Colourful World",
       "status": "would_compile"
     },
     {
       "task_id": "task_000184",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Clothes How Things Are Made",
       "status": "would_compile"
     },
     {
       "task_id": "task_000185",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Earth Our Shared Home",
       "status": "would_compile"
     },
     {
       "task_id": "task_000186",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Energy How Things Work",
       "status": "would_compile"
     },
     {
       "task_id": "task_000187",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Journey of a River",
       "status": "would_compile"
     },
     {
       "task_id": "task_000188",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Our School a Happy Place",
       "status": "would_compile"
     },
     {
       "task_id": "task_000189",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Our Vibrant Country",
       "status": "would_compile"
     },
     {
       "task_id": "task_000190",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Rhythms of Nature",
       "status": "would_compile"
     },
     {
       "task_id": "task_000191",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Some Unique Places",
       "status": "would_compile"
     },
     {
       "task_id": "task_000192",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Mystery of Food",
       "status": "would_compile"
     },
     {
       "task_id": "task_000193",
-      "grade": 9,
+      "grade": 5,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Water the Essence of Life",
       "status": "would_compile"
     },
     {
       "task_id": "task_000194",
-      "grade": 9,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "A Journey Through States of Water",
       "status": "would_compile"
     },
     {
       "task_id": "task_000195",
-      "grade": 10,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Beyond Earth",
       "status": "would_compile"
     },
     {
       "task_id": "task_000196",
-      "grade": 10,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Diversity in the Living World",
       "status": "would_compile"
     },
     {
       "task_id": "task_000197",
-      "grade": 10,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Exploring Magnets",
       "status": "would_compile"
     },
     {
       "task_id": "task_000198",
-      "grade": 10,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Living Creatures Exploring Their Characteristics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000199",
-      "grade": 10,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Materials Around Us",
       "status": "would_compile"
     },
     {
       "task_id": "task_000200",
-      "grade": 10,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Measurement of Length and Motion",
       "status": "would_compile"
     },
     {
       "task_id": "task_000201",
-      "grade": 8,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Methods of Separation in Everyday Life",
       "status": "would_compile"
     },
     {
       "task_id": "task_000202",
-      "grade": 8,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Mindful Eating a Path to a Healthy Body",
       "status": "would_compile"
     },
     {
       "task_id": "task_000203",
-      "grade": 8,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Nature's Treasures",
       "status": "would_compile"
     },
     {
       "task_id": "task_000204",
-      "grade": 8,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Temperature and Its Measurement",
       "status": "would_compile"
     },
     {
       "task_id": "task_000205",
-      "grade": 8,
+      "grade": 6,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Wonderful World of Science",
       "status": "would_compile"
     },
     {
       "task_id": "task_000206",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Adolescence a Stage of Growth and Change",
       "status": "would_compile"
     },
     {
       "task_id": "task_000207",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Changes Around Us Physical and Chemical",
       "status": "would_compile"
     },
     {
       "task_id": "task_000208",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Earth Moon and the Sun",
       "status": "would_compile"
     },
     {
       "task_id": "task_000209",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Electricity Circuits and Their Components",
       "status": "would_compile"
     },
     {
       "task_id": "task_000210",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Exploring Substances Acidic Basic and Neutral",
       "status": "would_compile"
     },
     {
       "task_id": "task_000211",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Heat Transfer in Nature",
       "status": "would_compile"
     },
     {
       "task_id": "task_000212",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Life Processes in Animals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000213",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Life Processes in Plants",
       "status": "would_compile"
     },
     {
       "task_id": "task_000214",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Light Shadows and Reflections",
       "status": "would_compile"
     },
     {
       "task_id": "task_000215",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Measurement of Time and Motion",
       "status": "would_compile"
     },
     {
       "task_id": "task_000216",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Ever Evolving World of Science",
       "status": "would_compile"
     },
     {
       "task_id": "task_000217",
-      "grade": 8,
+      "grade": 7,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The World of Metals and Non Metals",
       "status": "would_compile"
     },
     {
       "task_id": "task_000218",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Electricity Magnetic and Heating Effects",
       "status": "would_compile"
     },
     {
       "task_id": "task_000219",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Exploring Forces",
       "status": "would_compile"
     },
     {
       "task_id": "task_000220",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Exploring the Investigative World of Science",
       "status": "would_compile"
     },
     {
       "task_id": "task_000221",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Health the Ultimate Treasure",
       "status": "would_compile"
     },
     {
       "task_id": "task_000222",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "How Nature Works in Harmony",
       "status": "would_compile"
     },
     {
       "task_id": "task_000223",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Keeping Time with the Skies",
       "status": "would_compile"
     },
     {
       "task_id": "task_000224",
       "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Light Mirrors and Lenses",
       "status": "would_compile"
     },
     {
       "task_id": "task_000225",
-      "grade": 10,
+      "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Nature of Matter Elements Compounds and Mixtures",
       "status": "would_compile"
     },
     {
       "task_id": "task_000226",
-      "grade": 10,
+      "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Our Home Earth a Unique Life Sustaining Planet",
       "status": "would_compile"
     },
     {
       "task_id": "task_000227",
-      "grade": 10,
+      "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Particulate Nature of Matter",
       "status": "would_compile"
     },
     {
       "task_id": "task_000228",
-      "grade": 10,
+      "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Pressure Winds Storms and Cyclones",
       "status": "would_compile"
     },
     {
       "task_id": "task_000229",
-      "grade": 10,
+      "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Amazing World of Solutes Solvents and Solutions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000230",
-      "grade": 10,
+      "grade": 8,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Invisible Living World Beyond Our Naked Eye",
       "status": "would_compile"
     },
     {
       "task_id": "task_000231",
-      "grade": 10,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Atoms and Molecules",
       "status": "would_compile"
     },
     {
       "task_id": "task_000232",
-      "grade": 10,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Force and Laws of Motion",
       "status": "would_compile"
     },
     {
       "task_id": "task_000233",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Gravitation",
       "status": "would_compile"
     },
     {
       "task_id": "task_000234",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Improvement in Food Resources",
       "status": "would_compile"
     },
     {
       "task_id": "task_000235",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Is Matter Around Us Pure",
       "status": "would_compile"
     },
     {
       "task_id": "task_000236",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Matter in Our Surroundings",
       "status": "would_compile"
     },
     {
       "task_id": "task_000237",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Motion",
       "status": "would_compile"
     },
     {
       "task_id": "task_000238",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Sound",
       "status": "would_compile"
     },
     {
       "task_id": "task_000239",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Structure of the Atom",
       "status": "would_compile"
     },
     {
       "task_id": "task_000240",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "The Fundamental Unit of Life",
       "status": "would_compile"
     },
     {
       "task_id": "task_000241",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Tissues",
       "status": "would_compile"
     },
     {
       "task_id": "task_000242",
-      "grade": 6,
+      "grade": 9,
       "subject": "science",
-      "chapter": "unknown",
+      "chapter": "Work and Energy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000243",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Agriculture",
       "status": "would_compile"
     },
     {
       "task_id": "task_000244",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Forest and Wildlife Resources",
       "status": "would_compile"
     },
     {
       "task_id": "task_000245",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Lifelines of National Economy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000246",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Manufacturing Industries",
       "status": "would_compile"
     },
     {
       "task_id": "task_000247",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Minerals and Energy Resources",
       "status": "would_compile"
     },
     {
       "task_id": "task_000248",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Resources and Development",
       "status": "would_compile"
     },
     {
       "task_id": "task_000249",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Water Resources",
       "status": "would_compile"
     },
     {
       "task_id": "task_000250",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Consumer Rights",
       "status": "would_compile"
     },
     {
       "task_id": "task_000251",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Development",
       "status": "would_compile"
     },
     {
       "task_id": "task_000252",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Globalisation and the Indian Economy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000253",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Money and Credit",
       "status": "would_compile"
     },
     {
       "task_id": "task_000254",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Sectors of the Indian Economy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000255",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Nationalism in India",
       "status": "would_compile"
     },
     {
       "task_id": "task_000256",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Print Culture and the Modern World",
       "status": "would_compile"
     },
     {
       "task_id": "task_000257",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "The Age of Industrialisation",
       "status": "would_compile"
     },
     {
       "task_id": "task_000258",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "The Making of a Global World",
       "status": "would_compile"
     },
     {
       "task_id": "task_000259",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "The Rise of Nationalism in Europe",
       "status": "would_compile"
     },
     {
       "task_id": "task_000260",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Federalism",
       "status": "would_compile"
     },
     {
       "task_id": "task_000261",
-      "grade": 6,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 10,
+      "subject": "social_science",
+      "chapter": "Gender Religion and Caste",
       "status": "would_compile"
     },
     {
       "task_id": "task_000262",
       "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Outcomes of Democracy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000263",
       "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Political Parties",
       "status": "would_compile"
     },
     {
       "task_id": "task_000264",
       "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Power Sharing",
       "status": "would_compile"
     },
     {
       "task_id": "task_000265",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Economic Activities Around Us",
       "status": "would_compile"
     },
     {
       "task_id": "task_000266",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Family and Community",
       "status": "would_compile"
     },
     {
       "task_id": "task_000267",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Grassroots Democracy Part 1 Governance",
       "status": "would_compile"
     },
     {
       "task_id": "task_000268",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Grassroots Democracy Part 2 Local Government in Rural Areas",
       "status": "would_compile"
     },
     {
       "task_id": "task_000269",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Grassroots Democracy Part 3 Local Government in Urban Areas",
       "status": "would_compile"
     },
     {
       "task_id": "task_000270",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "India That Is Bharat",
       "status": "would_compile"
     },
     {
       "task_id": "task_000271",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "India's Cultural Roots",
       "status": "would_compile"
     },
     {
       "task_id": "task_000272",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Landforms and Life",
       "status": "would_compile"
     },
     {
       "task_id": "task_000273",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Locating Places on the Earth",
       "status": "would_compile"
     },
     {
       "task_id": "task_000274",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Oceans and Continents",
       "status": "would_compile"
     },
     {
       "task_id": "task_000275",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "The Beginnings of Indian Civilisation",
       "status": "would_compile"
     },
     {
       "task_id": "task_000276",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "The Value of Work",
       "status": "would_compile"
     },
     {
       "task_id": "task_000277",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Timeline and Sources of History",
       "status": "would_compile"
     },
     {
       "task_id": "task_000278",
-      "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 6,
+      "subject": "social_science",
+      "chapter": "Unity in Diversity or Many in the One",
       "status": "would_compile"
     },
     {
       "task_id": "task_000279",
       "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Climates of India",
       "status": "would_compile"
     },
     {
       "task_id": "task_000280",
       "grade": 7,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "From Barter to Money",
       "status": "would_compile"
     },
     {
       "task_id": "task_000281",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "From the Rulers to the Ruled Types of Governments",
       "status": "would_compile"
     },
     {
       "task_id": "task_000282",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Geographical Diversity of India",
       "status": "would_compile"
     },
     {
       "task_id": "task_000283",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "How the Land Becomes Sacred",
       "status": "would_compile"
     },
     {
       "task_id": "task_000284",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "New Beginnings Cities and States",
       "status": "would_compile"
     },
     {
       "task_id": "task_000285",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "The Age of Reorganisation",
       "status": "would_compile"
     },
     {
       "task_id": "task_000286",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "The Constitution of India an Introduction",
       "status": "would_compile"
     },
     {
       "task_id": "task_000287",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "The Gupta Era an Age of Tireless Creativity",
       "status": "would_compile"
     },
     {
       "task_id": "task_000288",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "The Rise of Empires",
       "status": "would_compile"
     },
     {
       "task_id": "task_000289",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Understanding Markets",
       "status": "would_compile"
     },
     {
       "task_id": "task_000290",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Understanding the Weather",
       "status": "would_compile"
     },
     {
       "task_id": "task_000291",
-      "grade": 5,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Banks and the Magic of Finance",
       "status": "would_compile"
     },
     {
       "task_id": "task_000292",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Empires and Kingdoms 6th to 10th Centuries",
       "status": "would_compile"
     },
     {
       "task_id": "task_000293",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "India a Home to Many",
       "status": "would_compile"
     },
     {
       "task_id": "task_000294",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "India and Her Neighbours",
       "status": "would_compile"
     },
     {
       "task_id": "task_000295",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Infrastructure Engine of India's Development",
       "status": "would_compile"
     },
     {
       "task_id": "task_000296",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "The State the Government and You",
       "status": "would_compile"
     },
     {
       "task_id": "task_000297",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "The Story of Indian Farming",
       "status": "would_compile"
     },
     {
       "task_id": "task_000298",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 7,
+      "subject": "social_science",
+      "chapter": "Turning Tides 11th and 12th Centuries",
       "status": "would_compile"
     },
     {
       "task_id": "task_000299",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "Factors of Production",
       "status": "would_compile"
     },
     {
       "task_id": "task_000300",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "Natural Resources and Their Use",
       "status": "would_compile"
     },
     {
       "task_id": "task_000301",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "Reshaping India's Political Map",
       "status": "would_compile"
     },
     {
       "task_id": "task_000302",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "The Colonial Era in India",
       "status": "would_compile"
     },
     {
       "task_id": "task_000303",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "The Parliamentary System Legislature and Executive",
       "status": "would_compile"
     },
     {
       "task_id": "task_000304",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "The Rise of the Marathas",
       "status": "would_compile"
     },
     {
       "task_id": "task_000305",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 8,
+      "subject": "social_science",
+      "chapter": "Universal Franchise and India's Electoral System",
       "status": "would_compile"
     },
     {
       "task_id": "task_000306",
-      "grade": 10,
-      "subject": "science",
-      "chapter": "unknown",
+      "grade": 9,
+      "subject": "social_science",
+      "chapter": "Constitutional Design",
       "status": "would_compile"
     },
     {
       "task_id": "task_000307",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Democratic Rights",
       "status": "would_compile"
     },
     {
       "task_id": "task_000308",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Electoral Politics",
       "status": "would_compile"
     },
     {
       "task_id": "task_000309",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "What Is Democracy Why Democracy",
       "status": "would_compile"
     },
     {
       "task_id": "task_000310",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Working of Institutions",
       "status": "would_compile"
     },
     {
       "task_id": "task_000311",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Climate",
       "status": "would_compile"
     },
     {
       "task_id": "task_000312",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Drainage",
       "status": "would_compile"
     },
     {
       "task_id": "task_000313",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "India Size and Location",
       "status": "would_compile"
     },
     {
       "task_id": "task_000314",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Natural Vegetation and Wildlife",
       "status": "would_compile"
     },
     {
       "task_id": "task_000315",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Physical Features of India",
       "status": "would_compile"
     },
     {
       "task_id": "task_000316",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Population",
       "status": "would_compile"
     },
     {
       "task_id": "task_000317",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Food Security in India",
       "status": "would_compile"
     },
     {
       "task_id": "task_000318",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "People as Resource",
       "status": "would_compile"
     },
     {
       "task_id": "task_000319",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "Poverty as a Challenge",
       "status": "would_compile"
     },
     {
       "task_id": "task_000320",
       "grade": 9,
-      "subject": "science",
-      "chapter": "unknown",
+      "subject": "social_science",
+      "chapter": "The Story of Village Palampur",
       "status": "would_compile"
     }
   ]

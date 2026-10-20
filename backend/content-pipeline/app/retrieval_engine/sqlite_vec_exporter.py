@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import struct
 import sqlite3
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class SqliteVecExporter:
@@ -28,70 +32,88 @@ class SqliteVecExporter:
     def export_to_sqlite(self, db_path: Path, chunks: list[dict[str, Any]]) -> int:
         """Exports a list of chunk dictionaries containing 'chunk_id', 'text', 'vector', and metadata to SQLite."""
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        if db_path.exists():
-            db_path.unlink()
+        temp_path = db_path.with_name(f"{db_path.name}.tmp")
+        if temp_path.exists():
+            temp_path.unlink()
 
-        conn = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
+        conn = sqlite3.connect(str(temp_path))
+        try:
+            cursor = conn.cursor()
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS chunks (
-                chunk_id TEXT PRIMARY KEY,
-                chapter_id TEXT,
-                subject TEXT,
-                grade INTEGER,
-                chunk_type TEXT,
-                text TEXT,
-                indexed_text TEXT,
-                metadata_json TEXT,
-                vector_blob BLOB
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS chunks (
+                    chunk_id TEXT PRIMARY KEY,
+                    chapter_id TEXT,
+                    subject TEXT,
+                    grade INTEGER,
+                    chunk_type TEXT,
+                    text TEXT,
+                    indexed_text TEXT,
+                    metadata_json TEXT,
+                    vector_blob BLOB
+                )
+            """)
 
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_chunks_chapter ON chunks(chapter_id)
-        """)
-        cursor.execute("""
-            CREATE INDEX IF NOT EXISTS idx_chunks_subject_grade ON chunks(subject, grade)
-        """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chunks_chapter ON chunks(chapter_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chunks_subject_grade ON chunks(subject, grade)
+            """)
 
-        inserted_count = 0
-        for chunk in chunks:
-            chunk_id = str(chunk.get("chunk_id") or chunk.get("id") or "")
-            if not chunk_id:
-                continue
+            inserted_count = 0
+            seen_chunk_ids: set[str] = set()
+            skipped_duplicates = 0
+            for chunk in chunks:
+                chunk_id = str(chunk.get("chunk_id") or chunk.get("id") or "")
+                if not chunk_id:
+                    continue
+                if chunk_id in seen_chunk_ids:
+                    skipped_duplicates += 1
+                    continue
+                seen_chunk_ids.add(chunk_id)
 
-            vector = chunk.get("vector") or []
-            vector_blob = self.pack_float_vector(vector) if vector else None
+                vector = chunk.get("vector") or []
+                vector_blob = self.pack_float_vector(vector) if vector else None
 
-            metadata = chunk.get("metadata") or {}
-            chapter_id = str(chunk.get("chapter_id") or metadata.get("chapter_id") or "")
-            subject = str(chunk.get("subject") or metadata.get("subject") or "")
-            grade = int(chunk.get("grade") or metadata.get("grade") or 0)
-            chunk_type = str(chunk.get("chunk_type") or metadata.get("chunk_type") or "text")
-            text = str(chunk.get("text") or "")
-            indexed_text = str(chunk.get("indexed_text") or text)
+                metadata = chunk.get("metadata") or {}
+                chapter_id = str(chunk.get("chapter_id") or metadata.get("chapter_id") or "")
+                subject = str(chunk.get("subject") or metadata.get("subject") or "")
+                grade = int(chunk.get("grade") or metadata.get("grade") or 0)
+                chunk_type = str(chunk.get("chunk_type") or metadata.get("chunk_type") or "text")
+                text = str(chunk.get("text") or "")
+                indexed_text = str(chunk.get("indexed_text") or text)
 
-            cursor.execute(
-                """
-                INSERT INTO chunks (
-                    chunk_id, chapter_id, subject, grade, chunk_type, text, indexed_text, metadata_json, vector_blob
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    chunk_id,
-                    chapter_id,
-                    subject,
-                    grade,
-                    chunk_type,
-                    text,
-                    indexed_text,
-                    json.dumps(metadata, ensure_ascii=False),
-                    vector_blob,
-                ),
-            )
-            inserted_count += 1
+                cursor.execute(
+                    """
+                    INSERT INTO chunks (
+                        chunk_id, chapter_id, subject, grade, chunk_type, text, indexed_text, metadata_json, vector_blob
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        chunk_id,
+                        chapter_id,
+                        subject,
+                        grade,
+                        chunk_type,
+                        text,
+                        indexed_text,
+                        json.dumps(metadata, ensure_ascii=False),
+                        vector_blob,
+                    ),
+                )
+                inserted_count += 1
 
-        conn.commit()
-        conn.close()
+            if skipped_duplicates:
+                logger.warning("Skipped %d duplicate chunk_id values during SQLite vector export", skipped_duplicates)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            if temp_path.exists():
+                temp_path.unlink()
+            raise
+        finally:
+            conn.close()
+
+        os.replace(temp_path, db_path)
         return inserted_count

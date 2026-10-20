@@ -142,12 +142,15 @@ class CurriculumManifestBuilder:
             grade = entry["grade"]
             subject = entry["subject"]
             language = entry["language"]
+            part = entry.get("part")
+            part_segment = f"_part{part}" if part else ""
 
             # Create curriculum entry
             curriculum_entry = {
                 "grade": grade,
                 "subject": subject,
                 "language": language,
+                "part": part,
                 "chapters": [],
             }
 
@@ -162,8 +165,10 @@ class CurriculumManifestBuilder:
                     learning_outcomes=chapter.get("learning_outcomes", []),
                 )
                 chapter_entry = {
-                    "chapter_id": f"{grade}_{subject}_{language}_ch{idx:03d}",
+                    "chapter_id": f"{grade}_{subject}_{language}{part_segment}_ch{idx:03d}",
                     "chapter_name": chapter["chapter"],
+                    "chapter_number": chapter.get("chapter_number"),
+                    "kind": chapter.get("kind", "chapter"),
                     "filename": chapter["filename"],
                     "relative_path": chapter["relative_path"],
                     "part": chapter["part"],

@@ -6,6 +6,12 @@ from typing import Optional
 
 from language_detector import LanguageDetector
 from subject_mapper import SubjectMapper
+from shared.chapter_naming import (
+    canonical_chapter_title,
+    chapter_number_for_pdf,
+    chapter_title_for_pdf,
+    classify_pdf_path,
+)
 
 
 class FolderParser:
@@ -28,7 +34,7 @@ class FolderParser:
             Grade number or None
         """
         # Match "class N" or "class N part M"
-        match = re.search(r"class\s+(\d+)", folder_name, re.IGNORECASE)
+        match = re.search(r"class[\s_-]+(\d+)", folder_name, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
@@ -54,7 +60,7 @@ class FolderParser:
         Returns:
             Part number or None
         """
-        match = re.search(r"part\s+(\d+)", folder_name, re.IGNORECASE)
+        match = re.search(r"part[\s_-]*(\d+)", folder_name, re.IGNORECASE)
         if match:
             return int(match.group(1))
 
@@ -76,25 +82,7 @@ class FolderParser:
         Returns:
             Chapter name
         """
-        # Remove .pdf extension
-        name = filename.replace(".pdf", "").replace(".PDF", "")
-
-        # Remove part indicators like " – 1", " - 1", " (Part 1)"
-        name = re.sub(r"\s*[-–]\s*\d+\s*$", "", name)
-        name = re.sub(r"\s*\(Part\s+\d+\)\s*$", "", name, flags=re.IGNORECASE)
-
-        # Remove trailing numbers and dashes
-        name = re.sub(r"\s*[-–]\s*\d+\s*$", "", name)
-
-        # For files like "10th Kan Maths Part- 1" extract subject part
-        # These are usually full textbooks, not individual chapters
-        if re.search(r"^\d+(?:st|nd|rd|th)\s+", name, re.IGNORECASE):
-            # This is a full textbook, extract the subject
-            match = re.search(r"(?:maths|science|social|english|hindi)\s+(?:part|part-)?", name, re.IGNORECASE)
-            if match:
-                return name[: match.end()].strip()
-
-        return name.strip()
+        return canonical_chapter_title(filename)
 
     @classmethod
     def is_textbook_file(cls, filename: str) -> bool:
@@ -134,30 +122,30 @@ class FolderParser:
         # Detect language from path
         language = LanguageDetector.detect_from_path(file_path)
 
-        # Extract subject from top-level directory
+        # Support both layouts:
+        #   mathematics/class 9/chapter.pdf
+        #   class_11/biology/chapter.pdf
         subject = None
-        subject_dir = Path(parts[0]) if parts else None
-        if subject_dir:
-            subject = SubjectMapper.extract_subject_from_directory(subject_dir)
-
-        # Extract grade from intermediate directory (usually "class N")
         grade = None
-        if len(parts) >= 2:
-            folder_name = parts[1]
-            grade = cls.extract_grade_from_folder_name(folder_name)
-            part = cls.extract_part_from_folder_name(folder_name)
-        else:
-            part = None
+        part = None
+        for folder_name in parts[:-1]:
+            if grade is None:
+                grade = cls.extract_grade_from_folder_name(folder_name)
+            if subject is None:
+                subject = SubjectMapper.extract_subject_from_directory(Path(folder_name))
+            if part is None:
+                part = cls.extract_part_from_folder_name(folder_name)
 
-        # Extract chapter from filename
-        chapter = cls.extract_chapter_from_filename(file_path.name) if len(parts) > 0 else None
+        relative_key = relative_path.as_posix()
 
         return {
             "language": language,
             "subject": subject,
             "grade": grade,
             "part": part,
-            "chapter": chapter,
+            "chapter": chapter_title_for_pdf(relative_key, file_path.name),
+            "chapter_number": chapter_number_for_pdf(relative_key, file_path.name),
+            "kind": classify_pdf_path(relative_key),
             "filename": file_path.name,
             "relative_path": str(relative_path),
             "full_path": str(file_path),

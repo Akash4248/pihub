@@ -136,7 +136,7 @@ class BulkCurriculumCompiler:
                     task_id=f"task_{task_id:06d}",
                     grade=grade or 0,
                     subject=subject or "unknown",
-                    chapter=chapter.get("chapter", "unknown"),
+                    chapter=chapter.get("chapter_name") or chapter.get("chapter") or "unknown",
                     filename=filename or "",
                     relative_path=str(relative_path) if relative_path else "",
                     language=language or "english",

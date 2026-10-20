@@ -24,6 +24,7 @@ from app.generated_pack_importer import GeneratedPackImporter
 from shared.schemas import HealthResponse
 from shared.security import InternalAuthMiddleware
 from shared.text_normalization import normalize_curriculum_name, normalize_language_code
+from shared.textbook_paths import find_textbooks_root
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -34,8 +35,9 @@ LOCAL_RUN_BASE = Path(__file__).resolve().parents[2] / ".local_run"
 SHARED_STORAGE_PATH = os.getenv("SHARED_STORAGE_PATH", str(LOCAL_RUN_BASE / "shared"))
 PACK_STORAGE_PATH = os.getenv("PACK_STORAGE_PATH") or os.getenv("SHARED_STORAGE_PATH") or str(LOCAL_RUN_BASE / "packs")
 CURRICULUM_GRAPH_PATH = os.getenv("CURRICULUM_GRAPH_PATH") or str(LOCAL_RUN_BASE / "work" / "curriculum_graph.json")
-PDF_LIBRARY_PATH = os.getenv("PDF_LIBRARY_PATH") or str(LOCAL_RUN_BASE / "textbooks")
+PDF_LIBRARY_PATH = os.getenv("PDF_LIBRARY_PATH") or str(find_textbooks_root(Path(__file__)) or (LOCAL_RUN_BASE / "textbooks"))
 PDF_MANIFEST_PATH = os.getenv("PDF_MANIFEST_PATH") or str(Path(PACK_STORAGE_PATH) / "pdf_manifests" / "pdf_manifest.json")
+CURRICULUM_MANIFEST_PATH = os.getenv("CURRICULUM_MANIFEST_PATH") or str(Path(PACK_STORAGE_PATH).parent / "curriculum" / "curriculum_manifest.json")
 
 app = FastAPI(title="Pack Management Service", version="2.0.0")
 app.add_middleware(InternalAuthMiddleware)
@@ -58,7 +60,11 @@ async def startup_event() -> None:
     app.state.pack_repository = PackRepository(storage_root)
     pdf_repository = PdfRepository(Path(PDF_MANIFEST_PATH), library_root=Path(PDF_LIBRARY_PATH))
     app.state.pdf_repository = pdf_repository
-    app.state.pdf_registration_service = PdfRegistrationService(pdf_repository, Path(PDF_LIBRARY_PATH))
+    app.state.pdf_registration_service = PdfRegistrationService(
+        pdf_repository,
+        Path(PDF_LIBRARY_PATH),
+        curriculum_manifest_path=Path(CURRICULUM_MANIFEST_PATH),
+    )
     if Path(PDF_LIBRARY_PATH).exists():
         scan_report = app.state.pdf_registration_service.rebuild_catalog()
         logger.info("PDF library catalog rebuilt: %s", scan_report)

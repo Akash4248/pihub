@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+TEXTBOOKS_ROOT = Path(os.getenv("TEXTBOOKS_ROOT", str(ROOT.parents[1] / "TEXTBOOKS")))
 PY = ROOT / ".venv" / "bin" / "python"
 LOCAL_RUN = ROOT / ".local_run"
 LOCAL_RUN.mkdir(parents=True, exist_ok=True)
@@ -32,7 +33,8 @@ env_vars = {
     "CURRICULUM_BUILD_DIR": str(LOCAL_RUN / "curriculum"),
     "CURRICULUM_MANIFEST_PATH": str(LOCAL_RUN / "curriculum" / "curriculum_manifest.json"),
     "PACKS_DIR": str(LOCAL_RUN / "pihub_packs"),
-    "PDF_LIBRARY_PATH": str(LOCAL_RUN / "textbooks"),
+    "TEXTBOOKS_ROOT": str(TEXTBOOKS_ROOT),
+    "PDF_LIBRARY_PATH": str(TEXTBOOKS_ROOT),
     "PDF_MANIFEST_PATH": str(LOCAL_RUN / "packs" / "pdf_manifests" / "pdf_manifest.json"),
     "PIHUB_DB_PATH": str(LOCAL_RUN / "pihub.sqlite3"),
     "CACHE_DIR": str(LOCAL_RUN / "pihub_cache"),

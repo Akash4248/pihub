@@ -26,9 +26,12 @@ import logging
 import sys
 from pathlib import Path
 
-# Add current directory to path for imports
+# Add current directory and backend root to path for imports
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(BACKEND_ROOT))
 
+from shared.textbook_paths import find_textbooks_root
 from bulk_curriculum_compiler import BulkCurriculumCompiler
 from curriculum_manifest_builder import CurriculumManifestBuilder
 from curriculum_scanner import CurriculumScanner
@@ -141,24 +144,11 @@ Examples:
         if args.textbooks_root:
             textbooks_root = Path(args.textbooks_root).resolve()
         else:
-            # Try to find TEXTBOOKS directory
-            current = Path.cwd()
-            textbooks_root = None
-
-            for _ in range(5):
-                candidate = current / "TEXTBOOKS"
-                if candidate.exists():
-                    textbooks_root = candidate
-                    break
-
-                if current.parent == current:
-                    break
-
-                current = current.parent
-
+            textbooks_root = find_textbooks_root(Path(__file__))
             if not textbooks_root:
-                # Default fallback
-                textbooks_root = Path("/home/akash/Desktop/PIHUB/TEXTBOOKS")
+                raise ValueError(
+                    "Could not locate TEXTBOOKS. Pass --textbooks-root /path/to/TEXTBOOKS."
+                )
 
         output_path = Path(args.output)
 

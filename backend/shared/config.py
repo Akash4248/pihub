@@ -5,6 +5,8 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from shared.textbook_paths import default_textbooks_root
+
 
 def _resolve_storage_path(env_var_name: str, default_path: str, fallback_relative_path: str) -> str:
     val = os.getenv(env_var_name)
@@ -107,7 +109,7 @@ class Settings(BaseSettings):
     classroom_id: str = Field(default="class_001", alias="CLASSROOM_ID")
     
     # Curriculum Builder Settings
-    textbooks_root: str = Field(default_factory=lambda: _resolve_storage_path("TEXTBOOKS_ROOT", "/home/akash/Desktop/PIHUB/TEXTBOOKS", "textbooks"), alias="TEXTBOOKS_ROOT")
+    textbooks_root: str = Field(default_factory=lambda: default_textbooks_root(Path(".local_run") / "textbooks"), alias="TEXTBOOKS_ROOT")
     curriculum_build_dir: str = Field(default_factory=lambda: _resolve_storage_path("CURRICULUM_BUILD_DIR", "/shared/curriculum", "curriculum"), alias="CURRICULUM_BUILD_DIR")
     curriculum_manifest_path: str = Field(default_factory=lambda: _resolve_storage_path("CURRICULUM_MANIFEST_PATH", "/shared/curriculum/curriculum_manifest.json", "curriculum/curriculum_manifest.json"), alias="CURRICULUM_MANIFEST_PATH")
     pack_registry_path: str = Field(default_factory=lambda: _resolve_storage_path("PACK_REGISTRY_PATH", "/shared/curriculum/pack_registry.json", "curriculum/pack_registry.json"), alias="PACK_REGISTRY_PATH")

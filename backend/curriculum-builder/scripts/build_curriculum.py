@@ -29,6 +29,7 @@ from build_utils import (
 from curriculum_scanner import CurriculumScanner
 from subject_mapper import SubjectMapper
 from shared.text_normalization import normalize_curriculum_name
+from shared.textbook_paths import find_textbooks_root
 
 logger = logging.getLogger("build_curriculum")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -194,16 +195,9 @@ def run(files: List[Path], dry_run: bool = True, force: bool = False) -> Dict[st
 
         # Preserve original relative path under /shared/content so content-pipeline
         # can extract grade/subject metadata from the file path.
-        # Locate the repo TEXTBOOKS directory by walking upward from this file
-        TEXTBOOKS_ROOT = None
-        for ancestor in Path(__file__).resolve().parents:
-            candidate = ancestor / "TEXTBOOKS"
-            if candidate.exists():
-                TEXTBOOKS_ROOT = candidate
-                break
+        TEXTBOOKS_ROOT = find_textbooks_root(Path(__file__))
         if TEXTBOOKS_ROOT is None:
-            # last resort: assume workspace root
-            TEXTBOOKS_ROOT = Path("/home/akash/Desktop/PIHUB/TEXTBOOKS")
+            raise ValueError("Could not locate TEXTBOOKS directory")
 
         logger.debug("TEXTBOOKS_ROOT=%s, file_path=%s", TEXTBOOKS_ROOT, file_path)
         try:
@@ -286,7 +280,7 @@ def run(files: List[Path], dry_run: bool = True, force: bool = False) -> Dict[st
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--textbooks-root", type=Path, default=Path("/home/akash/Desktop/PIHUB/TEXTBOOKS"))
+    parser.add_argument("--textbooks-root", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("--pilot", action="store_true", help="Run single-chapter pilot (first PDF)")
     parser.add_argument("--force", action="store_true", help="Rebuild even when cache says a chapter is unchanged")
@@ -294,7 +288,11 @@ def main():
     parser.add_argument("--subject")
     args = parser.parse_args()
 
-    scanner = CurriculumScanner(args.textbooks_root)
+    textbooks_root = Path(args.textbooks_root).resolve() if args.textbooks_root else find_textbooks_root(Path(__file__))
+    if textbooks_root is None:
+        logger.error("Could not locate TEXTBOOKS directory")
+        return 1
+    scanner = CurriculumScanner(textbooks_root)
     scan = scanner.scan()
 
     normalized_subject = SubjectMapper.normalize_subject(normalize_curriculum_name(args.subject)) if args.subject else None
@@ -311,7 +309,7 @@ def main():
             rel = ch.get("relative_path")
             if not rel:
                 continue
-            files.append(Path(args.textbooks_root) / rel)
+            files.append(textbooks_root / rel)
 
     if not files:
         logger.error("No textbook files found to process")

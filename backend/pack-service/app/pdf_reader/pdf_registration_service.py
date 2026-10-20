@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
+
+from shared.chapter_naming import CHAPTER, classify_pdf_path
 
 from .chapter_page_mapper import ChapterPageMapper
 from .models import PdfBook, PdfChapterMapping
@@ -21,10 +24,35 @@ SUBJECT_ALIASES = {
 
 
 class PdfRegistrationService:
-    def __init__(self, repository: PdfRepository, library_root: Path) -> None:
+    def __init__(
+        self,
+        repository: PdfRepository,
+        library_root: Path,
+        curriculum_manifest_path: Path | None = None,
+    ) -> None:
         self.repository = repository
         self.library_root = library_root.resolve()
         self.mapper = ChapterPageMapper()
+        self.chapter_overrides = self._load_chapter_overrides(curriculum_manifest_path)
+
+    def _load_chapter_overrides(self, manifest_path: Path | None) -> dict[str, dict[str, Any]]:
+        if manifest_path is None or not manifest_path.exists():
+            return {}
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        overrides: dict[str, dict[str, Any]] = {}
+        for entry in (manifest.get("curriculum_index") or {}).values():
+            for chapter in entry.get("chapters") or []:
+                relative_path = str(chapter.get("relative_path") or "").lstrip("./")
+                chapter_id = str(chapter.get("chapter_id") or "")
+                if relative_path and chapter_id:
+                    overrides[relative_path] = {
+                        "chapter_id": chapter_id,
+                        "chapter_title": chapter.get("chapter_name") or chapter.get("chapter_title"),
+                    }
+        return overrides
 
     def register_pdf(
         self,
@@ -38,7 +66,17 @@ class PdfRegistrationService:
         if not self.validate_pdf(pdf_path):
             raise FileNotFoundError(f"PDF not found or invalid: {pdf_path}")
         subject = self._normalize_subject(subject)
-        mapping = self.mapper.mapping_for_file(pdf_path, grade=grade, subject=subject, language=language)
+        try:
+            relative_path = pdf_path.relative_to(self.library_root).as_posix()
+        except ValueError:
+            relative_path = pdf_path.name
+        mapping = self.mapper.mapping_for_file(
+            pdf_path,
+            grade=grade,
+            subject=subject,
+            language=language,
+            relative_path=relative_path,
+        )
         path_context = self._path_context(pdf_path)
         if path_context:
             mapping.chapter_id = f"{mapping.chapter_id}_{self.mapper.slug(path_context)}"
@@ -156,11 +194,18 @@ class PdfRegistrationService:
         parts = [part for part in relative.parts if part]
         if len(parts) < 2:
             return None
-        subject = self._normalize_subject(parts[0])
+        relative_path = Path(*parts).as_posix()
+        if classify_pdf_path(relative_path) != CHAPTER:
+            return None
+        subject = self._subject_from_parts(parts)
+        if subject is None:
+            return None
         grade = self._grade_from_parts(parts)
         if grade is None:
             return None
         chapter = self.mapper.chapter_title_from_file(pdf_path)
+        override = self.chapter_overrides.get(relative_path, {})
+        chapter = override.get("chapter_title") or chapter
         return {
             "pdf_path": str(pdf_path.resolve()),
             "grade": grade,
@@ -168,7 +213,9 @@ class PdfRegistrationService:
             "language": self._language_from_path(pdf_path),
             "book": chapter,
             "chapter": chapter,
+            "chapter_id": override.get("chapter_id"),
             "page_count": self.mapper.page_count(pdf_path),
+            "relative_path": relative_path,
         }
 
     def _book_from_catalog_entry(self, entry: dict[str, Any]) -> PdfBook:
@@ -180,20 +227,24 @@ class PdfRegistrationService:
         language = str(entry["language"])
         chapter = str(entry["chapter"])
         path_context = self._path_context(pdf_path)
-        chapter_id = self.mapper.chapter_id(grade, subject, chapter, language)
+        legacy_chapter_id = self.mapper.chapter_id(grade, subject, chapter, language)
         if path_context:
-            chapter_id = f"{chapter_id}_{self.mapper.slug(path_context)}"
+            legacy_chapter_id = f"{legacy_chapter_id}_{self.mapper.slug(path_context)}"
+        chapter_id = str(entry.get("chapter_id") or legacy_chapter_id)
+        aliases = set(self.mapper.aliases_for(grade, subject, chapter, language))
+        aliases.add(legacy_chapter_id)
+        aliases.add(chapter_id)
         mapping = PdfChapterMapping(
             chapter_id=chapter_id,
             chapter_title=chapter,
             start_page=1,
             end_page=int(entry["page_count"]),
-            aliases=self.mapper.aliases_for(grade, subject, chapter, language),
+            aliases=sorted(alias for alias in aliases if alias),
             metadata={
                 "source": "ncert_textbook_catalog",
                 "chapter_level_pdf": True,
                 "pdf_file": pdf_path.name,
-                "relative_path": str(pdf_path.relative_to(self.library_root)) if self.library_root in pdf_path.parents else str(pdf_path),
+                "relative_path": str(entry.get("relative_path") or (pdf_path.relative_to(self.library_root) if self.library_root in pdf_path.parents else pdf_path)),
                 "path_context": path_context,
             },
         )
@@ -222,21 +273,49 @@ class PdfRegistrationService:
             relative_parent = pdf_path.parent.relative_to(self.library_root)
         except ValueError:
             relative_parent = pdf_path.parent
-        parts = [part for part in relative_parent.parts if re.search(r"\bpart\s*\d+\b", part, re.I)]
+        parts = [part for part in relative_parent.parts if re.search(r"(?:^|[\s_-])part[\s_-]*\d+", part, re.I)]
         return " ".join(parts)
 
     @staticmethod
     def _grade_from_parts(parts: list[str]) -> int | None:
         for part in parts:
-            match = re.search(r"\b(?:class|grade)\s*(\d{1,2})\b", part, re.I)
+            match = re.search(r"\b(?:class|grade)[\s_-]*(\d{1,2})(?:st|nd|rd|th)?\b", part, re.I)
             if match:
                 return int(match.group(1))
         return None
 
+    @classmethod
+    def _subject_from_parts(cls, parts: list[str]) -> str | None:
+        for part in parts[:-1]:
+            normalized = cls._normalize_subject(part)
+            if normalized in {"maths", "science", "social_science", "english", "hindi", "chemistry", "physics", "biology"}:
+                return normalized
+        return cls._normalize_subject(parts[0]) if parts else None
+
     @staticmethod
     def _normalize_subject(value: str) -> str:
         normalized = value.replace("_", " ").strip().lower()
-        return SUBJECT_ALIASES.get(normalized, normalized.replace(" ", "_"))
+        normalized = re.sub(r"(?:^|[\s_-])part[\s_-]*\d+\b", "", normalized).strip()
+        if normalized in SUBJECT_ALIASES:
+            return SUBJECT_ALIASES[normalized]
+
+        tokens = (
+            ("social science", "social_science"),
+            ("social", "social_science"),
+            ("mathematics", "maths"),
+            ("maths", "maths"),
+            ("math", "maths"),
+            ("chemistry", "chemistry"),
+            ("physics", "physics"),
+            ("biology", "biology"),
+            ("science", "science"),
+            ("english", "english"),
+            ("hindi", "hindi"),
+        )
+        for token, subject in tokens:
+            if re.search(rf"(?:^|[\s_-]){re.escape(token)}(?:$|[\s_-])", normalized):
+                return subject
+        return normalized.replace(" ", "_")
 
     @staticmethod
     def _language_from_path(pdf_path: Path) -> str:

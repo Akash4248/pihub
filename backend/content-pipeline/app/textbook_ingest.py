@@ -28,6 +28,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from shared.chapter_naming import canonical_chapter_title, chapter_title_for_pdf
 from shared.config import get_settings
 from shared.text_normalization import normalize_curriculum_name, normalize_language_code
 
@@ -190,9 +191,7 @@ class TextbookMetadataExtractor:
             metadata["language"] = "en"
 
         # Extract textbook name / chapter from filename and sanitize
-        # cleanup trailing dashes, separators, and trailing numbers
-        name = re.sub(r"[\(\)\[\]]", "", filename)
-        name = normalize_curriculum_name(name)
+        name = chapter_title_for_pdf(file_path, file_path.name)
         metadata["textbook_name"] = name
         # Also expose a cleaned 'chapter' field for downstream use
         metadata["chapter"] = name
@@ -205,15 +204,14 @@ class TextbookMetadataExtractor:
         language = merged.get("language")
         if not language or normalize_language_code(language) == "en":
             merged["language"] = cls.detect_language_from_text(text)
-        # Clean chapter trailing characters
         if merged.get("chapter"):
-            merged["chapter"] = normalize_curriculum_name(str(merged.get("chapter")))
+            merged["chapter"] = canonical_chapter_title(str(merged.get("chapter")))
         if merged.get("subject"):
             merged["subject"] = normalize_curriculum_name(str(merged.get("subject")))
         if merged.get("language"):
             merged["language"] = normalize_language_code(str(merged.get("language"))) or normalize_curriculum_name(str(merged.get("language")))
         if merged.get("textbook_name"):
-            merged["textbook_name"] = normalize_curriculum_name(str(merged.get("textbook_name")))
+            merged["textbook_name"] = canonical_chapter_title(str(merged.get("textbook_name")))
         return merged
 
 

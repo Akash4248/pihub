@@ -12,6 +12,9 @@ class SubjectMapper:
     SUBJECT_PATTERNS = {
         "mathematics": [r"maths?", r"math\s", r"numeracy"],
         "science": [r"science(?!\s)", r"sciences\s", r"science\s"],
+        "chemistry": [r"chemistry"],
+        "physics": [r"physics"],
+        "biology": [r"biology"],
         "social_science": [r"social\s+science", r"social science", r"ss\s+"],
         "english": [r"english\s", r"language\s+english"],
         "hindi": [r"hindi\s", r"language\s+hindi"],
@@ -22,6 +25,9 @@ class SubjectMapper:
     SUBJECT_ALIASES = {
         "math": "mathematics",
         "maths": "mathematics",
+        "chem": "chemistry",
+        "phy": "physics",
+        "bio": "biology",
         "social": "social_science",
         "ss": "social_science",
         "computers": "computer_science",
@@ -52,9 +58,9 @@ class SubjectMapper:
                 if re.search(pattern, dir_name, re.IGNORECASE):
                     return subject
 
-        # Check for aliases
+        # Check for aliases as standalone tokens, not substrings ("ss" in "class").
         for alias, normalized in cls.SUBJECT_ALIASES.items():
-            if alias in dir_name:
+            if re.search(rf"(?:^|[\s_-]){re.escape(alias)}(?:$|[\s_-])", dir_name, re.IGNORECASE):
                 return normalized
 
         return None

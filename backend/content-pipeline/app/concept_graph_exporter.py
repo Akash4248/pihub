@@ -32,73 +32,90 @@ class ConceptGraphExporter:
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         conn = sqlite3.connect(str(out_path))
-        cursor = conn.cursor()
+        try:
+            conn.execute("PRAGMA foreign_keys = ON;")
+            cursor = conn.cursor()
 
-        # 1. Create concept_nodes table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS concept_nodes (
-                concept_id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                subject TEXT NOT NULL,
-                grade INTEGER NOT NULL,
-                chapter_id TEXT,
-                difficulty TEXT DEFAULT 'intermediate',
-                summary TEXT,
-                learning_objectives TEXT
-            )
-        """)
-
-        # 2. Create concept_prerequisites table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS concept_prerequisites (
-                source_concept_id TEXT NOT NULL,
-                target_concept_id TEXT NOT NULL,
-                relation_type TEXT DEFAULT 'PREREQUISITE',
-                weight REAL DEFAULT 1.0,
-                PRIMARY KEY (source_concept_id, target_concept_id),
-                FOREIGN KEY (source_concept_id) REFERENCES concept_nodes(concept_id),
-                FOREIGN KEY (target_concept_id) REFERENCES concept_nodes(concept_id)
-            )
-        """)
-
-        # Use fallback seed concepts if none provided
-        if not concepts:
-            concepts = self._generate_default_concepts(subject, grade)
-        if not prerequisites:
-            prerequisites = self._generate_default_prerequisites(concepts)
-
-        # Insert Concept Nodes
-        for c in concepts:
+            # 1. Create concept_nodes table
             cursor.execute("""
-                INSERT OR REPLACE INTO concept_nodes (
-                    concept_id, name, subject, grade, chapter_id, difficulty, summary, learning_objectives
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                c["concept_id"],
-                c["name"],
-                c.get("subject", subject),
-                c.get("grade", grade),
-                c.get("chapter_id", f"class_{grade}_{subject.lower()}_ch1"),
-                c.get("difficulty", "intermediate"),
-                c.get("summary", ""),
-                json.dumps(c.get("learning_objectives", [])),
-            ))
+                CREATE TABLE IF NOT EXISTS concept_nodes (
+                    concept_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    grade INTEGER NOT NULL,
+                    chapter_id TEXT,
+                    difficulty TEXT DEFAULT 'intermediate',
+                    summary TEXT,
+                    learning_objectives TEXT
+                )
+            """)
 
-        # Insert Concept Prerequisites
-        for p in prerequisites:
+            # 2. Create concept_prerequisites table
             cursor.execute("""
-                INSERT OR REPLACE INTO concept_prerequisites (
-                    source_concept_id, target_concept_id, relation_type, weight
-                ) VALUES (?, ?, ?, ?)
-            """, (
-                p["source_concept_id"],
-                p["target_concept_id"],
-                p.get("relation_type", "PREREQUISITE"),
-                p.get("weight", 1.0),
-            ))
+                CREATE TABLE IF NOT EXISTS concept_prerequisites (
+                    source_concept_id TEXT NOT NULL,
+                    target_concept_id TEXT NOT NULL,
+                    relation_type TEXT DEFAULT 'PREREQUISITE',
+                    weight REAL DEFAULT 1.0,
+                    PRIMARY KEY (source_concept_id, target_concept_id),
+                    FOREIGN KEY (source_concept_id) REFERENCES concept_nodes(concept_id),
+                    FOREIGN KEY (target_concept_id) REFERENCES concept_nodes(concept_id)
+                )
+            """)
 
-        conn.commit()
-        conn.close()
+            # Use fallback seed concepts if none provided
+            if not concepts:
+                concepts = self._generate_default_concepts(subject, grade)
+            if not prerequisites:
+                prerequisites = self._generate_default_prerequisites(concepts)
+
+            # Insert Concept Nodes
+            for c in concepts:
+                cursor.execute("""
+                    INSERT INTO concept_nodes (
+                        concept_id, name, subject, grade, chapter_id, difficulty, summary, learning_objectives
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(concept_id) DO UPDATE SET
+                        name = excluded.name,
+                        subject = excluded.subject,
+                        grade = excluded.grade,
+                        chapter_id = excluded.chapter_id,
+                        difficulty = excluded.difficulty,
+                        summary = excluded.summary,
+                        learning_objectives = excluded.learning_objectives
+                """, (
+                    c["concept_id"],
+                    c["name"],
+                    c.get("subject", subject),
+                    c.get("grade", grade),
+                    c.get("chapter_id", f"class_{grade}_{subject.lower()}_ch1"),
+                    c.get("difficulty", "intermediate"),
+                    c.get("summary", ""),
+                    json.dumps(c.get("learning_objectives", [])),
+                ))
+
+            # Insert Concept Prerequisites
+            for p in prerequisites:
+                cursor.execute("""
+                    INSERT INTO concept_prerequisites (
+                        source_concept_id, target_concept_id, relation_type, weight
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(source_concept_id, target_concept_id) DO UPDATE SET
+                        relation_type = excluded.relation_type,
+                        weight = excluded.weight
+                """, (
+                    p["source_concept_id"],
+                    p["target_concept_id"],
+                    p.get("relation_type", "PREREQUISITE"),
+                    p.get("weight", 1.0),
+                ))
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
         logger.info(f"Exported concept graph DB with {len(concepts)} nodes and {len(prerequisites)} edges to {out_path}")
         return str(out_path)

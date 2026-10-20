@@ -1,0 +1,2145 @@
+{
+  "metadata": {
+    "scanned_at": "2026-05-18T09:37:06.156846",
+    "textbooks_root": "/home/akash/Desktop/PIHUB/TEXTBOOKS",
+    "total_pdfs": 320,
+    "grades": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "subjects": [
+      "mathematics",
+      "science"
+    ],
+    "languages": [
+      "english",
+      "kannada"
+    ]
+  },
+  "curriculum": {
+    "grade_unknown_unknown_kannada": {
+      "grade": null,
+      "subject": null,
+      "language": "kannada",
+      "chapters": [
+        {
+          "chapter": "10th Kan Maths Part",
+          "filename": "10th Kan Maths Part- 1 2025-26.pdf",
+          "relative_path": "KANNADA_MEDIUM/10th Kan Maths Part- 1 2025-26.pdf",
+          "part": null
+        },
+        {
+          "chapter": "10th Kan Maths Part",
+          "filename": "10th Kan Maths Part - 2  2025-26.pdf",
+          "relative_path": "KANNADA_MEDIUM/10th Kan Maths Part - 2  2025-26.pdf",
+          "part": null
+        },
+        {
+          "chapter": "10th Kan Science Part",
+          "filename": "10th Kan Science Part-1 2025-26.pdf",
+          "relative_path": "KANNADA_MEDIUM/10th Kan Science Part-1 2025-26.pdf",
+          "part": null
+        },
+        {
+          "chapter": "10th Kan Science Part",
+          "filename": "10th Kan Science Part-2  2025-26.pdf",
+          "relative_path": "KANNADA_MEDIUM/10th Kan Science Part-2  2025-26.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_8_mathematics_english_part1": {
+      "grade": 8,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Proportional Reasoning",
+          "filename": "Proportional Reasoning – 1.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/Proportional Reasoning – 1.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "A Square and A Cube",
+          "filename": "A Square and A Cube.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/A Square and A Cube.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Quadrilaterals",
+          "filename": "Quadrilaterals.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/Quadrilaterals.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/introduction.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Power Play",
+          "filename": "Power Play.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/Power Play.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Number Play",
+          "filename": "Number Play.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/Number Play.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "A Story of Numbers",
+          "filename": "A Story of Numbers.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/A Story of Numbers.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "We Distribute, Yet Things Multiply",
+          "filename": "We Distribute, Yet Things Multiply.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 1/We Distribute, Yet Things Multiply.pdf",
+          "part": 1
+        }
+      ]
+    },
+    "grade_3_mathematics_english": {
+      "grade": 3,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Fun at Class Party!",
+          "filename": "Fun at Class Party!.pdf",
+          "relative_path": "maths 1 to 10/class 3/Fun at Class Party!.pdf",
+          "part": null
+        },
+        {
+          "chapter": "House of Hundreds – II",
+          "filename": "House of Hundreds – II.pdf",
+          "relative_path": "maths 1 to 10/class 3/House of Hundreds – II.pdf",
+          "part": null
+        },
+        {
+          "chapter": "The Surajkund Fair",
+          "filename": "The Surajkund Fair.pdf",
+          "relative_path": "maths 1 to 10/class 3/The Surajkund Fair.pdf",
+          "part": null
+        },
+        {
+          "chapter": "House of Hundreds – I",
+          "filename": "House of Hundreds – I.pdf",
+          "relative_path": "maths 1 to 10/class 3/House of Hundreds – I.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fun with Shapes",
+          "filename": "Fun with Shapes.pdf",
+          "relative_path": "maths 1 to 10/class 3/Fun with Shapes.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Time Goes On",
+          "filename": "Time Goes On.pdf",
+          "relative_path": "maths 1 to 10/class 3/Time Goes On.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fair Share",
+          "filename": "Fair Share.pdf",
+          "relative_path": "maths 1 to 10/class 3/Fair Share.pdf",
+          "part": null
+        },
+        {
+          "chapter": "What’s in a Name",
+          "filename": "What’s in a Name.pdf",
+          "relative_path": "maths 1 to 10/class 3/What’s in a Name.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 3/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Raksha Bandhan",
+          "filename": "Raksha Bandhan.pdf",
+          "relative_path": "maths 1 to 10/class 3/Raksha Bandhan.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Toy Joy",
+          "filename": "Toy Joy.pdf",
+          "relative_path": "maths 1 to 10/class 3/Toy Joy.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Give and Take",
+          "filename": "Give and Take.pdf",
+          "relative_path": "maths 1 to 10/class 3/Give and Take.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Vacation with My Nani Maa",
+          "filename": "Vacation with My Nani Maa.pdf",
+          "relative_path": "maths 1 to 10/class 3/Vacation with My Nani Maa.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Double Century",
+          "filename": "Double Century.pdf",
+          "relative_path": "maths 1 to 10/class 3/Double Century.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Filling and Lifting",
+          "filename": "Filling and Lifting.pdf",
+          "relative_path": "maths 1 to 10/class 3/Filling and Lifting.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_7_mathematics_english_part2": {
+      "grade": 7,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Geometric Twins",
+          "filename": "Geometric Twins.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Geometric Twins.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Another Peek Beyond the Point",
+          "filename": "Another Peek Beyond the Point.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Another Peek Beyond the Point.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Operations with Integers",
+          "filename": "Operations with Integers.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Operations with Integers.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Finding the Unknown",
+          "filename": "Finding the Unknown.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Finding the Unknown.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/introduction.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Connecting the Dots...",
+          "filename": "Connecting the Dots....pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Connecting the Dots....pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Constructions and Tilings",
+          "filename": "Constructions and Tilings.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Constructions and Tilings.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Finding Common Ground",
+          "filename": "Finding Common Ground.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 2/Finding Common Ground.pdf",
+          "part": 2
+        }
+      ]
+    },
+    "grade_7_mathematics_english_part1": {
+      "grade": 7,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Parallel and Intersecting Lines",
+          "filename": "Parallel and Intersecting Lines.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/Parallel and Intersecting Lines.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Large Numbers Around Us",
+          "filename": "Large Numbers Around Us.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/Large Numbers Around Us.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "A Peek Beyond the Point",
+          "filename": "A Peek Beyond the Point.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/A Peek Beyond the Point.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Arithmetic Expressions",
+          "filename": "Arithmetic Expressions.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/Arithmetic Expressions.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/introduction.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Expressions Using Letter Numbers",
+          "filename": "Expressions Using Letter Numbers.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/Expressions Using Letter Numbers.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Working with Fractions",
+          "filename": "Working with Fractions.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/Working with Fractions.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "A Tale of Three Intersecting Lines",
+          "filename": "A Tale of Three Intersecting Lines.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/A Tale of Three Intersecting Lines.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Number Play",
+          "filename": "Number Play.pdf",
+          "relative_path": "maths 1 to 10/class 7 part 1/Number Play.pdf",
+          "part": 1
+        }
+      ]
+    },
+    "grade_5_mathematics_english": {
+      "grade": 5,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Shapes and Patterns",
+          "filename": "Shapes and Patterns.pdf",
+          "relative_path": "maths 1 to 10/class 5/Shapes and Patterns.pdf",
+          "part": null
+        },
+        {
+          "chapter": "We the Travellers—II",
+          "filename": "We the Travellers—II.pdf",
+          "relative_path": "maths 1 to 10/class 5/We the Travellers—II.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Racing Seconds",
+          "filename": "Racing Seconds.pdf",
+          "relative_path": "maths 1 to 10/class 5/Racing Seconds.pdf",
+          "part": null
+        },
+        {
+          "chapter": "The Dairy Farm",
+          "filename": "The Dairy Farm.pdf",
+          "relative_path": "maths 1 to 10/class 5/The Dairy Farm.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Angles as Turns",
+          "filename": "Angles as Turns.pdf",
+          "relative_path": "maths 1 to 10/class 5/Angles as Turns.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Symmetrical Designs",
+          "filename": "Symmetrical Designs.pdf",
+          "relative_path": "maths 1 to 10/class 5/Symmetrical Designs.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Maps and Locations",
+          "filename": "Maps and Locations.pdf",
+          "relative_path": "maths 1 to 10/class 5/Maps and Locations.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Grandmother’s Quilt",
+          "filename": "Grandmother’s Quilt.pdf",
+          "relative_path": "maths 1 to 10/class 5/Grandmother’s Quilt.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 5/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Data Through Pictures",
+          "filename": "Data Through Pictures.pdf",
+          "relative_path": "maths 1 to 10/class 5/Data Through Pictures.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Coconut Farm",
+          "filename": "Coconut Farm.pdf",
+          "relative_path": "maths 1 to 10/class 5/Coconut Farm.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fractions",
+          "filename": "Fractions.pdf",
+          "relative_path": "maths 1 to 10/class 5/Fractions.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Far and Near",
+          "filename": "Far and Near.pdf",
+          "relative_path": "maths 1 to 10/class 5/Far and Near.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Weight and Capacity",
+          "filename": "Weight and Capacity.pdf",
+          "relative_path": "maths 1 to 10/class 5/Weight and Capacity.pdf",
+          "part": null
+        },
+        {
+          "chapter": "We the Travellers—I",
+          "filename": "We the Travellers—I.pdf",
+          "relative_path": "maths 1 to 10/class 5/We the Travellers—I.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Animal Jumps",
+          "filename": "Animal Jumps.pdf",
+          "relative_path": "maths 1 to 10/class 5/Animal Jumps.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_6_mathematics_english": {
+      "grade": 6,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Data Handling and Presentation",
+          "filename": "Data Handling and Presentation.pdf",
+          "relative_path": "maths 1 to 10/class 6/Data Handling and Presentation.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Perimeter and Area",
+          "filename": "Perimeter and Area.pdf",
+          "relative_path": "maths 1 to 10/class 6/Perimeter and Area.pdf",
+          "part": null
+        },
+        {
+          "chapter": "The Other Side of Zero",
+          "filename": "The Other Side of Zero.pdf",
+          "relative_path": "maths 1 to 10/class 6/The Other Side of Zero.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Lines and Angles",
+          "filename": "Lines and Angles.pdf",
+          "relative_path": "maths 1 to 10/class 6/Lines and Angles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Symmetry",
+          "filename": "Symmetry.pdf",
+          "relative_path": "maths 1 to 10/class 6/Symmetry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Patterns in Mathematics",
+          "filename": "Patterns in Mathematics.pdf",
+          "relative_path": "maths 1 to 10/class 6/Patterns in Mathematics.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Prime Time",
+          "filename": "Prime Time.pdf",
+          "relative_path": "maths 1 to 10/class 6/Prime Time.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fractions",
+          "filename": "Fractions.pdf",
+          "relative_path": "maths 1 to 10/class 6/Fractions.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Number Play",
+          "filename": "Number Play.pdf",
+          "relative_path": "maths 1 to 10/class 6/Number Play.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Playing with Constructions",
+          "filename": "Playing with Constructions.pdf",
+          "relative_path": "maths 1 to 10/class 6/Playing with Constructions.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_1_mathematics_english": {
+      "grade": 1,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Fun with Numbers (Numbers 21 to 99)",
+          "filename": "Fun with Numbers (Numbers 21 to 99).pdf",
+          "relative_path": "maths 1 to 10/class 1/Fun with Numbers (Numbers 21 to 99).pdf",
+          "part": null
+        },
+        {
+          "chapter": "How Many (Addition and Subtraction of Single Digit Numbers)",
+          "filename": "How Many (Addition and Subtraction of Single Digit Numbers).pdf",
+          "relative_path": "maths 1 to 10/class 1/How Many (Addition and Subtraction of Single Digit Numbers).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Utsav (Patterns)",
+          "filename": "Utsav (Patterns).pdf",
+          "relative_path": "maths 1 to 10/class 1/Utsav (Patterns).pdf",
+          "part": null
+        },
+        {
+          "chapter": "How do I Spend my Day (Time)",
+          "filename": "How do I Spend my Day (Time).pdf",
+          "relative_path": "maths 1 to 10/class 1/How do I Spend my Day (Time).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Making 10 (Numbers 10 to 20)",
+          "filename": "Making 10 (Numbers 10 to 20).pdf",
+          "relative_path": "maths 1 to 10/class 1/Making 10 (Numbers 10 to 20).pdf",
+          "part": null
+        },
+        {
+          "chapter": "So Many Toys (Data Handling)",
+          "filename": "So Many Toys (Data Handling).pdf",
+          "relative_path": "maths 1 to 10/class 1/So Many Toys (Data Handling).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Lina’s Family (Measurement)",
+          "filename": "Lina’s Family (Measurement).pdf",
+          "relative_path": "maths 1 to 10/class 1/Lina’s Family (Measurement).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Vegetable Farm (Addition and Subtraction up to 20)",
+          "filename": "Vegetable Farm (Addition and Subtraction up to 20).pdf",
+          "relative_path": "maths 1 to 10/class 1/Vegetable Farm (Addition and Subtraction up to 20).pdf",
+          "part": null
+        },
+        {
+          "chapter": "How Many Times (Multiplication)",
+          "filename": "How Many Times (Multiplication).pdf",
+          "relative_path": "maths 1 to 10/class 1/How Many Times (Multiplication).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Mango Treat (Numbers 1 to 9)",
+          "filename": "Mango Treat (Numbers 1 to 9).pdf",
+          "relative_path": "maths 1 to 10/class 1/Mango Treat (Numbers 1 to 9).pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 1/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "What is Long What is Round (Shapes)",
+          "filename": "What is Long What is Round (Shapes).pdf",
+          "relative_path": "maths 1 to 10/class 1/What is Long What is Round (Shapes).pdf",
+          "part": null
+        },
+        {
+          "chapter": "How Much Can We Spend (Money)",
+          "filename": "How Much Can We Spend (Money).pdf",
+          "relative_path": "maths 1 to 10/class 1/How Much Can We Spend (Money).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Finding the Furry Cat! (Pre-number Concepts)",
+          "filename": "Finding the Furry Cat! (Pre-number Concepts).pdf",
+          "relative_path": "maths 1 to 10/class 1/Finding the Furry Cat! (Pre-number Concepts).pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_10_mathematics_english": {
+      "grade": 10,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Quadratic Equations",
+          "filename": "Quadratic Equations.pdf",
+          "relative_path": "maths 1 to 10/class 10/Quadratic Equations.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Probability",
+          "filename": "Probability.pdf",
+          "relative_path": "maths 1 to 10/class 10/Probability.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Real Numbers",
+          "filename": "Real Numbers.pdf",
+          "relative_path": "maths 1 to 10/class 10/Real Numbers.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Polynomials",
+          "filename": "Polynomials.pdf",
+          "relative_path": "maths 1 to 10/class 10/Polynomials.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Circles",
+          "filename": "Circles.pdf",
+          "relative_path": "maths 1 to 10/class 10/Circles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Coordinate Geometry",
+          "filename": "Coordinate Geometry.pdf",
+          "relative_path": "maths 1 to 10/class 10/Coordinate Geometry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Some Applications of Trigonometry",
+          "filename": "Some Applications of Trigonometry.pdf",
+          "relative_path": "maths 1 to 10/class 10/Some Applications of Trigonometry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Pair of Linear Equations in Two Variables",
+          "filename": "Pair of Linear Equations in Two Variables.pdf",
+          "relative_path": "maths 1 to 10/class 10/Pair of Linear Equations in Two Variables.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Introduction to Trigonometry",
+          "filename": "Introduction to Trigonometry.pdf",
+          "relative_path": "maths 1 to 10/class 10/Introduction to Trigonometry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 10/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Areas Related to Circles",
+          "filename": "Areas Related to Circles.pdf",
+          "relative_path": "maths 1 to 10/class 10/Areas Related to Circles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Arithmetic Progressions",
+          "filename": "Arithmetic Progressions.pdf",
+          "relative_path": "maths 1 to 10/class 10/Arithmetic Progressions.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Surface Areas and Volumes",
+          "filename": "Surface Areas and Volumes.pdf",
+          "relative_path": "maths 1 to 10/class 10/Surface Areas and Volumes.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Triangles",
+          "filename": "Triangles.pdf",
+          "relative_path": "maths 1 to 10/class 10/Triangles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Statistics",
+          "filename": "Statistics.pdf",
+          "relative_path": "maths 1 to 10/class 10/Statistics.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_8_mathematics_english_part2": {
+      "grade": 8,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Area",
+          "filename": "Area.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/Area.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Fractions in Disguise",
+          "filename": "Fractions in Disguise.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/Fractions in Disguise.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Exploring Some Geometric Themes",
+          "filename": "Exploring Some Geometric Themes.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/Exploring Some Geometric Themes.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/introduction.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Proportional Reasoning",
+          "filename": "Proportional Reasoning-2.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/Proportional Reasoning-2.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Tales by Dots and Lines",
+          "filename": "Tales by Dots and Lines.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/Tales by Dots and Lines.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "The Baudhayana-Pythagoras Theorem",
+          "filename": "The Baudhayana-Pythagoras Theorem.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/The Baudhayana-Pythagoras Theorem.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Algebra Play",
+          "filename": "Algebra Play.pdf",
+          "relative_path": "maths 1 to 10/class 8 part 2/Algebra Play.pdf",
+          "part": 2
+        }
+      ]
+    },
+    "grade_2_mathematics_english": {
+      "grade": 2,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Which Season is it (Measurement of Time)",
+          "filename": "Which Season is it (Measurement of Time).pdf",
+          "relative_path": "maths 1 to 10/class 2/Which Season is it (Measurement of Time).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Introduction",
+          "filename": "Introduction.pdf",
+          "relative_path": "maths 1 to 10/class 2/Introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Playing with Lines (Orientations of a line)",
+          "filename": "Playing with Lines (Orientations of a line).pdf",
+          "relative_path": "maths 1 to 10/class 2/Playing with Lines (Orientations of a line).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Decoration for Festival (Addition and Subtraction)",
+          "filename": "Decoration for Festival (Addition and Subtraction).pdf",
+          "relative_path": "maths 1 to 10/class 2/Decoration for Festival (Addition and Subtraction).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Shadow Story (Togalu) (2D Shapes)",
+          "filename": "Shadow Story (Togalu) (2D Shapes).pdf",
+          "relative_path": "maths 1 to 10/class 2/Shadow Story (Togalu) (2D Shapes).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Rani’s Gift (Measurement)",
+          "filename": "Rani’s Gift (Measurement).pdf",
+          "relative_path": "maths 1 to 10/class 2/Rani’s Gift (Measurement).pdf",
+          "part": null
+        },
+        {
+          "chapter": "A Day at the Beach (Counting in Groups)",
+          "filename": "A Day at the Beach (Counting in Groups).pdf",
+          "relative_path": "maths 1 to 10/class 2/A Day at the Beach (Counting in Groups).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Data Handling",
+          "filename": "Data Handling.pdf",
+          "relative_path": "maths 1 to 10/class 2/Data Handling.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Shapes Around Us (3D Shapes)",
+          "filename": "Shapes Around Us (3D Shapes).pdf",
+          "relative_path": "maths 1 to 10/class 2/Shapes Around Us (3D Shapes).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fun at the Fair (Money)",
+          "filename": "Fun at the Fair (Money).pdf",
+          "relative_path": "maths 1 to 10/class 2/Fun at the Fair (Money).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fun with Numbers (Numbers 1 to 100)",
+          "filename": "Fun with Numbers (Numbers 1 to 100).pdf",
+          "relative_path": "maths 1 to 10/class 2/Fun with Numbers (Numbers 1 to 100).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Grouping and Sharing (Multiplication and Division)",
+          "filename": "Grouping and Sharing (Multiplication and Division).pdf",
+          "relative_path": "maths 1 to 10/class 2/Grouping and Sharing (Multiplication and Division).pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_4_mathematics_english": {
+      "grade": 4,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Thousands Around Us",
+          "filename": "Thousands Around Us.pdf",
+          "relative_path": "maths 1 to 10/class 4/Thousands Around Us.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Measuring Length",
+          "filename": "Measuring Length.pdf",
+          "relative_path": "maths 1 to 10/class 4/Measuring Length.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Fun with Symmetry",
+          "filename": "Fun with Symmetry.pdf",
+          "relative_path": "maths 1 to 10/class 4/Fun with Symmetry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "The Transport Museum",
+          "filename": "The Transport Museum.pdf",
+          "relative_path": "maths 1 to 10/class 4/The Transport Museum.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Shapes Around Us",
+          "filename": "Shapes Around Us.pdf",
+          "relative_path": "maths 1 to 10/class 4/Shapes Around Us.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Ticking Clocks and Turning Calendar",
+          "filename": "Ticking Clocks and Turning Calendar.pdf",
+          "relative_path": "maths 1 to 10/class 4/Ticking Clocks and Turning Calendar.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Hide and Seek",
+          "filename": "Hide and Seek.pdf",
+          "relative_path": "maths 1 to 10/class 4/Hide and Seek.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 4/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Sharing and Measuring",
+          "filename": "Sharing and Measuring.pdf",
+          "relative_path": "maths 1 to 10/class 4/Sharing and Measuring.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Equal Groups",
+          "filename": "Equal Groups.pdf",
+          "relative_path": "maths 1 to 10/class 4/Equal Groups.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Data Handling",
+          "filename": "Data Handling.pdf",
+          "relative_path": "maths 1 to 10/class 4/Data Handling.pdf",
+          "part": null
+        },
+        {
+          "chapter": "The Cleanest Village",
+          "filename": "The Cleanest Village.pdf",
+          "relative_path": "maths 1 to 10/class 4/The Cleanest Village.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Pattern Around Us",
+          "filename": "Pattern Around Us.pdf",
+          "relative_path": "maths 1 to 10/class 4/Pattern Around Us.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Weigh it, Pour it",
+          "filename": "Weigh it, Pour it.pdf",
+          "relative_path": "maths 1 to 10/class 4/Weigh it, Pour it.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Elephants, Tigers and Leopards",
+          "filename": "Elephants, Tigers and Leopards.pdf",
+          "relative_path": "maths 1 to 10/class 4/Elephants, Tigers and Leopards.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_9_mathematics_english": {
+      "grade": 9,
+      "subject": "mathematics",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Quadrilaterals",
+          "filename": "Quadrilaterals.pdf",
+          "relative_path": "maths 1 to 10/class 9/Quadrilaterals.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Introduction to Euclid’s Geometry",
+          "filename": "Introduction to Euclid’s Geometry.pdf",
+          "relative_path": "maths 1 to 10/class 9/Introduction to Euclid’s Geometry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Polynomials",
+          "filename": "Polynomials.pdf",
+          "relative_path": "maths 1 to 10/class 9/Polynomials.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Circles",
+          "filename": "Circles.pdf",
+          "relative_path": "maths 1 to 10/class 9/Circles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Heron’s Formula",
+          "filename": "Heron’s Formula.pdf",
+          "relative_path": "maths 1 to 10/class 9/Heron’s Formula.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Linear Equations in Two Variables",
+          "filename": "Linear Equations in Two Variables.pdf",
+          "relative_path": "maths 1 to 10/class 9/Linear Equations in Two Variables.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Coordinate Geometry",
+          "filename": "Coordinate Geometry.pdf",
+          "relative_path": "maths 1 to 10/class 9/Coordinate Geometry.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Lines and Angles",
+          "filename": "Lines and Angles.pdf",
+          "relative_path": "maths 1 to 10/class 9/Lines and Angles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "maths 1 to 10/class 9/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Surface Areas and Volumes",
+          "filename": "Surface Areas and Volumes.pdf",
+          "relative_path": "maths 1 to 10/class 9/Surface Areas and Volumes.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Number Systems",
+          "filename": "Number Systems.pdf",
+          "relative_path": "maths 1 to 10/class 9/Number Systems.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Triangles",
+          "filename": "Triangles.pdf",
+          "relative_path": "maths 1 to 10/class 9/Triangles.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Statistics",
+          "filename": "Statistics.pdf",
+          "relative_path": "maths 1 to 10/class 9/Statistics.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_9_science_english_part3": {
+      "grade": 9,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 3 Poverty as a Challenge",
+          "filename": "Chapter 3 Poverty as a Challenge.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 3/Chapter 3 Poverty as a Challenge.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 1 The Story of Village Palampur",
+          "filename": "Chapter 1 The Story of Village Palampur.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 3/Chapter 1 The Story of Village Palampur.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "ECONOMICS",
+          "filename": "ECONOMICS.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 3/ECONOMICS.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 4 Food Security in India",
+          "filename": "Chapter 4 Food Security in India.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 3/Chapter 4 Food Security in India.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 2 People as Resource",
+          "filename": "Chapter 2 People as Resource.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 3/Chapter 2 People as Resource.pdf",
+          "part": 3
+        }
+      ]
+    },
+    "grade_7_science_english_part1": {
+      "grade": 7,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 10 The Constitution of India An Introduction",
+          "filename": "Chapter 10 The Constitution of India An Introduction.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 10 The Constitution of India An Introduction.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 9 From the Rulers to the Ruled Types of Governments",
+          "filename": "Chapter 9 From the Rulers to the Ruled Types of Governments.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 9 From the Rulers to the Ruled Types of Governments.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 6 The Age of Reorganisation",
+          "filename": "Chapter 6 The Age of Reorganisation.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 6 The Age of Reorganisation.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 12 Understanding Markets",
+          "filename": "Chapter 12 Understanding Markets.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 12 Understanding Markets.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 11 From Barter to Money",
+          "filename": "Chapter 11 From Barter to Money.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 11 From Barter to Money.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 7 The Gupta Era An Age of Tireless Creativity",
+          "filename": "Chapter 7 The Gupta Era An Age of Tireless Creativity.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 7 The Gupta Era An Age of Tireless Creativity.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Social Science textbook for  class 7 part 1",
+          "filename": "Social Science textbook for  class 7 part 1.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Social Science textbook for  class 7 part 1.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 3 Climates of India",
+          "filename": "Chapter 3 Climates of India.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 3 Climates of India.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 1 Geographical Diversity of India",
+          "filename": "Chapter 1 Geographical Diversity of India.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 1 Geographical Diversity of India.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 2 Understanding the Weather",
+          "filename": "Chapter 2 Understanding the Weather.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 2 Understanding the Weather.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 8 How the Land Becomes Sacred",
+          "filename": "Chapter 8 How the Land Becomes Sacred.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 8 How the Land Becomes Sacred.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 5 The Rise of Empires",
+          "filename": "Chapter 5 The Rise of Empires.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 5 The Rise of Empires.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 4 New Beginnings Cities and States",
+          "filename": "Chapter 4 New Beginnings Cities and States.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 1/Chapter 4 New Beginnings Cities and States.pdf",
+          "part": 1
+        }
+      ]
+    },
+    "grade_7_science_english_part2": {
+      "grade": 7,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 6 The State the Government and You",
+          "filename": "Chapter 6 The State the Government and You.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 6 The State the Government and You.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 5 India a Home to Many",
+          "filename": "Chapter 5 India a Home to Many.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 5 India a Home to Many.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Glossary",
+          "filename": "Glossary.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Glossary.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 3 Empires and Kingdoms 6th to 10th Centuries",
+          "filename": "Chapter 3 Empires and Kingdoms 6th to 10th Centuries.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 3 Empires and Kingdoms 6th to 10th Centuries.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 1 The Story of Indian Farming",
+          "filename": "Chapter 1 The Story of Indian Farming.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 1 The Story of Indian Farming.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 8 Banks and the Magic of Finance",
+          "filename": "Chapter 8 Banks and the Magic of Finance.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 8 Banks and the Magic of Finance.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 4 Turning Tides 11th and 12th Centuries",
+          "filename": "Chapter 4 Turning Tides 11th and 12th Centuries.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 4 Turning Tides 11th and 12th Centuries.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 7 Infrastructure Engine of Indias Development",
+          "filename": "Chapter 7 Infrastructure Engine of Indias Development.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 7 Infrastructure Engine of Indias Development.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Social Science textbook for  class 7 part 2",
+          "filename": "Social Science textbook for  class 7 part 2.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Social Science textbook for  class 7 part 2.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 2 India and Her Neighbours",
+          "filename": "Chapter 2 India and Her Neighbours.pdf",
+          "relative_path": "social science 6 -10/class 7th social science part 2/Chapter 2 India and Her Neighbours.pdf",
+          "part": 2
+        }
+      ]
+    },
+    "grade_10_science_english_part4": {
+      "grade": 10,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 5 Outcomes of Democracy",
+          "filename": "Chapter 5 Outcomes of Democracy.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 4/Chapter 5 Outcomes of Democracy.pdf",
+          "part": 4
+        },
+        {
+          "chapter": "Chapter 3 Gender Religion and Caste",
+          "filename": "Chapter 3 Gender Religion and Caste.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 4/Chapter 3 Gender Religion and Caste.pdf",
+          "part": 4
+        },
+        {
+          "chapter": "Democratic Politics-ii",
+          "filename": "Democratic Politics-ii.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 4/Democratic Politics-ii.pdf",
+          "part": 4
+        },
+        {
+          "chapter": "Chapter 4 Political Parties",
+          "filename": "Chapter 4 Political Parties.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 4/Chapter 4 Political Parties.pdf",
+          "part": 4
+        },
+        {
+          "chapter": "Chapter 2 Federalism",
+          "filename": "Chapter 2 Federalism.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 4/Chapter 2 Federalism.pdf",
+          "part": 4
+        },
+        {
+          "chapter": "Chapter 1 Power Sharing",
+          "filename": "Chapter 1 Power Sharing.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 4/Chapter 1 Power Sharing.pdf",
+          "part": 4
+        }
+      ]
+    },
+    "grade_9_science_english_part2": {
+      "grade": 9,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 3 Drainage",
+          "filename": "Chapter 3 Drainage.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/Chapter 3 Drainage.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 5 Natural Vegetation and Wildlife",
+          "filename": "Chapter 5 Natural Vegetation and Wildlife.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/Chapter 5 Natural Vegetation and Wildlife.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "CONTEMPORARY INDIA-I",
+          "filename": "CONTEMPORARY INDIA-I.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/CONTEMPORARY INDIA-I.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 6 Population",
+          "filename": "Chapter 6 Population.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/Chapter 6 Population.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 2 Physical Features of India",
+          "filename": "Chapter 2 Physical Features of India.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/Chapter 2 Physical Features of India.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 4 Climate",
+          "filename": "Chapter 4 Climate.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/Chapter 4 Climate.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 1 India Size and Location",
+          "filename": "Chapter 1 India Size and Location.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 2/Chapter 1 India Size and Location.pdf",
+          "part": 2
+        }
+      ]
+    },
+    "grade_9_science_english_part1": {
+      "grade": 9,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "DEMOCRATIC POLITICS CLASS 9",
+          "filename": "DEMOCRATIC POLITICS CLASS 9.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 1/DEMOCRATIC POLITICS CLASS 9.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 2 Constitutional Design",
+          "filename": "Chapter 2 Constitutional Design.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 1/Chapter 2 Constitutional Design.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 1 What Is Democracy Why Democracy",
+          "filename": "Chapter 1 What Is Democracy Why Democracy.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 1/Chapter 1 What Is Democracy Why Democracy.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 5 Democratic Rights",
+          "filename": "Chapter 5 Democratic Rights.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 1/Chapter 5 Democratic Rights.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 3 Electoral Politics",
+          "filename": "Chapter 3 Electoral Politics.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 1/Chapter 3 Electoral Politics.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 4 Working of Institutions",
+          "filename": "Chapter 4 Working of Institutions.pdf",
+          "relative_path": "social science 6 -10/class 9th social science part 1/Chapter 4 Working of Institutions.pdf",
+          "part": 1
+        }
+      ]
+    },
+    "grade_10_science_english_part3": {
+      "grade": 10,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 2 Nationalism in India",
+          "filename": "Chapter 2 Nationalism in India.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 3/Chapter 2 Nationalism in India.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 5 Print Culture and the Modern World",
+          "filename": "Chapter 5 Print Culture and the Modern World.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 3/Chapter 5 Print Culture and the Modern World.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 1 The Rise of Nationalism in Europe",
+          "filename": "Chapter 1 The Rise of Nationalism in Europe.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 3/Chapter 1 The Rise of Nationalism in Europe.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "India and the Contemporary World – II",
+          "filename": "India and the Contemporary World – II.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 3/India and the Contemporary World – II.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 4 The Age of Industrialisation",
+          "filename": "Chapter 4 The Age of Industrialisation.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 3/Chapter 4 The Age of Industrialisation.pdf",
+          "part": 3
+        },
+        {
+          "chapter": "Chapter 3 The Making of a Global World",
+          "filename": "Chapter 3 The Making of a Global World.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 3/Chapter 3 The Making of a Global World.pdf",
+          "part": 3
+        }
+      ]
+    },
+    "grade_8_science_english": {
+      "grade": 8,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 7 Factors of Production",
+          "filename": "Chapter 7 Factors of Production.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 7 Factors of Production.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 The Colonial Era in India",
+          "filename": "Chapter 4 The Colonial Era in India.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 4 The Colonial Era in India.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Glossary",
+          "filename": "Glossary.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Glossary.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 2 Reshaping Indias Political Map",
+          "filename": "Chapter 2 Reshaping Indias Political Map.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 2 Reshaping Indias Political Map.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 Universal Franchise and Indias Electoral System",
+          "filename": "Chapter 5 Universal Franchise and Indias Electoral System.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 5 Universal Franchise and Indias Electoral System.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 6 The Parliamentary System Legislature and Executive",
+          "filename": "Chapter 6 The Parliamentary System Legislature and Executive.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 6 The Parliamentary System Legislature and Executive.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 The Rise of the Marathas",
+          "filename": "Chapter 3 The Rise of the Marathas.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 3 The Rise of the Marathas.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Social Science Textbook for class 8",
+          "filename": "Social Science Textbook for class 8.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Social Science Textbook for class 8.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 1 Natural Resources and Their Use",
+          "filename": "Chapter 1 Natural Resources and Their Use.pdf",
+          "relative_path": "social science 6 -10/class 8th social science/Chapter 1 Natural Resources and Their Use.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 11 Keeping Time with the Skies",
+          "filename": "Chapter 11 Keeping Time with the Skies.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 11 Keeping Time with the Skies.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 9 The Amazing World of Solutes, Solvents, and Solutions",
+          "filename": "Chapter 9 The Amazing World of Solutes, Solvents, and Solutions.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 9 The Amazing World of Solutes, Solvents, and Solutions.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Curiosity",
+          "filename": "Curiosity.pdf",
+          "relative_path": "science 5 -10/class 8/Curiosity.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 7 Particulate Nature of Matter",
+          "filename": "Chapter 7 Particulate Nature of Matter.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 7 Particulate Nature of Matter.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 12 How Nature Works in Harmony",
+          "filename": "Chapter 12 How Nature Works in Harmony.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 12 How Nature Works in Harmony.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 Health The Ultimate Treasure",
+          "filename": "Chapter 3 Health The Ultimate Treasure.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 3 Health The Ultimate Treasure.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 2 The Invisible Living World Beyond Our Naked Eye",
+          "filename": "Chapter 2 The Invisible Living World Beyond Our Naked Eye.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 2 The Invisible Living World Beyond Our Naked Eye.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 1 Exploring the Investigative World of Science",
+          "filename": "Chapter 1 Exploring the Investigative World of Science.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 1 Exploring the Investigative World of Science.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "science 5 -10/class 8/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 6 Pressure, Winds, Storms, and Cyclones",
+          "filename": "Chapter 6 Pressure, Winds, Storms, and Cyclones.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 6 Pressure, Winds, Storms, and Cyclones.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 13 Our Home Earth, a Unique Life-Sustaining Planet",
+          "filename": "Chapter 13 Our Home Earth, a Unique Life-Sustaining Planet.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 13 Our Home Earth, a Unique Life-Sustaining Planet.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 8 Nature of Matter Elements, Compounds, and Mixtures",
+          "filename": "Chapter 8 Nature of Matter Elements, Compounds, and Mixtures.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 8 Nature of Matter Elements, Compounds, and Mixtures.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 Exploring Forces",
+          "filename": "Chapter 5 Exploring Forces.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 5 Exploring Forces.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 10 Light Mirrors and Lenses",
+          "filename": "Chapter 10 Light Mirrors and Lenses.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 10 Light Mirrors and Lenses.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 Electricity Magnetic and Heating Effects",
+          "filename": "Chapter 4 Electricity Magnetic and Heating Effects.pdf",
+          "relative_path": "science 5 -10/class 8/Chapter 4 Electricity Magnetic and Heating Effects.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_10_science_english_part1": {
+      "grade": 10,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 5 Minerals and Energy Resources",
+          "filename": "Chapter 5 Minerals and Energy Resources.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 5 Minerals and Energy Resources.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 4 Agriculture",
+          "filename": "Chapter 4 Agriculture.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 4 Agriculture.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 7 Lifelines of National Economy",
+          "filename": "Chapter 7 Lifelines of National Economy.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 7 Lifelines of National Economy.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 6 Manufacturing Industries",
+          "filename": "Chapter 6 Manufacturing Industries.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 6 Manufacturing Industries.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 3 Water Resources",
+          "filename": "Chapter 3 Water Resources.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 3 Water Resources.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 2 Forest and Wildlife Resources",
+          "filename": "Chapter 2 Forest and Wildlife Resources.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 2 Forest and Wildlife Resources.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Contemporary india 2",
+          "filename": "Contemporary india 2.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Contemporary india 2.pdf",
+          "part": 1
+        },
+        {
+          "chapter": "Chapter 1 Resources and Development",
+          "filename": "Chapter 1 Resources and Development.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 1/Chapter 1 Resources and Development.pdf",
+          "part": 1
+        }
+      ]
+    },
+    "grade_6_science_english": {
+      "grade": 6,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 1 Locating Places on the Earth",
+          "filename": "Chapter 1 Locating Places on the Earth.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 1 Locating Places on the Earth.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Glossary",
+          "filename": "Glossary.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Glossary.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 8 Unity in Diversity or Many in the One",
+          "filename": "Chapter 8 Unity in Diversity or Many in the One.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 8 Unity in Diversity or Many in the One.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 14 Economic Activities Around Us",
+          "filename": "Chapter 14 Economic Activities Around Us.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 14 Economic Activities Around Us.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 India That Is Bharat",
+          "filename": "Chapter 5 India That Is Bharat.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 5 India That Is Bharat.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 12 Grassroots Democracy Part 3 Local Government in Urban Areas",
+          "filename": "Chapter 12 Grassroots Democracy Part 3 Local Government in Urban Areas.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 12 Grassroots Democracy Part 3 Local Government in Urban Areas.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 9 Family and Community",
+          "filename": "Chapter 9 Family and Community.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 9 Family and Community.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 11 Grassroots Democracy Part 2 Local Government in Rural Areas",
+          "filename": "Chapter 11 Grassroots Democracy Part 2 Local Government in Rural Areas.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 11 Grassroots Democracy Part 2 Local Government in Rural Areas.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 Landforms and Life",
+          "filename": "Chapter 3 Landforms and Life.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 3 Landforms and Life.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 2 Oceans and Continents",
+          "filename": "Chapter 2 Oceans and Continents.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 2 Oceans and Continents.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 7 Indias Cultural Roots",
+          "filename": "Chapter 7 Indias Cultural Roots.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 7 Indias Cultural Roots.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 Timeline and Sources of History",
+          "filename": "Chapter 4 Timeline and Sources of History.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 4 Timeline and Sources of History.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 13 The Value of Work",
+          "filename": "Chapter 13 The Value of Work.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 13 The Value of Work.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 6 The Beginnings of Indian Civilisation",
+          "filename": "Chapter 6 The Beginnings of Indian Civilisation.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 6 The Beginnings of Indian Civilisation.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 10 Grassroots Democracy Part 1 Governance",
+          "filename": "Chapter 10 Grassroots Democracy Part 1 Governance.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Chapter 10 Grassroots Democracy Part 1 Governance.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Contents",
+          "filename": "Contents.pdf",
+          "relative_path": "social science 6 -10/class 6th social science/Contents.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 Measurement of Length and Motion",
+          "filename": "Chapter 5 Measurement of Length and Motion.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 5 Measurement of Length and Motion.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 12 Beyond Earth",
+          "filename": "Chapter 12 Beyond Earth.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 12 Beyond Earth.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 Exploring Magnets",
+          "filename": "Chapter 4 Exploring Magnets.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 4 Exploring Magnets.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 10 Living Creatures Exploring their Characteristics",
+          "filename": "Chapter 10 Living Creatures Exploring their Characteristics.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 10 Living Creatures Exploring their Characteristics.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 9 Methods of Separation in Everyday Life",
+          "filename": "Chapter 9 Methods of Separation in Everyday Life.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 9 Methods of Separation in Everyday Life.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Class 6 Science textbook",
+          "filename": "Class 6 Science textbook.pdf",
+          "relative_path": "science 5 -10/class 6/Class 6 Science textbook.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 6 Materials Around Us",
+          "filename": "Chapter 6 Materials Around Us.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 6 Materials Around Us.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 11 Natures Treasures",
+          "filename": "Chapter 11 Natures Treasures.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 11 Natures Treasures.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 8 A Journey through States of Water",
+          "filename": "Chapter 8 A Journey through States of Water.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 8 A Journey through States of Water.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 Mindful Eating A Path to a Healthy Body",
+          "filename": "Chapter 3 Mindful Eating A Path to a Healthy Body.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 3 Mindful Eating A Path to a Healthy Body.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 2 Diversity in the Living World",
+          "filename": "Chapter 2 Diversity in the Living World.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 2 Diversity in the Living World.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 1 The Wonderful World of Science",
+          "filename": "Chapter 1 The Wonderful World of Science.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 1 The Wonderful World of Science.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 7 Temperature and its Measurement",
+          "filename": "Chapter 7 Temperature and its Measurement.pdf",
+          "relative_path": "science 5 -10/class 6/Chapter 7 Temperature and its Measurement.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_10_science_english_part2": {
+      "grade": 10,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 5 Consumer Rights",
+          "filename": "Chapter 5 Consumer Rights.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 2/Chapter 5 Consumer Rights.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 3 Money and Credit",
+          "filename": "Chapter 3 Money and Credit.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 2/Chapter 3 Money and Credit.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Understanding Economic Development",
+          "filename": "Understanding Economic Development.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 2/Understanding Economic Development.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 2 Sectors of the Indian Economy",
+          "filename": "Chapter 2 Sectors of the Indian Economy.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 2/Chapter 2 Sectors of the Indian Economy.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 4 Globalisation and the Indian Economy",
+          "filename": "Chapter 4 Globalisation and the Indian Economy.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 2/Chapter 4 Globalisation and the Indian Economy.pdf",
+          "part": 2
+        },
+        {
+          "chapter": "Chapter 1 Development",
+          "filename": "Chapter 1 Development.pdf",
+          "relative_path": "social science 6 -10/class 10 th social science part 2/Chapter 1 Development.pdf",
+          "part": 2
+        }
+      ]
+    },
+    "grade_7_science_english": {
+      "grade": 7,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 6 Adolescence A Stage of Growth and Change",
+          "filename": "Chapter 6 Adolescence A Stage of Growth and Change.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 6 Adolescence A Stage of Growth and Change.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 Electricity Circuits and their Components",
+          "filename": "Chapter 3 Electricity Circuits and their Components.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 3 Electricity Circuits and their Components.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 11 Light Shadows and Reflections",
+          "filename": "Chapter 11 Light Shadows and Reflections.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 11 Light Shadows and Reflections.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 Changes Around Us Physical and Chemical",
+          "filename": "Chapter 5 Changes Around Us Physical and Chemical.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 5 Changes Around Us Physical and Chemical.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 1 The Ever-Evolving World of Science",
+          "filename": "Chapter 1 The Ever-Evolving World of Science.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 1 The Ever-Evolving World of Science.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Class 7 Science textbook titled Curiosity",
+          "filename": "Class 7 Science textbook titled Curiosity.pdf",
+          "relative_path": "science 5 -10/class 7/Class 7 Science textbook titled Curiosity.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 10 Life Processes in Plants",
+          "filename": "Chapter 10 Life Processes in Plants.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 10 Life Processes in Plants.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 7 Heat Transfer in Nature",
+          "filename": "Chapter 7 Heat Transfer in Nature.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 7 Heat Transfer in Nature.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 The World of Metals and Non-metals",
+          "filename": "Chapter 4 The World of Metals and Non-metals.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 4 The World of Metals and Non-metals.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 8 Measurement of Time and Motion",
+          "filename": "Chapter 8 Measurement of Time and Motion.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 8 Measurement of Time and Motion.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 9 Life Processes in Animals",
+          "filename": "Chapter 9 Life Processes in Animals.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 9 Life Processes in Animals.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 12 Earth, Moon and the Sun",
+          "filename": "Chapter 12 Earth, Moon and the Sun.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 12 Earth, Moon and the Sun.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 2 Exploring Substances Acidic, Basic and Neutral",
+          "filename": "Chapter 2 Exploring Substances Acidic, Basic and Neutral.pdf",
+          "relative_path": "science 5 -10/class 7/Chapter 2 Exploring Substances Acidic, Basic and Neutral.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_5_science_english": {
+      "grade": 5,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 1 Water—The Essence of Life",
+          "filename": "Chapter 1 Water—The Essence of Life.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 1 Water—The Essence of Life.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 2 Journey of a River",
+          "filename": "Chapter 2 Journey of a River.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 2 Journey of a River.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 9 Rhythms of Nature",
+          "filename": "Chapter 9 Rhythms of Nature.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 9 Rhythms of Nature.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 Our School—A Happy Place",
+          "filename": "Chapter 4 Our School—A Happy Place.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 4 Our School—A Happy Place.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 10 Earth—Our Shared Home",
+          "filename": "Chapter 10 Earth—Our Shared Home.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 10 Earth—Our Shared Home.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 7 Energy—How Things Work",
+          "filename": "Chapter 7 Energy—How Things Work.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 7 Energy—How Things Work.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Class 5 Environmental Studies (EVS)",
+          "filename": "Class 5 Environmental Studies (EVS).pdf",
+          "relative_path": "science 5 -10/class 5/Class 5 Environmental Studies (EVS).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 6 Some Unique Places",
+          "filename": "Chapter 6 Some Unique Places.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 6 Some Unique Places.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 Our Vibrant Country",
+          "filename": "Chapter 5 Our Vibrant Country.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 5 Our Vibrant Country.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 8 Clothes—How Things are Made",
+          "filename": "Chapter 8 Clothes—How Things are Made.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 8 Clothes—How Things are Made.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 The Mystery of Food",
+          "filename": "Chapter 3 The Mystery of Food.pdf",
+          "relative_path": "science 5 -10/class 5/Chapter 3 The Mystery of Food.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_10_science_english": {
+      "grade": 10,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Heredity",
+          "filename": "Heredity.pdf",
+          "relative_path": "science 5 -10/class 10/Heredity.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Light – Reflection and Refraction",
+          "filename": "Light – Reflection and Refraction.pdf",
+          "relative_path": "science 5 -10/class 10/Light – Reflection and Refraction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "How do Organisms Reproduce",
+          "filename": "How do Organisms Reproduce.pdf",
+          "relative_path": "science 5 -10/class 10/How do Organisms Reproduce.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Life Processes",
+          "filename": "Life Processes.pdf",
+          "relative_path": "science 5 -10/class 10/Life Processes.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chemical Reactions and Equations",
+          "filename": "Chemical Reactions and Equations.pdf",
+          "relative_path": "science 5 -10/class 10/Chemical Reactions and Equations.pdf",
+          "part": null
+        },
+        {
+          "chapter": "The Human Eye and the Colourful World",
+          "filename": "The Human Eye and the Colourful World.pdf",
+          "relative_path": "science 5 -10/class 10/The Human Eye and the Colourful World.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Metals and Non-metals",
+          "filename": "Metals and Non-metals.pdf",
+          "relative_path": "science 5 -10/class 10/Metals and Non-metals.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Magnetic Effects of Electric Current",
+          "filename": "Magnetic Effects of Electric Current.pdf",
+          "relative_path": "science 5 -10/class 10/Magnetic Effects of Electric Current.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Acids, Bases and Salts",
+          "filename": "Acids, Bases and Salts.pdf",
+          "relative_path": "science 5 -10/class 10/Acids, Bases and Salts.pdf",
+          "part": null
+        },
+        {
+          "chapter": "introduction",
+          "filename": "introduction.pdf",
+          "relative_path": "science 5 -10/class 10/introduction.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Answers",
+          "filename": "Answers.pdf",
+          "relative_path": "science 5 -10/class 10/Answers.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Electricity",
+          "filename": "Electricity.pdf",
+          "relative_path": "science 5 -10/class 10/Electricity.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Our Environment",
+          "filename": "Our Environment.pdf",
+          "relative_path": "science 5 -10/class 10/Our Environment.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Carbon and its Compounds",
+          "filename": "Carbon and its Compounds.pdf",
+          "relative_path": "science 5 -10/class 10/Carbon and its Compounds.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Control and Coordination",
+          "filename": "Control and Coordination.pdf",
+          "relative_path": "science 5 -10/class 10/Control and Coordination.pdf",
+          "part": null
+        }
+      ]
+    },
+    "grade_9_science_english": {
+      "grade": 9,
+      "subject": "science",
+      "language": "english",
+      "chapters": [
+        {
+          "chapter": "Chapter 2 Is Matter Around Us Pure",
+          "filename": "Chapter 2 Is Matter Around Us Pure.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 2 Is Matter Around Us Pure.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 6 Tissues",
+          "filename": "Chapter 6 Tissues.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 6 Tissues.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Class 9 Science textbook is titled Science",
+          "filename": "Class 9 Science textbook is titled Science.pdf",
+          "relative_path": "science 5 -10/class 9/Class 9 Science textbook is titled Science.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 1 Matter in Our Surroundings",
+          "filename": "Chapter 1 Matter in Our Surroundings.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 1 Matter in Our Surroundings.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 3 Atoms and Molecules",
+          "filename": "Chapter 3 Atoms and Molecules.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 3 Atoms and Molecules.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Class 9 Science textbook is titled Science (2)",
+          "filename": "Class 9 Science textbook is titled Science (2).pdf",
+          "relative_path": "science 5 -10/class 9/Class 9 Science textbook is titled Science (2).pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 5 The Fundamental Unit of Life",
+          "filename": "Chapter 5 The Fundamental Unit of Life.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 5 The Fundamental Unit of Life.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 9 GRAVITATION",
+          "filename": "Chapter 9 GRAVITATION.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 9 GRAVITATION.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 4 Structure of the Atom",
+          "filename": "Chapter 4 Structure of the Atom.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 4 Structure of the Atom.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 10 WORK  AND ENERGY",
+          "filename": "Chapter 10 WORK  AND ENERGY.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 10 WORK  AND ENERGY.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 7 Motion",
+          "filename": "Chapter 7 Motion.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 7 Motion.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 11 SOUND",
+          "filename": "Chapter 11 SOUND.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 11 SOUND.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 8 Force and Laws of Motion",
+          "filename": "Chapter 8 Force and Laws of Motion.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 8 Force and Laws of Motion.pdf",
+          "part": null
+        },
+        {
+          "chapter": "Chapter 12 IMPROVEMENT IN FOOD RESOURCES",
+          "filename": "Chapter 12 IMPROVEMENT IN FOOD RESOURCES.pdf",
+          "relative_path": "science 5 -10/class 9/Chapter 12 IMPROVEMENT IN FOOD RESOURCES.pdf",
+          "part": null
+        }
+      ]
+    }
+  }
+}
