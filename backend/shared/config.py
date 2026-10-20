@@ -53,13 +53,6 @@ class Settings(BaseSettings):
 
     redis_url: str = Field(default="", alias="REDIS_URL")
     
-    # MinIO Object Storage
-    minio_endpoint: str = Field(default="minio:9000", alias="MINIO_ENDPOINT")
-    minio_access_key: str = Field(default="minioadmin", alias="MINIO_ACCESS_KEY")
-    minio_secret_key: str = Field(default="minioadmin", alias="MINIO_SECRET_KEY")
-    minio_bucket: str = Field(default="educational-packs", alias="MINIO_BUCKET")
-    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
-
     qdrant_url: str = Field(default="http://qdrant:6333", alias="QDRANT_URL")
     qdrant_api_key: str = Field(default="", alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="educational_chunks_bge_m3", alias="QDRANT_COLLECTION")
@@ -173,11 +166,6 @@ class Settings(BaseSettings):
                 raise RuntimeError(
                     "Insecure JWT_SECRET_KEY set in production environment. "
                     "Set a secure JWT_SECRET_KEY environment variable or set ALLOW_ANONYMOUS_DEV=true for local dev."
-                )
-            if self.minio_access_key in {"minioadmin", "minio"} or self.minio_secret_key in {"minioadmin", "minio"}:
-                raise RuntimeError(
-                    "Insecure MINIO credentials set in production environment. "
-                    "Set MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables or set ALLOW_ANONYMOUS_DEV=true for local dev."
                 )
 
 

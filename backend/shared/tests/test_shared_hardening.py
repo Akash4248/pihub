@@ -43,21 +43,10 @@ def test_security_config_validation_fail_closed():
     with pytest.raises(RuntimeError, match="Insecure JWT_SECRET_KEY set in production"):
         prod_insecure.validate_security_config()
 
-    # Production mode with insecure MinIO key must fail
-    prod_insecure_minio = Settings(
-        ALLOW_ANONYMOUS_DEV=False,
-        JWT_SECRET_KEY="secure-production-jwt-token-key-123456",
-        MINIO_ACCESS_KEY="minioadmin",
-    )
-    with pytest.raises(RuntimeError, match="Insecure MINIO credentials set in production"):
-        prod_insecure_minio.validate_security_config()
-
     # Production mode with valid keys succeeds
     prod_valid = Settings(
         ALLOW_ANONYMOUS_DEV=False,
         JWT_SECRET_KEY="secure-production-jwt-token-key-123456",
-        MINIO_ACCESS_KEY="prod-minio-user",
-        MINIO_SECRET_KEY="prod-minio-secret-pass-7890",
     )
     prod_valid.validate_security_config()
 

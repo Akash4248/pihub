@@ -41,8 +41,6 @@ common_env=(
   -e QDRANT_URL=http://localhost:6333
   -e MONGO_URL=mongodb://localhost:27017
   -e QDRANT_COLLECTION=educational_chunks
-  -e MINIO_ACCESS_KEY=test-minio-admin
-  -e MINIO_SECRET_KEY=test-minio-secret-not-default
 )
 
 svc_env=()
