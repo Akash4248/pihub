@@ -152,7 +152,7 @@ def test_host_url_defaults_to_hotspot_gateway(monkeypatch):
 
 
 def test_device_status_strips_auth_token():
-    client = TestClient(app)
+    client = TestClient(app, headers={"x-pihub-token": settings.admin_token})
 
     # Register device
     reg_resp = client.post("/devices", json={"device_name": "Tablet-1", "role": "student", "classroom": "Room101"})

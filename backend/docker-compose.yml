@@ -202,7 +202,6 @@ services:
       PIHUB_URL: ${PIHUB_URL:-http://pihub:8020}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       PACK_SERVICE_URL: ${PACK_SERVICE_URL:-http://pack-service:8030}
-      EXPERIMENT_SERVICE_URL: ${EXPERIMENT_SERVICE_URL:-http://experiment-service:8040}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       - content-pipeline
@@ -210,9 +209,9 @@ services:
       - pihub
       - qdrant
       - pack-service
-      - experiment-service
     volumes:
       - shared_storage:/shared
+      - ../phet_downloads:/shared/simulations:ro
       - backend_logs:/logs
     expose:
       - "8000"
@@ -260,50 +259,6 @@ services:
     mem_limit: 2048m
     cpus: 2.0
 
-  experiment-service:
-    build:
-      context: .
-      dockerfile: experiment-service/Dockerfile
-      network: host
-    container_name: pihub-experiment-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    volumes:
-      - shared_storage:/shared
-      - backend_logs:/logs
-      - ../phet_downloads:/shared/simulations:ro
-    expose:
-      - "8040"
-    healthcheck:
-      <<: *python-healthcheck
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8040/health', timeout=2).read()"]
-      start_period: 30s
-    mem_limit: 1024m
-    cpus: 1.0
-
-  db:
-    image: postgres:16-alpine
-    container_name: pihub-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-pihub}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    expose:
-      - "5432"
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pihub}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   nginx:
     image: nginx:1.27-alpine
     container_name: pihub-nginx
@@ -319,7 +274,6 @@ services:
 volumes:
   qdrant_data:
   mongo_data:
-  postgres_data:
   backend_logs:
   shared_storage:
   searxng_data:

@@ -16,7 +16,6 @@ SERVICES = [
     ("inference-service", "inference-service", "app.main:app", 8010),
     ("pihub", "pihub", "api.main:app", 8020),
     ("pack-service", "pack-service", "app.main:app", 8030),
-    ("experiment-service", "experiment-service", "app.main:app", 8040),
 ]
 
 processes = []

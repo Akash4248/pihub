@@ -2,6 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import create_app
+from shared.security import get_internal_service_key
+
+AUTH_HEADERS = {"X-Internal-Service-Key": get_internal_service_key()}
 
 
 def test_voice_service_health_disabled(monkeypatch):
@@ -38,17 +41,17 @@ def test_voice_routes_return_503_when_disabled(monkeypatch):
     client = TestClient(app)
 
     # POST /voice/query -> 503
-    res_query = client.post("/voice/query", json={"query": "Hello", "language": "en"})
+    res_query = client.post("/voice/query", json={"query": "Hello", "language": "en"}, headers=AUTH_HEADERS)
     assert res_query.status_code == 503
     assert res_query.json()["detail"]["code"] == "VOICE_SERVICE_DISABLED"
 
     # POST /voice/tts -> 503
-    res_tts = client.post("/voice/tts", json={"text": "Hello", "language": "en"})
+    res_tts = client.post("/voice/tts", json={"text": "Hello", "language": "en"}, headers=AUTH_HEADERS)
     assert res_tts.status_code == 503
     assert res_tts.json()["detail"]["code"] == "VOICE_SERVICE_DISABLED"
 
     # POST /voice/stt -> 503
-    res_stt = client.post("/voice/stt", files={"file": ("test.wav", b"dummy wav data", "audio/wav")})
+    res_stt = client.post("/voice/stt", files={"file": ("test.wav", b"dummy wav data", "audio/wav")}, headers=AUTH_HEADERS)
     assert res_stt.status_code == 503
     assert res_stt.json()["detail"]["code"] == "VOICE_SERVICE_DISABLED"
 

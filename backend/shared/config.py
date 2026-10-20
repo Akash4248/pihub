@@ -38,8 +38,6 @@ class Settings(BaseSettings):
     content_pipeline_url: str = Field(default="http://content-pipeline:8001", alias="CONTENT_PIPELINE_URL")
     inference_service_url: str = Field(default="http://inference-service:8010", alias="INFERENCE_SERVICE_URL")
     pihub_url: str = Field(default="http://pihub:8020", alias="PIHUB_URL")
-    experiment_service_url: str = Field(default="http://experiment-service:8040", alias="EXPERIMENT_SERVICE_URL")
-    experiment_service_required: bool = Field(default=False, alias="EXPERIMENT_SERVICE_REQUIRED")
     voice_service_url: str = Field(default="http://voice-service:8050", alias="VOICE_SERVICE_URL")
     voice_service_required: bool = Field(default=False, alias="VOICE_SERVICE_REQUIRED")
     voice_service_enabled: bool = Field(default=False, alias="VOICE_SERVICE_ENABLED")
@@ -50,8 +48,6 @@ class Settings(BaseSettings):
     # explicitly opted into dev mode. Local `run_backend.sh` exports
     # ALLOW_ANONYMOUS_DEV=true so laptop dev keeps working.
     allow_anonymous_dev: bool = Field(default=False, alias="ALLOW_ANONYMOUS_DEV")
-    database_url: str = Field(default="postgresql+asyncpg://postgres:postgres@db:5432/pihub", alias="DATABASE_URL")
-
 
     redis_url: str = Field(default="", alias="REDIS_URL")
     

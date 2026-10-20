@@ -96,6 +96,9 @@ class ChatRequest(BaseModel):
     asset_context: list[dict[str, Any]] = Field(default_factory=list)
     asset_search: dict[str, Any] = Field(default_factory=dict)
     simulation_context: dict[str, Any] = Field(default_factory=dict)
+    systemPrompt: str | None = None
+    system_prompt: str | None = None
+    tools: list[dict[str, Any]] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -106,6 +109,12 @@ class ChatRequest(BaseModel):
         normalized = dict(data)
         if "conversation_history" in normalized and "conversationHistory" not in normalized:
             normalized["conversationHistory"] = normalized["conversation_history"]
+        if "conversationHistory" in normalized and "conversation_history" not in normalized:
+            normalized["conversation_history"] = normalized["conversationHistory"]
+        if "system_prompt" in normalized and "systemPrompt" not in normalized:
+            normalized["systemPrompt"] = normalized["system_prompt"]
+        if "systemPrompt" in normalized and "system_prompt" not in normalized:
+            normalized["system_prompt"] = normalized["systemPrompt"]
         if "session_state" in normalized and "sessionState" not in normalized:
             normalized["sessionState"] = normalized["session_state"]
         if "execution_mode" in normalized and "executionMode" not in normalized:
@@ -553,21 +562,38 @@ def _sanitize_prompt_text(value: Any) -> str:
 
 
 def _build_system_prompt(request: ChatRequest, style: str) -> str:
-    language = normalize_language_code(request.language)
-    parts = [
-        _sanitize_prompt_text("You are an expert educational tutoring assistant for distributed classroom platform."),
-        _sanitize_prompt_text("Provide clear, accurate educational explanations aligned with curriculum standards."),
-        _sanitize_prompt_text("Prioritize learning value and relevance over verbosity."),
-        _grade_instructions(request.grade),
-        _sanitize_prompt_text(f"Subject: {request.subject or 'General Studies'}"),
-        _sanitize_prompt_text(f"Chapter: {request.chapter or 'General Topics'}"),
-        _sanitize_prompt_text(f"Topic: {request.topic or 'General'}"),
-        _sanitize_prompt_text(f"Language: {_language_label(language or request.language)} ({language or 'en'})"),
-        _sanitize_prompt_text(f"Teaching style: {style}"),
-        _sanitize_prompt_text(_language_instruction(language)),
-        _sanitize_prompt_text(RELEVANCE_INSTRUCTION),
-        _sanitize_prompt_text("If context is not helpful, answer directly based on educational knowledge."),
-    ]
+    client_prompt = request.system_prompt or request.systemPrompt
+    if client_prompt and client_prompt.strip():
+        parts = [_sanitize_prompt_text(client_prompt.strip())]
+    else:
+        language = normalize_language_code(request.language)
+        parts = [
+            _sanitize_prompt_text("You are an expert educational tutoring assistant for distributed classroom platform."),
+            _sanitize_prompt_text("Provide clear, accurate educational explanations aligned with curriculum standards."),
+            _sanitize_prompt_text("Prioritize learning value and relevance over verbosity."),
+            _grade_instructions(request.grade),
+            _sanitize_prompt_text(f"Subject: {request.subject or 'General Studies'}"),
+            _sanitize_prompt_text(f"Chapter: {request.chapter or 'General Topics'}"),
+            _sanitize_prompt_text(f"Topic: {request.topic or 'General'}"),
+            _sanitize_prompt_text(f"Language: {_language_label(language or request.language)} ({language or 'en'})"),
+            _sanitize_prompt_text(f"Teaching style: {style}"),
+            _sanitize_prompt_text(_language_instruction(language)),
+            _sanitize_prompt_text(RELEVANCE_INSTRUCTION),
+            _sanitize_prompt_text("If context is not helpful, answer directly based on educational knowledge."),
+        ]
+
+    if request.tools:
+        tools_summary = []
+        for t in request.tools:
+            name = t.get("name", "")
+            desc = t.get("description", "")
+            params = json.dumps(t.get("parameters", {}))
+            tools_summary.append(f"- {name}: {desc} (Parameters: {params})")
+        parts.append("\nAVAILABLE AGENT TOOLS:\n" + "\n".join(tools_summary))
+        parts.append(
+            'To invoke a tool, output a tool call event or structured tag: `{"tool_call": {"name": "...", "arguments": {...}}}`.'
+        )
+
     return "\n".join(parts)
 
 
@@ -654,6 +680,22 @@ async def _retrieve_context(request: ChatRequest) -> list[ContextResult]:
 
 
 def _build_user_prompt(request: ChatRequest, context: list[ContextResult]) -> str:
+    prompt_parts = []
+
+    # Include recent conversation turns if provided by client
+    history = request.conversationHistory or request.conversation_history
+    if history:
+        history_lines = ["RECENT CONVERSATION HISTORY:"]
+        for turn in history[-4:]:
+            if isinstance(turn, dict):
+                role = turn.get("role", "User")
+                content = turn.get("content", "")
+                history_lines.append(f"{role.capitalize()}: {_sanitize_prompt_text(str(content))}")
+            else:
+                history_lines.append(_sanitize_prompt_text(str(turn)))
+        prompt_parts.append("\n".join(history_lines))
+        prompt_parts.append("-" * 40)
+
     # Build context block with better formatting
     context_lines: list[str] = []
     if request.asset_context:
@@ -679,8 +721,6 @@ def _build_user_prompt(request: ChatRequest, context: list[ContextResult]) -> st
     if len(context_block) > settings.prompt_context_limit:
         context_block = context_block[: settings.prompt_context_limit] + "\n[context truncated]"
 
-    # Build cleaner prompt format for Phi-2
-    prompt_parts = []
     if context_block:
         prompt_parts.append(context_block)
     

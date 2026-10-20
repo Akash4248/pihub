@@ -1,4 +1,5 @@
 import io
+import json
 import pytest
 from fastapi.testclient import TestClient
 
@@ -8,10 +9,9 @@ from shared.security import get_internal_service_key
 client = TestClient(app)
 
 
-def test_upload_without_token_returns_401(monkeypatch):
-    # Prod mode: conftest opts the suite into ALLOW_ANONYMOUS_DEV=true, so
-    # explicitly drop it here to exercise the fail-closed gate.
-    monkeypatch.delenv("ALLOW_ANONYMOUS_DEV", raising=False)
+def test_upload_without_token_returns_401():
+    # Mutations are never allowed by the dev escape hatch, so no credentials
+    # must always be rejected regardless of ALLOW_ANONYMOUS_DEV.
     response = client.post(
         "/upload",
         files={"file": ("test.pdf", b"%PDF-1.4...", "application/pdf")},
@@ -109,6 +109,7 @@ def test_ingest_pdf_exceeding_50mb_returns_413():
     large_chunk = b"X" * (51 * 1024 * 1024)  # 51 MB
     response = client.post(
         "/ingest/pdf",
+        headers={"X-Internal-Service-Key": get_internal_service_key()},
         files={"file": ("large.pdf", large_chunk, "application/pdf")},
     )
     assert response.status_code == 413
@@ -119,6 +120,7 @@ def test_ingest_textbook_exceeding_50mb_returns_413():
     large_chunk = b"X" * (51 * 1024 * 1024)  # 51 MB
     response = client.post(
         "/ingest/textbook",
+        headers={"X-Internal-Service-Key": get_internal_service_key()},
         files={"file": ("large.pdf", large_chunk, "application/pdf")},
     )
     assert response.status_code == 413
@@ -156,6 +158,7 @@ def test_ingest_pdf_sanitizes_traversal_filename():
 
     response = client.post(
         "/ingest/pdf",
+        headers={"X-Internal-Service-Key": get_internal_service_key()},
         files={"file": ("../../etc/passwd", b"%PDF-1.4 test content", "application/pdf")},
     )
     assert response.status_code == 200
@@ -164,14 +167,16 @@ def test_ingest_pdf_sanitizes_traversal_filename():
 
 
 def test_ai_tutor_empty_question_returns_422():
-    assert client.post("/ai/tutor", json={}).status_code == 422
-    assert client.post("/ai/tutor", json={"question": "   "}).status_code == 422
-    assert client.post("/ai/tutor", json={"query": ""}).status_code == 422
+    headers = {"X-Internal-Service-Key": get_internal_service_key()}
+    assert client.post("/ai/tutor", json={}, headers=headers).status_code == 422
+    assert client.post("/ai/tutor", json={"question": "   "}, headers=headers).status_code == 422
+    assert client.post("/ai/tutor", json={"query": ""}, headers=headers).status_code == 422
 
 
 def test_ai_chat_empty_prompt_returns_422():
-    assert client.post("/ai/chat", json={}).status_code == 422
-    assert client.post("/ai/chat", json={"prompt": "  "}).status_code == 422
+    headers = {"X-Internal-Service-Key": get_internal_service_key()}
+    assert client.post("/ai/chat", json={}, headers=headers).status_code == 422
+    assert client.post("/ai/chat", json={"prompt": "  "}, headers=headers).status_code == 422
 
 
 def test_upload_downstream_outage_returns_503_not_500():
@@ -209,3 +214,25 @@ def test_content_upload_alias_redirects_to_upload():
     )
     assert response.status_code == 301
     assert response.headers["location"] == "/upload"
+
+
+def test_experiments_catalog_serves_phet_shim(tmp_path, monkeypatch):
+    catalog = [
+        {
+            "slug": "acid-base-solutions",
+            "url": "https://phet.colorado.edu/sims/html/acid-base-solutions/latest/acid-base-solutions_en.html",
+        }
+    ]
+    (tmp_path / "catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+    import app.main as gateway_main
+
+    monkeypatch.setattr(gateway_main, "SIMULATIONS_DIR", tmp_path)
+
+    response = client.get("/experiments/catalog")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["experiments"] == []
+    assert body["simulations"][0]["local_url"] == "/simulations/acid-base-solutions/index.html"
+    assert body["simulations"][0]["manifest"]["id"] == "phet-acid-base-solutions"

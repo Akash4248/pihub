@@ -38,14 +38,13 @@ services:
       PIHUB_URL: ${PIHUB_URL:-http://pihub:8020}
       QDRANT_URL: ${QDRANT_URL:-http://akash-ubuntu.local:6333}
       PACK_SERVICE_URL: ${PACK_SERVICE_URL:-http://pack-service:8030}
-      EXPERIMENT_SERVICE_URL: ${EXPERIMENT_SERVICE_URL:-http://experiment-service:8040}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       - pihub
       - pack-service
-      - experiment-service
     volumes:
       - shared_storage:/shared
+      - nfs_phet_downloads:/shared/simulations:ro
       - backend_logs:/logs
     expose:
       - "8000"
@@ -82,26 +81,6 @@ services:
       - "8030"
     ports:
       - "8030:8030"
-
-  experiment-service:
-    build:
-      context: .
-      dockerfile: experiment-service/Dockerfile
-      network: host
-    container_name: pihub-experiment-service
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    volumes:
-      - shared_storage:/shared
-      - backend_logs:/logs
-      - nfs_phet_downloads:/shared/simulations:ro
-    expose:
-      - "8040"
-    ports:
-      - "8040:8040"
 
   nginx:
     image: nginx:1.27-alpine

@@ -4,7 +4,7 @@
 # rebuilding heavyweight images.
 #
 # Usage: svc.sh <start|stop|logs> <service>
-# Services: gateway | content-pipeline | inference-service | pihub | pack-service | experiment-service
+# Services: gateway | content-pipeline | inference-service | pihub | pack-service
 set -euo pipefail
 
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,7 +23,6 @@ case "$svc" in
   inference-service)  img=backend-inference-service:latest;port=8010; module="app.main:app"; src="inference-service/app";dst="/app/app"; pip_extra="pyjwt" ;;
   pihub)              img=backend-pihub:latest;            port=8020; module="api.main:app"; src="pihub";              dst="/app";     pip_extra="pyjwt" ;;
   pack-service)       img=backend-pack-service:latest;     port=8030; module="app.main:app"; src="pack-service/app";    dst="/app/app"; pip_extra="pyjwt filelock" ;;
-  experiment-service) img=backend-experiment-service:latest;port=8040;module="app.main:app"; src="experiment-service";  dst="/app";     pip_extra="pyjwt" ;;
   *) echo "unknown service: $svc" >&2; exit 2 ;;
 esac
 
@@ -37,7 +36,6 @@ common_env=(
   -e INFERENCE_SERVICE_URL=http://localhost:8010
   -e PIHUB_URL=http://localhost:8020
   -e PACK_SERVICE_URL=http://localhost:8030
-  -e EXPERIMENT_SERVICE_URL=http://localhost:8040
   -e QDRANT_URL=http://localhost:6333
   -e MONGO_URL=mongodb://localhost:27017
   -e QDRANT_COLLECTION=educational_chunks
@@ -88,19 +86,9 @@ case "$cmd" in
     py_env=()
     src_abs="${BACKEND_DIR}/${src}"
     mount_mode="ro"
-    if [[ "$svc" == "pihub" || "$svc" == "experiment-service" ]]; then
+    if [[ "$svc" == "pihub" ]]; then
       shared_dst="/opt/shared"
       py_env=(-e PYTHONPATH="/app:/opt")
-    fi
-    if [[ "$svc" == "experiment-service" ]]; then
-      # This service writes SQLite state into its own package tree, so mount a
-      # writable copy instead of the (read-only) source checkout.
-      scratch="${BACKEND_DIR}/.local_run/test_src/experiment-service"
-      mkdir -p "$(dirname "$scratch")"
-      rm -rf "$scratch"
-      cp -a "${BACKEND_DIR}/experiment-service" "$scratch"
-      src_abs="$scratch"
-      mount_mode="rw"
     fi
     $DOCKER rm -f "$name" >/dev/null 2>&1 || true
     $DOCKER run -d --name "$name" --network host \

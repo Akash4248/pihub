@@ -55,7 +55,6 @@ SERVICES=(
   "inference-service:inference-service:app.main:app:8010"
   "pihub:pihub:api.main:app:8020"
   "pack-service:pack-service:app.main:app:8030"
-  "experiment-service:experiment-service:app.main:app:8040"
 )
 
 DOCKER_STORES=(qdrant mongo)
@@ -111,9 +110,10 @@ start_service() {
   INFERENCE_SERVICE_URL="${INFERENCE_SERVICE_URL:-http://localhost:8010}" \
   PIHUB_URL="${PIHUB_URL:-http://localhost:8020}" \
   PACK_SERVICE_URL="${PACK_SERVICE_URL:-http://localhost:8030}" \
-  EXPERIMENT_SERVICE_URL="${EXPERIMENT_SERVICE_URL:-http://localhost:8040}" \
+  SIMULATIONS_DIR="${SIMULATIONS_DIR:-$ROOT/../phet_downloads}" \
   QDRANT_URL="${QDRANT_URL:-http://localhost:6333}" \
   MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" \
+  ALLOW_ANONYMOUS_DEV="${ALLOW_ANONYMOUS_DEV:-true}" \
     setsid "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
     >"$LOG_DIR/$name.log" 2>&1 &
   pid=$!

@@ -19,20 +19,48 @@ import jwt
 logger = logging.getLogger(__name__)
 
 
-def _get_or_create_fallback_jwt_secret() -> str:
-    env_secret = os.getenv("JWT_SECRET_KEY")
-    insecure_defaults = {"change-me", "default-secret-key-change-in-production", "change-me-super-secret-jwt-key-min32chars"}
-    if env_secret and env_secret not in insecure_defaults:
-        return env_secret
+# Anchor dev state to the backend package root, not the process cwd, so every
+# service and script that imports shared.security resolves the same dev key.
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_DEV_STATE_DIR = _BACKEND_ROOT / ".local_run"
 
-    key_dir = Path(".local_run")
-    key_dir.mkdir(parents=True, exist_ok=True)
-    key_file = key_dir / "jwt_secret.key"
+_INSECURE_SECRETS = {
+    "",
+    "change-me",
+    "change-me-too",
+    "default-secret-key-change-in-production",
+    "change-me-super-secret-jwt-key-min32chars",
+}
+
+
+def _is_dev_mode() -> bool:
+    return os.getenv("ALLOW_ANONYMOUS_DEV", "false").lower() == "true"
+
+
+def _is_usable_secret(value: str | None, min_length: int = 32) -> bool:
+    return bool(value) and value.strip() not in _INSECURE_SECRETS and len(value.strip()) >= min_length
+
+
+def _get_or_create_local_secret(filename: str, label: str) -> str:
+    """Return a persisted, shared dev secret or fail closed.
+
+    Dev mode must use one key for every process; generating a fresh random key
+    per process is what previously broke service-to-service auth.
+    """
+    if not _is_dev_mode():
+        raise RuntimeError(
+            f"{label} is not configured. Set it to a random value of at least 32 "
+            "characters (run scripts/generate_secrets.py), or set "
+            "ALLOW_ANONYMOUS_DEV=true for local development."
+        )
+
+    _DEV_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    key_file = _DEV_STATE_DIR / filename
 
     if key_file.exists():
         try:
             stored_secret = key_file.read_text(encoding="utf-8").strip()
-            if stored_secret and len(stored_secret) >= 32:
+            if _is_usable_secret(stored_secret):
                 try:
                     os.chmod(str(key_file), 0o600)
                 except Exception:
@@ -52,34 +80,49 @@ def _get_or_create_fallback_jwt_secret() -> str:
         except Exception:
             pass
     except Exception as e:
-        logger.warning(f"Could not persist JWT key to {key_file}: {e}")
+        raise RuntimeError(
+            f"{label} is not configured and the dev key could not be persisted "
+            f"to {key_file}: {e}. Set {label} explicitly."
+        ) from e
 
+    logger.warning(
+        "%s not configured; using the shared development key from %s. "
+        "Never use this in production.",
+        label,
+        key_file,
+    )
     return secret
 
 
-# Fallback auto-generated/persisted random keys if environment variables are not set or default
-_GLOBAL_FALLBACK_JWT_SECRET = _get_or_create_fallback_jwt_secret()
+def _get_or_create_fallback_jwt_secret() -> str:
+    env_secret = os.getenv("JWT_SECRET_KEY")
+    if _is_usable_secret(env_secret):
+        return env_secret.strip()
+    return _get_or_create_local_secret("jwt_secret.key", "JWT_SECRET_KEY")
 
-_GLOBAL_INTERNAL_SERVICE_KEY = os.getenv("INTERNAL_SERVICE_KEY")
-if not _GLOBAL_INTERNAL_SERVICE_KEY or _GLOBAL_INTERNAL_SERVICE_KEY in ["change-me"]:
-    _GLOBAL_INTERNAL_SERVICE_KEY = secrets.token_hex(32)
-    logger.warning("INTERNAL_SERVICE_KEY auto-generated temporary secure token.")
 
 JWT_ALGORITHM = "HS256"
 security_bearer = HTTPBearer(auto_error=False)
 
+
 def get_jwt_secret_key() -> str:
     secret = os.getenv("JWT_SECRET_KEY")
-    insecure_defaults = {"change-me", "default-secret-key-change-in-production", "change-me-super-secret-jwt-key-min32chars"}
-    if secret and secret not in insecure_defaults:
-        return secret
+    if _is_usable_secret(secret):
+        return secret.strip()
     return _get_or_create_fallback_jwt_secret()
 
+
 def get_internal_service_key() -> str:
-    key = os.getenv("INTERNAL_SERVICE_KEY", _GLOBAL_INTERNAL_SERVICE_KEY)
-    if key in ["change-me"]:
-        return _GLOBAL_INTERNAL_SERVICE_KEY
-    return key
+    key = os.getenv("INTERNAL_SERVICE_KEY")
+    if _is_usable_secret(key):
+        return key.strip()
+    return _get_or_create_local_secret("internal_service.key", "INTERNAL_SERVICE_KEY")
+
+
+def assert_security_configured() -> None:
+    """Fail fast at startup if the shared secrets are missing in production."""
+    get_jwt_secret_key()
+    get_internal_service_key()
 
 async def verify_jwt_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
@@ -165,15 +208,21 @@ def _extract_bearer(headers: dict[str, str]) -> str | None:
     return None
 
 
-def request_is_authenticated(headers: dict[str, str]) -> bool:
+def request_is_authenticated(
+    headers: dict[str, str],
+    *,
+    internal_service_key: str | None = None,
+    jwt_secret: str | None = None,
+) -> bool:
     """True if the request carries a valid internal service key or a valid JWT."""
+    expected_key = internal_service_key or get_internal_service_key()
     internal_key = headers.get("x-internal-service-key")
-    if internal_key and hmac.compare_digest(internal_key, get_internal_service_key()):
+    if internal_key and hmac.compare_digest(internal_key, expected_key):
         return True
     token = _extract_bearer(headers)
     if token:
         try:
-            jwt.decode(token, get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
+            jwt.decode(token, jwt_secret or get_jwt_secret_key(), algorithms=[JWT_ALGORITHM])
             return True
         except jwt.PyJWTError:
             return False
@@ -221,6 +270,11 @@ class InternalAuthMiddleware:
     """
 
     def __init__(self, app, public_prefixes: tuple[str, ...] = PUBLIC_PATH_PREFIXES, extra_check=None):
+        # Resolve secrets once at startup: fail closed in production, persist a
+        # single shared dev key in development (never a per-process random key).
+        assert_security_configured()
+        self._internal_service_key = get_internal_service_key()
+        self._jwt_secret = get_jwt_secret_key()
         self.app = app
         self.public_prefixes = tuple(public_prefixes)
         self.extra_check = extra_check
@@ -247,7 +301,11 @@ class InternalAuthMiddleware:
             return await self.app(scope, receive, send)
 
         headers = _headers_from_scope(scope)
-        if request_is_authenticated(headers):
+        if request_is_authenticated(
+            headers,
+            internal_service_key=self._internal_service_key,
+            jwt_secret=self._jwt_secret,
+        ):
             return await self.app(scope, receive, send)
 
         if self.extra_check is not None and self.extra_check(headers):

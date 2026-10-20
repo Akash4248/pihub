@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import socket
 import time
 from collections import deque
+from pathlib import Path
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from typing import Any
@@ -17,6 +19,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
@@ -34,7 +37,6 @@ from shared.security import (
 )
 from shared.topic_normalization import normalize_subject, normalize_topic, should_use_planner, topic_aliases
 from app.services.auth_service import get_current_user_optional, get_current_user_required
-from app.services.experiment_service_client import ExperimentGatewayMetrics, ExperimentServiceClient
 
 
 from app.middleware.structlog_middleware import StructuredLoggingMiddleware
@@ -43,7 +45,9 @@ settings = get_settings()
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
 retrieval_metrics: deque[dict[str, Any]] = deque(maxlen=200)
-experiment_gateway_metrics = ExperimentGatewayMetrics()
+
+# PhET catalog + static simulations were previously served by experiment-service.
+SIMULATIONS_DIR = Path(os.getenv("SIMULATIONS_DIR", "/shared/simulations"))
 
 DEMO_TOPICS: list[dict[str, Any]] = [
     {
@@ -80,11 +84,6 @@ async def lifespan(app: FastAPI):
         timeout=settings.gateway_http_timeout_seconds,
         limits=limits,
     )
-    app.state.experiment_client = ExperimentServiceClient(
-        app.state.http,
-        settings.experiment_service_url,
-        experiment_gateway_metrics,
-    )
     app.state.started_at = time.time()
     app.state.discovery_task = asyncio.create_task(_discovery_beacon_loop())
     try:
@@ -106,6 +105,11 @@ app.add_middleware(
         "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
         "/auth/register", "/auth/login", "/",
     ),
+)
+app.mount(
+    "/simulations",
+    StaticFiles(directory=str(SIMULATIONS_DIR), html=True, check_dir=False),
+    name="simulations",
 )
 
 
@@ -1022,7 +1026,6 @@ async def health() -> dict[str, Any]:
     qdrant_task = _safe_http_get_json(f"{settings.qdrant_url}/healthz")
     qdrant_coll_task = _safe_http_get_json(f"{settings.qdrant_url}/collections/{settings.qdrant_collection}")
     inference_task = _safe_http_get_json(f"{settings.inference_service_url}/ai/health")
-    exp_task = app.state.experiment_client.health()
     pihub_task = _safe_http_get_json(f"{settings.pihub_url}/health")
     pihub_packs_task = _safe_http_get_json(f"{settings.pihub_url}/packs")
     pack_svc_task = _safe_http_get_json(f"{settings.pack_service_url}/packs")
@@ -1033,7 +1036,7 @@ async def health() -> dict[str, Any]:
         else None
     )
 
-    tasks = [content_task, qdrant_task, qdrant_coll_task, inference_task, exp_task, pihub_task, pihub_packs_task, pack_svc_task]
+    tasks = [content_task, qdrant_task, qdrant_coll_task, inference_task, pihub_task, pihub_packs_task, pack_svc_task]
     if voice_task:
         tasks.append(voice_task)
 
@@ -1066,15 +1069,8 @@ async def health() -> dict[str, Any]:
     if not inference_ok:
         status = "degraded"
 
-    # Process experiment service
-    exp_res = results[4] if isinstance(results[4], dict) else {"healthy": False, "error": str(results[4])}
-    checks["experiment_service"] = exp_res
-    experiment_ok = bool(exp_res.get("healthy"))
-    if not experiment_ok and settings.experiment_service_required:
-        status = "degraded"
-
     # Process pihub
-    pihub_ok, pihub_body = results[5] if isinstance(results[5], tuple) else (False, {"error": str(results[5])})
+    pihub_ok, pihub_body = results[4] if isinstance(results[4], tuple) else (False, {"error": str(results[4])})
     checks["pihub"] = pihub_body
     database_ok = pihub_ok
     if not pihub_ok:
@@ -1082,12 +1078,12 @@ async def health() -> dict[str, Any]:
 
     # Process packs count
     pack_count = 0
-    packs_ok, packs_body = results[6] if isinstance(results[6], tuple) else (False, {})
+    packs_ok, packs_body = results[5] if isinstance(results[5], tuple) else (False, {})
     if packs_ok and isinstance(packs_body, dict):
         pack_count = len(packs_body.get("packs", [])) + len(packs_body.get("cached", []))
 
     # Process pack_service
-    pack_svc_ok, pack_svc_body = results[7] if isinstance(results[7], tuple) else (False, {})
+    pack_svc_ok, pack_svc_body = results[6] if isinstance(results[6], tuple) else (False, {})
     if pack_svc_ok and isinstance(pack_svc_body, dict):
         pack_count = max(pack_count, len(pack_svc_body.get("packs", [])))
         checks["pack_service"] = {"status": "ok", "pack_count": len(pack_svc_body.get("packs", []))}
@@ -1096,8 +1092,8 @@ async def health() -> dict[str, Any]:
 
     # Process voice service
     voice_ok = False
-    if settings.voice_service_enabled and len(results) > 8:
-        v_ok, v_body = results[8] if isinstance(results[8], tuple) else (False, {})
+    if settings.voice_service_enabled and len(results) > 7:
+        v_ok, v_body = results[7] if isinstance(results[7], tuple) else (False, {})
         checks["voice_service"] = v_body
         voice_ok = v_ok
         if not v_ok and settings.voice_service_required:
@@ -1110,7 +1106,6 @@ async def health() -> dict[str, Any]:
         "version": "1.0",
         "service": "gateway",
         "inference_service": inference_ok,
-        "experiment_service": {"healthy": experiment_ok},
         "voice_service": (
             {"healthy": True, "disabled": True}
             if not settings.voice_service_enabled
@@ -1922,194 +1917,41 @@ def _query_params(**values: Any) -> dict[str, Any]:
     return params
 
 
-@app.get("/experiments")
-async def experiments_get(
-    grade: int | None = Query(default=None),
-    subject: str | None = Query(default=None),
-    chapter: str | None = Query(default=None),
-    topic: str | None = Query(default=None),
-    difficulty: str | None = Query(default=None),
-    required_sensors: list[str] = Query(default=[]),
-    execution_modes: list[str] = Query(default=[]),
-    tags: list[str] = Query(default=[]),
-) -> Any:
-    params = _query_params(
-        grade=grade,
-        subject=subject,
-        chapter=chapter,
-        topic=topic,
-        difficulty=difficulty,
-        required_sensors=required_sensors,
-        execution_modes=execution_modes,
-        tags=tags,
-    )
-    return await app.state.experiment_client.get_experiments(params)
-
-
 @app.get("/experiments/catalog")
 async def experiments_catalog() -> Any:
-    return await app.state.experiment_client.get_catalog()
+    """Serve the PhET catalog formerly provided by experiment-service.
 
+    The catalog file lives alongside the simulation bundles, so the gateway
+    only needs the read-only simulations mount; no extra service is required.
+    """
+    catalog_path = SIMULATIONS_DIR / "catalog.json"
+    if not catalog_path.exists():
+        return {"experiments": [], "simulations": [], "total": 0}
 
-@app.get("/simulations/{path:path}")
-async def proxy_simulations(path: str) -> StreamingResponse:
-    return await _proxy_stream(settings.experiment_service_url, "GET", f"/simulations/{path}")
+    try:
+        raw = json.loads(catalog_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning("[EXPERIMENT_CATALOG] failed to read %s: %s", catalog_path, exc)
+        return {"experiments": [], "simulations": [], "total": 0}
 
+    simulations: list[dict[str, Any]] = []
+    for entry in raw if isinstance(raw, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        slug = str(entry.get("slug") or "").strip()
+        if not slug:
+            continue
+        simulation = dict(entry)
+        simulation["local_url"] = f"/simulations/{slug}/index.html"
+        simulation["manifest"] = {
+            "id": f"phet-{slug}",
+            "title": slug.replace("-", " ").title(),
+            "provider": "phet",
+            "type": "simulation",
+        }
+        simulations.append(simulation)
 
-@app.get("/experiments/search")
-async def experiments_search(
-    q: str | None = Query(default=None),
-    grade: int | None = Query(default=None),
-    subject: str | None = Query(default=None),
-    chapter: str | None = Query(default=None),
-    topic: str | None = Query(default=None),
-    difficulty: str | None = Query(default=None),
-    required_sensors: list[str] = Query(default=[]),
-    execution_modes: list[str] = Query(default=[]),
-    tags: list[str] = Query(default=[]),
-) -> Any:
-    params = _query_params(
-        q=q,
-        grade=grade,
-        subject=subject,
-        chapter=chapter,
-        topic=topic,
-        difficulty=difficulty,
-        required_sensors=required_sensors,
-        execution_modes=execution_modes,
-        tags=tags,
-    )
-    return await app.state.experiment_client.search_experiments(params)
-
-
-@app.get("/experiments/{experiment_id}/download")
-async def experiment_pack_download(experiment_id: str) -> StreamingResponse:
-    return await _proxy_stream(settings.experiment_service_url, "GET", f"/experiments/{quote(experiment_id, safe='')}/download")
-
-
-@app.get("/experiments/{experiment_id}/certification")
-async def experiment_certification(experiment_id: str) -> Any:
-    return await app.state.experiment_client.get_certification(experiment_id)
-
-
-@app.get("/experiments/{experiment_id}")
-async def experiment_get(experiment_id: str) -> Any:
-    return await app.state.experiment_client.get_experiment(experiment_id)
-
-
-@app.get("/chapters/{chapter_id}/experiments")
-async def chapter_experiments(chapter_id: str) -> Any:
-    return await app.state.experiment_client.get_chapter_experiments(chapter_id)
-
-
-@app.post("/classroom/sessions")
-async def classroom_session_create(payload: dict[str, Any]) -> Any:
-    return await _proxy_to(settings.experiment_service_url, "POST", "/classroom/sessions", payload)
-
-
-@app.get("/classroom/sessions")
-async def classroom_sessions(page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=200)) -> Any:
-    return await _get_json(settings.experiment_service_url, "/classroom/sessions", params={"page": page, "page_size": page_size})
-
-
-@app.post("/classroom/sessions/{session_id}/assignments")
-async def classroom_assignment_create(session_id: str, payload: dict[str, Any]) -> Any:
-    return await _proxy_to(settings.experiment_service_url, "POST", f"/classroom/sessions/{quote(session_id, safe='')}/assignments", payload)
-
-
-@app.get("/classroom/sessions/{session_id}/assignments")
-async def classroom_assignments(
-    session_id: str,
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
-) -> Any:
-    return await _get_json(
-        settings.experiment_service_url,
-        f"/classroom/sessions/{quote(session_id, safe='')}/assignments",
-        params={"page": page, "page_size": page_size},
-    )
-
-
-@app.post("/classroom/assignments/{assignment_id}/submit")
-async def classroom_assignment_submit(assignment_id: str, payload: dict[str, Any]) -> Any:
-    return await _proxy_to(settings.experiment_service_url, "POST", f"/classroom/assignments/{quote(assignment_id, safe='')}/submit", payload)
-
-
-@app.get("/classroom/assignments/{assignment_id}/submissions")
-async def classroom_assignment_submissions(
-    assignment_id: str,
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
-) -> Any:
-    return await _get_json(
-        settings.experiment_service_url,
-        f"/classroom/assignments/{quote(assignment_id, safe='')}/submissions",
-        params={"page": page, "page_size": page_size},
-    )
-
-
-@app.get("/classroom/analytics")
-async def classroom_session_analytics() -> Any:
-    return await _get_json(settings.experiment_service_url, "/classroom/analytics")
-
-
-@app.get("/experiment-templates")
-async def experiment_templates() -> Any:
-    return await app.state.experiment_client.get_templates()
-
-
-@app.post("/experiment-runs")
-async def experiment_run_create(payload: dict[str, Any]) -> Any:
-    return await app.state.experiment_client.create_run(payload)
-
-
-@app.get("/experiment-runs/student/{student_id}")
-async def experiment_runs_student(student_id: str) -> Any:
-    return await app.state.experiment_client.get_student_runs(student_id)
-
-
-@app.get("/experiment-runs/{run_id}")
-async def experiment_run_get(run_id: str) -> Any:
-    return await app.state.experiment_client.get_run(run_id)
-
-
-@app.post("/experiment-runs/{run_id}/events")
-async def experiment_run_event(run_id: str, payload: dict[str, Any]) -> Any:
-    return await app.state.experiment_client.append_event(run_id, payload)
-
-
-@app.post("/experiment-runs/{run_id}/complete")
-async def experiment_run_complete(run_id: str, payload: dict[str, Any]) -> Any:
-    return await app.state.experiment_client.complete_run(run_id, payload)
-
-
-@app.get("/analytics/student/{student_id}")
-async def experiment_student_analytics(student_id: str) -> Any:
-    return await app.state.experiment_client.get_student_analytics(student_id)
-
-
-@app.get("/analytics/experiment/{experiment_id}")
-async def experiment_analytics(experiment_id: str) -> Any:
-    return await app.state.experiment_client.get_experiment_analytics(experiment_id)
-
-
-@app.get("/analytics/system")
-async def experiment_system_analytics() -> Any:
-    return await app.state.experiment_client.get_system_analytics()
-
-
-@app.get("/analytics/top-experiments")
-async def experiment_top_analytics(limit: int = Query(default=10, ge=1, le=100)) -> Any:
-    return await app.state.experiment_client.get_top_experiments({"limit": limit})
-
-
-@app.get("/experiment-metrics")
-async def experiment_metrics() -> Any:
-    service_metrics = await app.state.experiment_client.get_metrics()
-    return {
-        "service": service_metrics,
-        "gateway": experiment_gateway_metrics.snapshot(),
-    }
+    return {"experiments": [], "simulations": simulations, "total": len(simulations)}
 
 
 async def _learning_asset(
