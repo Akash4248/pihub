@@ -1,0 +1,21 @@
+{
+  "service": "inference-service",
+  "base": "http://localhost:8010",
+  "method": "POST",
+  "protected_endpoint": "/ai/content/summary",
+  "checks": {
+    "without_credentials": {
+      "status": 401,
+      "rejected": true
+    },
+    "with_internal_key": {
+      "status": 400,
+      "accepted": true
+    },
+    "with_wrong_key": {
+      "status": 401,
+      "rejected": true
+    }
+  },
+  "ok": true
+}

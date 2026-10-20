@@ -6,6 +6,7 @@ import logging
 import os
 import uuid
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,8 @@ from devices.manager import DeviceManager
 from distribution.pack_manager import PackDistributionManager
 from monitoring.health import HealthMonitor
 from network.discovery import ClassroomIntranet, NetworkDiscovery
-from sync.manager import build_sync_manifest, checksum_bytes, validate_pack_file
+from shared.security import read_file_chunks_safely, InternalAuthMiddleware
+from sync.manager import build_sync_manifest
 from sync.sync_engine import SyncEngine
 from deployment.hotspot import HotspotNetworking
 from deployment.startup import DeploymentAutomation
@@ -62,7 +64,16 @@ class Settings:
         self.logs_dir = Path(os.getenv("LOGS_DIR") or (local_base / "pihub_logs"))
 
 
+import hmac
+
 settings = Settings()
+# Fail-closed by default (run_backend.sh exports ALLOW_ANONYMOUS_DEV=true
+# for local dev, matching shared.config).
+ALLOW_ANONYMOUS_DEV = os.getenv("ALLOW_ANONYMOUS_DEV", "false").lower() == "true"
+if not ALLOW_ANONYMOUS_DEV:
+    if settings.admin_token in ("change-me", "") or settings.device_token_secret in ("change-me-too", ""):
+        raise ValueError("Production deployment requires non-default PIHUB_ADMIN_TOKEN and PIHUB_DEVICE_TOKEN_SECRET")
+
 store = PiHubStore(settings.db_path)
 for target_dir in (settings.packs_dir, settings.cache_dir, settings.storage_dir, settings.logs_dir):
     try:
@@ -103,6 +114,15 @@ transfer_stress_test = TransferStressTest()
 recovery_scenarios = RecoveryScenarios()
 
 app = FastAPI(title="pihub")
+# pihub uses its own admin/device token scheme; accept those in addition to the
+# shared internal key / JWT so edge-device flows keep working while anonymous
+# access is still rejected.
+app.add_middleware(
+    InternalAuthMiddleware,
+    extra_check=lambda h: (
+        bool(h.get("x-pihub-token")) and hmac.compare_digest(h["x-pihub-token"], settings.admin_token)
+    ) or bool(h.get("x-device-token")),
+)
 
 
 def _log_tag(path: str) -> str:
@@ -150,13 +170,17 @@ async def structured_logging(request: Request, call_next):
 
 
 def require_admin(x_pihub_token: str | None = Header(default=None)) -> None:
-    if x_pihub_token != settings.admin_token:
+    if not x_pihub_token or not hmac.compare_digest(x_pihub_token.encode("utf-8"), settings.admin_token.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Admin token required")
 
 
 def issue_device_token(seed: str | None = None) -> str:
-    material = f"{seed or uuid.uuid4()}:{settings.device_token_secret}".encode("utf-8")
-    return hashlib.sha256(material).hexdigest()
+    seed_str = seed or str(uuid.uuid4())
+    return hmac.new(
+        settings.device_token_secret.encode("utf-8"),
+        seed_str.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -183,61 +207,51 @@ def update_classroom(payload: ClassroomUpdateRequest, _: None = Depends(require_
 def list_devices() -> dict[str, Any]:
     devices = []
     for device in store.list_devices():
-        devices.append({key: value for key, value in device.items() if key != "auth_token"})
+        devices.append({key: value for key, value in device.items() if key not in ("auth_token", "auth_token_hash")})
     return {"devices": devices}
 
 
 @app.post("/devices", response_model=DeviceResponse)
 def register_device(payload: DeviceRegisterRequest) -> DeviceResponse:
-    token = issue_device_token()
-    device = store.register_device(payload.device_name, payload.role, payload.classroom, payload.metadata, token)
-    store.create_device_session(device["device_id"], payload.classroom or "default", payload.device_name)
-    classroom_intranet.announce_device(device["device_id"], payload.device_name, device.get("metadata", {}).get("device_ip", "0.0.0.0"), 8000)
-    return DeviceResponse(**device)
+    device_id, token, _ = device_manager.register_device(
+        classroom_id=payload.classroom or "default",
+        device_name=payload.device_name,
+        device_ip=payload.metadata.get("device_ip", "0.0.0.0") if payload.metadata else "0.0.0.0",
+        role=payload.role,
+        metadata=payload.metadata,
+    )
+    device = store.get_device(device_id)
+    classroom_intranet.announce_device(device_id, payload.device_name, device.get("metadata", {}).get("device_ip", "0.0.0.0"), 8000)
+    # The plaintext token is shown exactly once here from the fresh secret —
+    # never read back from storage (only hashes live in the DB).
+    return DeviceResponse(**{**device, "auth_token": token})
 
 
 @app.post("/devices/{device_id}/heartbeat")
 def device_heartbeat(device_id: str, x_device_token: str | None = Header(default=None)) -> dict[str, Any]:
-    device = store.get_device(device_id)
-    if device is None:
-        raise HTTPException(status_code=404, detail="Device not found")
-    if x_device_token != device.get("auth_token"):
+    if not x_device_token or not device_manager.heartbeat(device_id, x_device_token):
         raise HTTPException(status_code=401, detail="Device token required")
-    store.heartbeat(device_id)
-    sessions = store.list_device_sessions(device_id)
-    if sessions:
-        store.update_device_session(sessions[0]["session_id"], last_heartbeat=int(time.time()), status="active", sync_status="idle")
     return {"status": "ok", "device_id": device_id}
 
 
 @app.post("/devices/{device_id}/reconnect")
 def reconnect_device(device_id: str, x_device_token: str | None = Header(default=None)) -> dict[str, Any]:
-    device = store.get_device(device_id)
-    if device is None:
-        raise HTTPException(status_code=404, detail="Device not found")
-    if x_device_token != device.get("auth_token"):
+    if not x_device_token:
         raise HTTPException(status_code=401, detail="Device token required")
-
-    store.heartbeat(device_id)
-    sessions = store.list_device_sessions(device_id)
-    if sessions:
-        store.update_device_session(
-            sessions[0]["session_id"],
-            last_heartbeat=int(time.time()),
-            status="active",
-            sync_status="recovering",
-        )
+    res = device_manager.handle_reconnect(device_id, x_device_token)
+    if res.get("status") == "error":
+        raise HTTPException(status_code=401, detail=res.get("message", "Device token required"))
+    device = store.get_device(device_id) or {}
     classroom_intranet.announce_device(device_id, device.get("device_name", device_id), device.get("metadata", {}).get("device_ip", "0.0.0.0"), 8000)
     return {"status": "reconnected", "device_id": device_id}
 
 
 @app.get("/devices/{device_id}/status")
 def device_status(device_id: str) -> dict[str, Any]:
-    device = store.get_device(device_id)
-    if device is None:
+    status_data = device_manager.get_device_status(device_id)
+    if status_data.get("status") == "unknown":
         raise HTTPException(status_code=404, detail="Device not found")
-    session = store.list_device_sessions(device_id)
-    return {"device": device, "session": session[0] if session else None, "trust": store.is_device_trusted(device_id)}
+    return status_data
 
 
 @app.post("/devices/{device_id}/trust")
@@ -251,6 +265,11 @@ def list_packs() -> dict[str, Any]:
     return {"packs": store.list_packs(), "cached": pack_manager.list_cached_packs()}
 
 
+# Packs are legitimately large: cap streaming at 1 GiB (enforced DURING the
+# upload so a bigger body can never sit in RAM), not after a full read.
+PACK_MAX_BYTES = 1024 * 1024 * 1024
+
+
 @app.post("/packs")
 async def create_pack(
     file: UploadFile = File(...),
@@ -262,22 +281,53 @@ async def create_pack(
     metadata: str = Form(default="{}"),
     _: None = Depends(require_admin),
 ) -> dict[str, Any]:
-    data = await file.read()
-    validate_pack_file(file.filename or pack_name, data)
-    target_name = file.filename or f"{pack_name or 'pack'}.zip"
-    target_path = settings.packs_dir / target_name
-    target_path.write_bytes(data)
+    try:
+        metadata_dict = json.loads(metadata)
+    except (json.JSONDecodeError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {exc}") from exc
+    safe_filename = Path(file.filename or f"{pack_name or 'pack'}.zip").name
+    if not safe_filename.lower().endswith((".zip", ".pack")):
+        raise HTTPException(status_code=400, detail="Packs must be packaged as .zip or .pack files")
+    target_path = (settings.packs_dir / safe_filename).resolve()
+    packs_dir_res = settings.packs_dir.resolve()
+    if not target_path.is_relative_to(packs_dir_res):
+        raise HTTPException(status_code=400, detail="Invalid filename: path traversal attempt")
+    # Stream straight to a temp sibling (never full body in RAM), then validate.
+    tmp_path = target_path.with_name(target_path.name + ".part")
+    digest = hashlib.sha256()
+    size_bytes = 0
+    try:
+        with open(tmp_path, "wb") as sink:
+            async for chunk in read_file_chunks_safely(file, max_bytes=PACK_MAX_BYTES):
+                sink.write(chunk)
+                digest.update(chunk)
+                size_bytes += len(chunk)
+            sink.flush()
+            os.fsync(sink.fileno())
+    except HTTPException:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    if safe_filename.lower().endswith(".zip") and not zipfile.is_zipfile(tmp_path):
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise HTTPException(status_code=400, detail="Invalid zip pack file")
+    os.replace(tmp_path, target_path)
     pack_record = store.add_pack(
         {
-            "pack_name": pack_name or target_name,
+            "pack_name": pack_name or safe_filename,
             "version": version,
             "subject": subject,
             "grade": grade,
             "chapter": chapter,
             "file_path": str(target_path),
-            "checksum": checksum_bytes(data),
-            "size_bytes": len(data),
-            "metadata": json.loads(metadata),
+            "checksum": digest.hexdigest(),
+            "size_bytes": size_bytes,
+            "metadata": metadata_dict,
         }
     )
     pack_manager.cache_pack(
@@ -286,7 +336,7 @@ async def create_pack(
         pack_record["version"],
         str(target_path),
         pack_record["checksum"],
-        len(data),
+        size_bytes,
         subject,
         grade,
         chapter,
@@ -320,9 +370,16 @@ def download_pack(pack_id: str) -> FileResponse:
     pack = store.get_cached_pack(pack_id) or store.get_pack(pack_id)
     if pack is None:
         raise HTTPException(status_code=404, detail="Pack not found")
+    target_path = Path(pack["file_path"]).resolve()
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail="Pack file missing")
+    packs_dir_res = settings.packs_dir.resolve()
+    cache_dir_res = settings.cache_dir.resolve()
+    if not target_path.is_relative_to(packs_dir_res) and not target_path.is_relative_to(cache_dir_res):
+        raise HTTPException(status_code=403, detail="Forbidden file path")
     store.touch_pack(pack_id)
     pack_manager.touch_cached_pack(pack_id)
-    return FileResponse(pack["file_path"], filename=Path(pack["file_path"]).name)
+    return FileResponse(str(target_path), filename=target_path.name)
 
 
 @app.post("/sync")

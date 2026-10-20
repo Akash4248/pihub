@@ -22,6 +22,7 @@ from app.sync.sync_manifest_generator import SyncManifestGenerator
 from app.validation.pack_validator import PackValidator
 from app.generated_pack_importer import GeneratedPackImporter
 from shared.schemas import HealthResponse
+from shared.security import InternalAuthMiddleware
 from shared.text_normalization import normalize_curriculum_name, normalize_language_code
 
 logger = logging.getLogger(__name__)
@@ -30,12 +31,14 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION", "educational_chunks_bge_m3")
 LOCAL_RUN_BASE = Path(__file__).resolve().parents[2] / ".local_run"
-PACK_STORAGE_PATH = os.getenv("PACK_STORAGE_PATH") or str(LOCAL_RUN_BASE / "packs")
+SHARED_STORAGE_PATH = os.getenv("SHARED_STORAGE_PATH", str(LOCAL_RUN_BASE / "shared"))
+PACK_STORAGE_PATH = os.getenv("PACK_STORAGE_PATH") or os.getenv("SHARED_STORAGE_PATH") or str(LOCAL_RUN_BASE / "packs")
 CURRICULUM_GRAPH_PATH = os.getenv("CURRICULUM_GRAPH_PATH") or str(LOCAL_RUN_BASE / "work" / "curriculum_graph.json")
 PDF_LIBRARY_PATH = os.getenv("PDF_LIBRARY_PATH") or str(LOCAL_RUN_BASE / "textbooks")
 PDF_MANIFEST_PATH = os.getenv("PDF_MANIFEST_PATH") or str(Path(PACK_STORAGE_PATH) / "pdf_manifests" / "pdf_manifest.json")
 
 app = FastAPI(title="Pack Management Service", version="2.0.0")
+app.add_middleware(InternalAuthMiddleware)
 
 
 def _pack_generator() -> PackGenerator:
@@ -78,7 +81,7 @@ async def health_check() -> HealthResponse:
 
 try:
     from shared.pack_schemas import PackGenerationRequest, PackGenerationResponse
-except Exception:  # pragma: no cover - fallback for alternate import paths
+except ImportError:  # pragma: no cover - fallback for alternate import paths
     from pydantic import BaseModel
 
     class PackGenerationRequest(BaseModel):
@@ -106,7 +109,7 @@ def _expected_pack_id(request: PackGenerationRequest) -> str | None:
     generator = app.state.pack_generator
     normalized_subject = normalize_curriculum_name(request.subject) if request.subject else None
     normalized_chapter = normalize_curriculum_name(request.chapter) if request.chapter else None
-    normalized_language = normalize_language_code(request.language) if request.language else None
+    normalized_language = normalize_language_code(request.language) or (normalize_curriculum_name(request.language) if request.language else None)
     if request.pack_type == "class" and request.grade is not None and normalized_subject:
         language = normalized_language or "english"
         return f"class{request.grade}_{generator._pack_id_part(normalized_subject)}_{generator._pack_id_part(language)}"
@@ -137,7 +140,7 @@ async def generate_pack(request: PackGenerationRequest) -> PackGenerationRespons
         generator = app.state.pack_generator
         normalized_subject = normalize_curriculum_name(request.subject) if request.subject else None
         normalized_chapter = normalize_curriculum_name(request.chapter) if request.chapter else None
-        normalized_language = normalize_language_code(request.language) if request.language else None
+        normalized_language = normalize_language_code(request.language) or request.language
 
         if request.pack_type == "class":
             if request.grade is None or not request.subject:
@@ -206,9 +209,9 @@ async def generate_pack(request: PackGenerationRequest) -> PackGenerationRespons
         logger.exception("Pack generation error")
         raise HTTPException(status_code=500, detail=str(exc))
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 class ImportGeneratedPackRequest(BaseModel):
-    source_dir: str = "/shared/generated_pack"
+    source_dir: str = Field(default_factory=lambda: os.getenv("SHARED_STORAGE_PATH", str(Path(PACK_STORAGE_PATH).parent / "shared" / "generated_pack")))
 
 @app.post("/packs/import/generated", tags=["Pack Import"])
 async def import_generated_pack(request: ImportGeneratedPackRequest) -> dict:

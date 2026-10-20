@@ -8,6 +8,9 @@ from app.educational_intelligence.artifact_cleaning import clean_text, is_meanin
 from app.educational_intelligence.glossary_extractor import GlossaryExtractor
 from shared.text_normalization import normalize_language_code
 
+from shared.config import get_settings
+
+settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -52,12 +55,12 @@ class GeneratedPackIngestor:
     def ingest_pack(self, pack_id: str) -> dict[str, Any]:
         """Ingest a generated_pack's artifacts into Qdrant via the pipeline."""
         # Primary path: pack was saved via pack-service into shared packs dir
-        # The pack-service saves to /shared/packs/grade_0/mixed/generated_pack/<pack_id>/
-        # Try to find it; fall back to the raw generated_pack directory
+        # Try to find it; fall back to the raw generated_pack directory in work_dir
         candidate_paths = [
-            Path("/shared/packs") / pack_id,
-            Path("/shared/packs/grade_0/mixed/generated_pack") / pack_id,
-            Path("/shared/generated_pack"),
+            Path(settings.pack_storage_path) / pack_id,
+            Path(settings.pack_storage_path) / "grade_0" / "mixed" / "generated_pack" / pack_id,
+            Path(settings.work_dir) / "generated_pack",
+            Path(settings.work_dir) / pack_id,
         ]
         pack_dir = None
         for p in candidate_paths:

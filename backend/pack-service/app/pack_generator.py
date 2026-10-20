@@ -31,21 +31,9 @@ from qdrant_client.models import PointStruct
 from app.pack_storage.pack_repository import PackRepository
 from app.semantic_content_pipeline import SemanticContentPipeline
 from shared.text_normalization import language_filter_values, normalize_curriculum_name, normalize_language_code
+from shared.vector_store import build_filter
 
 logger = logging.getLogger(__name__)
-
-SUBJECT_QUERY_ALIASES = {
-    "math": ["maths", "mathematics"],
-    "maths": ["maths", "math", "mathematics"],
-    "mathematics": ["maths", "math", "mathematics"],
-    "science": ["science", "social_science"],
-    "social_science": ["social_science", "science"],
-    "social science": ["social_science", "science"],
-    "history": ["social_science", "history"],
-    "geography": ["social_science", "geography"],
-    "economics": ["social_science", "economics"],
-    "civics": ["social_science", "civics"],
-}
 
 
 class PackGenerationNoContentError(RuntimeError):
@@ -58,7 +46,7 @@ class PackQualityGateError(RuntimeError):
 
 class PackGenerator:
     """Core pack generation engine"""
-    
+
     def __init__(
         self,
         qdrant_url: str,
@@ -70,14 +58,14 @@ class PackGenerator:
         self.qdrant_collection = qdrant_collection
         self.pack_storage_path = Path(pack_storage_path)
         self.curriculum_graph_path = Path(curriculum_graph_path)
-        
+
         self.pack_storage_path.mkdir(parents=True, exist_ok=True)
         self.client = QdrantClient(url=qdrant_url)
         self.repository = PackRepository(self.pack_storage_path)
         self.semantic_pipeline = SemanticContentPipeline()
-        
+
         self.active_generations: Dict[str, dict] = {}
-    
+
     async def generate_class_pack(
         self,
         grade: int,
@@ -87,33 +75,19 @@ class PackGenerator:
         compression: str = "gzip",
         quantize_embeddings: bool = False
     ) -> str:
-        """
-        Generate a comprehensive pack for an entire class
-        
-        Args:
-            grade: Grade level (e.g., 7)
-            subject: Subject name (e.g., 'science')
-            language: Language code (e.g., 'en', 'kn')
-            include_media: Include media files
-            compression: Compression format
-            quantize_embeddings: Quantize embeddings to reduce size
-        
-        Returns:
-            Pack ID
-        """
+        """Generate a comprehensive pack for an entire class"""
         normalized_subject = normalize_curriculum_name(subject)
         normalized_language = normalize_language_code(language) or normalize_curriculum_name(language)
         pack_id = f"class{grade}_{self._pack_id_part(normalized_subject)}_{self._pack_id_part(normalized_language)}"
         logger.info(f"Starting class pack generation: {pack_id}")
-        
-        # Search Qdrant for all chunks matching grade/subject/language
-        search_results = await self._search_chunks_by_metadata(
+
+        search_results, used_fallback = await self._search_chunks_by_metadata(
             grade=grade,
             subject=subject,
             language=language
         )
         self._ensure_chunks_found(pack_id, search_results)
-        
+
         pack = await self._create_pack(
             pack_id=pack_id,
             pack_type="class",
@@ -121,16 +95,17 @@ class PackGenerator:
             metadata={
                 "grade": grade,
                 "subject": normalized_subject,
-                "language": normalized_language
+                "language": normalized_language,
+                "used_fallback": used_fallback,
             },
             compression=compression,
             quantize_embeddings=quantize_embeddings,
             include_media=include_media
         )
-        
+
         logger.info(f"Class pack generated: {pack_id}, size: {pack['size_mb']:.2f}MB")
         return pack_id
-    
+
     async def generate_chapter_pack(
         self,
         grade: int,
@@ -146,16 +121,15 @@ class PackGenerator:
         normalized_language = normalize_language_code(language) or normalize_curriculum_name(language)
         pack_id = f"chapter_{grade}_{self._pack_id_part(normalized_subject)}_{self._pack_id_part(normalized_chapter)}_{self._pack_id_part(normalized_language)}"
         logger.info(f"Starting chapter pack generation: {pack_id}")
-        
-        # Search for chunks with matching chapter
-        search_results = await self._search_chunks_by_metadata(
+
+        search_results, used_fallback = await self._search_chunks_by_metadata(
             grade=grade,
             subject=subject,
             chapter=chapter,
             language=language
         )
         self._ensure_chunks_found(pack_id, search_results)
-        
+
         pack = await self._create_pack(
             pack_id=pack_id,
             pack_type="chapter",
@@ -164,15 +138,16 @@ class PackGenerator:
                 "grade": grade,
                 "subject": normalized_subject,
                 "chapter": normalized_chapter,
-                "language": normalized_language
+                "language": normalized_language,
+                "used_fallback": used_fallback,
             },
             compression=compression,
             quantize_embeddings=quantize_embeddings
         )
-        
+
         logger.info(f"Chapter pack generated: {pack_id}, size: {pack['size_mb']:.2f}MB")
         return pack_id
-    
+
     async def generate_language_pack(
         self,
         language: str,
@@ -188,15 +163,14 @@ class PackGenerator:
         grade_str = f"_{grade}" if grade else ""
         pack_id = f"lang_{self._pack_id_part(normalized_language)}{grade_str}{subject_str}"
         logger.info(f"Starting language pack generation: {pack_id}")
-        
-        # Search for chunks with matching language
-        search_results = await self._search_chunks_by_metadata(
+
+        search_results, used_fallback = await self._search_chunks_by_metadata(
             language=language,
             grade=grade,
             subject=subject
         )
         self._ensure_chunks_found(pack_id, search_results)
-        
+
         pack = await self._create_pack(
             pack_id=pack_id,
             pack_type="language",
@@ -204,15 +178,16 @@ class PackGenerator:
             metadata={
                 "language": normalized_language,
                 "grade": grade,
-                "subject": normalized_subject
+                "subject": normalized_subject,
+                "used_fallback": used_fallback,
             },
             compression=compression,
             quantize_embeddings=quantize_embeddings
         )
-        
+
         logger.info(f"Language pack generated: {pack_id}, size: {pack['size_mb']:.2f}MB")
         return pack_id
-    
+
     async def _search_chunks_by_metadata(
         self,
         grade: Optional[int] = None,
@@ -220,125 +195,87 @@ class PackGenerator:
         chapter: Optional[str] = None,
         language: Optional[str] = None,
         limit: int = 10000
-    ) -> List[dict]:
+    ) -> Tuple[List[dict], Optional[str]]:
         """Search Qdrant for chunks matching metadata filters with controlled fallbacks."""
-        try:
-            requested = {
-                "grade": grade,
-                "subject": self._normalize_metadata_value(subject),
-                "chapter": self._normalize_metadata_value(chapter),
-                "language": self._normalize_metadata_value(language),
-            }
+        requested = {
+            "grade": grade,
+            "subject": subject,
+            "chapter": chapter,
+            "language": language,
+        }
 
-            logger.info(
-                "Pack generation request metadata: grade=%s, subject=%s, chapter=%s, language=%s",
-                requested["grade"],
-                requested["subject"],
-                requested["chapter"],
-                requested["language"],
-            )
+        logger.info(
+            "Pack generation request metadata: grade=%s, subject=%s, chapter=%s, language=%s",
+            requested["grade"],
+            requested["subject"],
+            requested["chapter"],
+            requested["language"],
+        )
 
-            exact = self._scroll_chunks_by_metadata(
-                grade=requested["grade"],
-                subject=requested["subject"],
-                chapter=requested["chapter"],
-                language=requested["language"],
-                limit=limit,
-            )
-            if exact:
-                logger.info("Found %s chunks matching exact filters", len(exact))
-                return exact
+        exact = self._scroll_chunks_by_metadata(
+            grade=requested["grade"],
+            subject=requested["subject"],
+            chapter=requested["chapter"],
+            language=requested["language"],
+            limit=limit,
+        )
+        if exact:
+            logger.info("Found %s chunks matching exact filters", len(exact))
+            return exact, None
 
-            logger.warning(
-                "PACK_FALLBACK_TRIGGERED grade=%s subject=%s chapter=%s language=%s reason=exact_filter_zero_chunks",
-                requested["grade"],
-                requested["subject"],
-                requested["chapter"],
-                requested["language"],
-            )
+        logger.warning(
+            "PACK_FALLBACK_TRIGGERED grade=%s subject=%s chapter=%s language=%s reason=exact_filter_zero_chunks",
+            requested["grade"],
+            requested["subject"],
+            requested["chapter"],
+            requested["language"],
+        )
 
-            attempts = self._fallback_attempts(
-                grade=requested["grade"],
-                subject=requested["subject"],
-                chapter=requested["chapter"],
-                language=requested["language"],
-            )
-            for attempt in attempts:
-                if attempt["fuzzy_chapter"]:
-                    results = self._scroll_chunks_with_fuzzy_chapter(
-                        grade=attempt["grade"],
-                        subject=attempt["subject"],
-                        chapter=attempt["chapter"],
-                        language=attempt["language"],
-                        limit=max(limit, 50000),
-                    )
-                else:
-                    results = self._scroll_chunks_by_metadata(
-                        grade=attempt["grade"],
-                        subject=attempt["subject"],
-                        chapter=attempt["chapter"],
-                        language=attempt["language"],
-                        limit=limit,
-                    )
+        attempts = self._fallback_attempts(
+            grade=requested["grade"],
+            subject=requested["subject"],
+            chapter=requested["chapter"],
+            language=requested["language"],
+        )
+        for attempt in attempts:
+            if attempt["fuzzy_chapter"]:
+                results = self._scroll_chunks_with_fuzzy_chapter(
+                    grade=attempt["grade"],
+                    subject=attempt["subject"],
+                    chapter=attempt["chapter"],
+                    language=attempt["language"],
+                    limit=min(limit, 5000),
+                )
+            else:
+                results = self._scroll_chunks_by_metadata(
+                    grade=attempt["grade"],
+                    subject=attempt["subject"],
+                    chapter=attempt["chapter"],
+                    language=attempt["language"],
+                    limit=limit,
+                )
 
-                if results:
-                    logger.warning(
-                        "PACK_FALLBACK_SUCCESS reason=%s chunks=%s grade=%s subject=%s chapter=%s language=%s fuzzy_chapter=%s",
-                        attempt["reason"],
-                        len(results),
-                        attempt["grade"],
-                        attempt["subject"],
-                        attempt["chapter"],
-                        attempt["language"],
-                        attempt["fuzzy_chapter"],
-                    )
-                    return results
+            if results:
+                logger.warning(
+                    "PACK_FALLBACK_SUCCESS reason=%s chunks=%s grade=%s subject=%s chapter=%s language=%s fuzzy_chapter=%s",
+                    attempt["reason"],
+                    len(results),
+                    attempt["grade"],
+                    attempt["subject"],
+                    attempt["chapter"],
+                    attempt["language"],
+                    attempt["fuzzy_chapter"],
+                )
+                return results, attempt["reason"]
 
-            logger.warning(
-                "PACK_FALLBACK_FAILED grade=%s subject=%s chapter=%s language=%s",
-                requested["grade"],
-                requested["subject"],
-                requested["chapter"],
-                requested["language"],
-            )
-            return []
-        
-        except Exception as e:
-            logger.exception("Error searching chunks: %s", e)
-            return []
-
-    @staticmethod
-    def _normalize_metadata_value(value: Any) -> Any:
-        if value is None:
-            return None
-        if isinstance(value, str):
-            language_code = normalize_language_code(value)
-            if language_code in {"en", "hi", "kn"}:
-                return language_code
-            return normalize_curriculum_name(value)
-        return value
-
-    @staticmethod
-    def _unique(values: List[Any]) -> List[Any]:
-        result: List[Any] = []
-        seen = set()
-        for value in values:
-            if value in (None, ""):
-                continue
-            key = str(value)
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append(value)
-        return result
-
-    def _subject_query_variants(self, subject: Optional[str]) -> List[str]:
-        if not subject:
-            return []
-        normalized = normalize_curriculum_name(subject)
-        variants = [normalized]
-        variants.extend(SUBJECT_QUERY_ALIASES.get(normalized, []))
-        return [str(value) for value in self._unique(variants)]
+        logger.warning(
+            "PACK_FALLBACK_FAILED grade=%s subject=%s chapter=%s language=%s",
+            requested["grade"],
+            requested["subject"],
+            requested["chapter"],
+            requested["language"],
+        )
+        return [], None
 
     def _fallback_attempts(
         self,
@@ -348,7 +285,6 @@ class PackGenerator:
         language: Optional[str],
     ) -> List[dict[str, Any]]:
         attempts: List[dict[str, Any]] = []
-        subject_variants = self._subject_query_variants(subject) or [subject]
 
         def add(reason: str, item_subject: Optional[str], item_language: Optional[str], fuzzy_chapter: bool = False) -> None:
             attempt = {
@@ -359,89 +295,18 @@ class PackGenerator:
                 "language": item_language,
                 "fuzzy_chapter": fuzzy_chapter,
             }
-            key = (
-                attempt["reason"],
-                attempt["grade"],
-                attempt["subject"],
-                attempt["chapter"],
-                attempt["language"],
-                attempt["fuzzy_chapter"],
-            )
-            if not any(
-                (
-                    existing["reason"],
-                    existing["grade"],
-                    existing["subject"],
-                    existing["chapter"],
-                    existing["language"],
-                    existing["fuzzy_chapter"],
-                ) == key
-                for existing in attempts
-            ):
+            if attempt not in attempts:
                 attempts.append(attempt)
 
         if language is not None:
             add("remove_language_filter", subject, None)
 
-        for variant in subject_variants:
-            if variant != subject:
-                add("normalized_subject_filter", variant, language)
-                if language is not None:
-                    add("normalized_subject_without_language", variant, None)
-
         if chapter is not None:
             add("chapter_fuzzy_match", subject, language, fuzzy_chapter=True)
             if language is not None:
                 add("chapter_fuzzy_match_without_language", subject, None, fuzzy_chapter=True)
-            for variant in subject_variants:
-                if variant != subject:
-                    add("normalized_subject_chapter_fuzzy_match", variant, language, fuzzy_chapter=True)
-                    if language is not None:
-                        add("normalized_subject_chapter_fuzzy_without_language", variant, None, fuzzy_chapter=True)
 
         return attempts
-
-    def _build_qdrant_filter(
-        self,
-        grade: Optional[int] = None,
-        subject: Optional[str] = None,
-        chapter: Optional[str] = None,
-        language: Optional[str] = None,
-    ):
-        from qdrant_client import models
-
-        must_conditions = []
-        conditions = []
-        for key, value in (
-            ("grade", grade),
-            ("subject", subject),
-            ("chapter", chapter),
-            ("language", language),
-        ):
-            if value is None:
-                continue
-            if key == "language" and isinstance(value, str):
-                language_values = language_filter_values(value)
-                if len(language_values) > 1:
-                    conditions.append({"key": key, "match": {"any": language_values}})
-                    must_conditions.append(models.FieldCondition(key=key, match=models.MatchAny(any=language_values)))
-                    continue
-                value = normalize_language_code(value)
-            else:
-                if isinstance(value, str):
-                    value = normalize_curriculum_name(value)
-            conditions.append({"key": key, "match": {"value": value}})
-            must_conditions.append(models.FieldCondition(key=key, match=models.MatchValue(value=value)))
-
-        scroll_filter = models.Filter(must=must_conditions) if must_conditions else None
-        logger.info("Generated Qdrant filter: %s", conditions)
-        logger.info("EXACT GENERATED FILTER OBJECT: %s", scroll_filter)
-        if scroll_filter:
-            try:
-                logger.info("SERIALIZED JSON FILTER: %s", scroll_filter.json())
-            except AttributeError:
-                logger.info("SERIALIZED JSON FILTER: %s", scroll_filter.model_dump_json())
-        return scroll_filter
 
     def _scroll_points(self, scroll_filter: Any, limit: int) -> list[Any]:
         points: list[Any] = []
@@ -453,7 +318,7 @@ class PackGenerator:
                 limit=min(1000, limit - len(points)),
                 offset=offset,
                 with_payload=True,
-                with_vectors=True,
+                with_vectors=False,
             )
             if not batch:
                 break
@@ -461,8 +326,6 @@ class PackGenerator:
             if offset is None:
                 break
         logger.info("Number of Qdrant points returned after pagination: %s", len(points))
-        if points and points[0].payload:
-            logger.info("First returned payload: %s", points[0].payload)
         return points
 
     @staticmethod
@@ -471,7 +334,7 @@ class PackGenerator:
         return {
             "chunk_id": str(point.id),
             "text": payload.get("text", ""),
-            "embedding": point.vector if point.vector else [],
+            "embedding": getattr(point, "vector", None) or [],
             "metadata": payload,
         }
 
@@ -483,11 +346,13 @@ class PackGenerator:
         language: Optional[str] = None,
         limit: int = 10000,
     ) -> List[dict]:
-        scroll_filter = self._build_qdrant_filter(
-            grade=grade,
-            subject=subject,
-            chapter=chapter,
-            language=language,
+        scroll_filter = build_filter(
+            {
+                "grade": grade,
+                "subject": subject,
+                "chapter": chapter,
+                "language": language,
+            }
         )
         return [self._point_to_result(point) for point in self._scroll_points(scroll_filter, limit)]
 
@@ -513,13 +378,16 @@ class PackGenerator:
         language: Optional[str],
         limit: int,
     ) -> List[dict]:
-        scroll_filter = self._build_qdrant_filter(
-            grade=grade,
-            subject=subject,
-            language=language,
+        scroll_filter = build_filter(
+            {
+                "grade": grade,
+                "subject": subject,
+                "language": language,
+            }
         )
         results: List[dict] = []
-        for point in self._scroll_points(scroll_filter, limit):
+        cap_limit = min(limit, 5000)
+        for point in self._scroll_points(scroll_filter, cap_limit):
             payload = point.payload or {}
             if self._chapter_matches(payload.get("chapter"), chapter):
                 results.append(self._point_to_result(point))
@@ -539,126 +407,11 @@ class PackGenerator:
         logger.error("Pack generation failed: zero chunks retrieved for pack_id=%s", pack_id)
         raise PackGenerationNoContentError(f"No chunks found for pack {pack_id}; empty pack publication blocked")
 
-    def debug_pack_query(
-        self,
-        grade: int = 5,
-        subject: str = "maths",
-        chapter: str = "animal jumps"
-    ):
-        """Debug method to identify the exact mismatch between fields."""
-        try:
-            from qdrant_client import models
-            print("\n--- RUNNING DEBUG PACK QUERY ---")
-            
-            language = "en"
-            normalized_subject = normalize_curriculum_name(subject)
-            normalized_chapter = normalize_curriculum_name(chapter)
-            normalized_language = normalize_language_code(language) or normalize_curriculum_name(language)
-            
-            # Filter A: All fields
-            must_conditions_A = [
-                models.FieldCondition(key="grade", match=models.MatchValue(value=grade)),
-                models.FieldCondition(key="subject", match=models.MatchValue(value=normalized_subject)),
-                models.FieldCondition(key="chapter", match=models.MatchValue(value=normalized_chapter)),
-                models.FieldCondition(key="language", match=models.MatchValue(value=normalized_language))
-            ]
-            filter_A = models.Filter(must=must_conditions_A)
-            
-            points_A, _ = self.client.scroll(
-                collection_name=self.qdrant_collection,
-                scroll_filter=filter_A,
-                limit=10,
-                with_payload=True
-            )
-            print(f"Filter A (All fields) chunk count: {len(points_A)}")
-            
-            # Filter B: Only chapter
-            must_conditions_B = [
-                models.FieldCondition(key="chapter", match=models.MatchValue(value=normalized_chapter))
-            ]
-            filter_B = models.Filter(must=must_conditions_B)
-            
-            points_B, _ = self.client.scroll(
-                collection_name=self.qdrant_collection,
-                scroll_filter=filter_B,
-                limit=10,
-                with_payload=True
-            )
-            print(f"Filter B (Only chapter) chunk count: {len(points_B)}")
-            
-            if len(points_B) > 0 and len(points_A) == 0:
-                print("\nFinding mismatch...")
-                payload = points_B[0].payload
-                print(f"First matching payload for B:\n{json.dumps(payload, indent=2)}")
-                
-                test_fields = [
-                    ("grade", grade),
-                    ("subject", normalized_subject),
-                    ("language", normalized_language)
-                ]
-                
-                for field, expected_val in test_fields:
-                    test_conds = [
-                        models.FieldCondition(key="chapter", match=models.MatchValue(value=normalized_chapter)),
-                        models.FieldCondition(key=field, match=models.MatchValue(value=expected_val))
-                    ]
-                    test_filter = models.Filter(must=test_conds)
-                    test_pts, _ = self.client.scroll(
-                        collection_name=self.qdrant_collection,
-                        scroll_filter=test_filter,
-                        limit=1,
-                        with_payload=False
-                    )
-                    if len(test_pts) == 0:
-                        actual_val = payload.get(field)
-                        print(f"MISMATCH FOUND! Field: '{field}'")
-                        print(f"  Expected value used in query: '{expected_val}' (type: {type(expected_val).__name__})")
-                        print(f"  Actual value in Qdrant DB : '{actual_val}' (type: {type(actual_val).__name__})")
-
-            print("--- END DEBUG PACK QUERY ---\n")
-        except Exception as e:
-            print(f"Error in debug: {e}")
-
     @staticmethod
     def _pack_id_part(value: str | None) -> str:
         normalized = normalize_curriculum_name(value)
         return re.sub(r"[^a-z0-9]+", "_", normalized).strip("_") or "unknown"
-        
-    def _generate_glossary(self, chunks: List[dict]) -> List[dict]:
-        """Generate a valid, deduplicated glossary from chunks"""
-        glossary = []
-        seen_terms = set()
-        
-        for chunk in chunks:
-            metadata = chunk.get("metadata", {})
-            term = metadata.get("topic") or metadata.get("chapter") or ""
-            term = str(term).strip()
-            
-            if not term:
-                continue
-                
-            # Normalize casing: e.g. capitalize first letter
-            term_normalized = term.capitalize()
-            term_lower = term_normalized.lower()
-            
-            if term_lower in seen_terms:
-                continue
-                
-            definition = str(chunk.get("text", "")).strip()
-            if not definition:
-                continue
-                
-            # Truncate definition reasonably
-            definition = definition[:240]
-            
-            glossary.append({"term": term_normalized, "definition": definition})
-            seen_terms.add(term_lower)
-            
-            if len(glossary) >= 10:
-                break
-                
-        return glossary
-    
+
     async def _create_pack(
         self,
         pack_id: str,
@@ -670,6 +423,20 @@ class PackGenerator:
         include_media: bool = False
     ) -> dict:
         """Create and compress a pack"""
+        used_fallback = metadata.get("used_fallback")
+        req_lang = normalize_language_code(metadata.get("language")) or metadata.get("language")
+        regional_languages = {"kn", "hi", "ta", "te", "mr", "gu", "bn", "ml", "or", "pa", "as"}
+        if req_lang and req_lang in regional_languages and used_fallback == "remove_language_filter":
+            logger.error(
+                "PACK_QUALITY_GATE_FAILED pack_id=%s language=%s fallback=%s reason=regional_language_fallback_blocked",
+                pack_id,
+                req_lang,
+                used_fallback,
+            )
+            raise PackQualityGateError(
+                f"Regional language pack ({req_lang}) publication blocked because language filter was dropped (used_fallback={used_fallback})"
+            )
+
         processed_chunks: list[dict[str, object]] = []
         for chunk in chunks:
             chunk_data = {
@@ -734,52 +501,32 @@ class PackGenerator:
         pack_record["checksum"] = pack_record.get("checksum")
         logger.info(f"Pack {pack_id} saved: {compressed_size:.2f}MB")
         return pack_record
-    
-    async def _compress_pack(self, pack_dir: Path, format: str = "gzip") -> Path:
-        """Compress pack directory"""
-        archive_name = pack_dir.name
-        archive_path = pack_dir.parent / f"{archive_name}.tar.{format}"
-        
-        if format == "gzip":
-            with tarfile.open(archive_path, "w:gz") as tar:
-                tar.add(pack_dir, arcname=archive_name)
-        elif format == "xz":
-            with tarfile.open(archive_path, "w:xz") as tar:
-                tar.add(pack_dir, arcname=archive_name)
-        else:  # zstd or others
-            with tarfile.open(archive_path, "w") as tar:
-                tar.add(pack_dir, arcname=archive_name)
-        
-        logger.info(f"Pack compressed to {archive_path}")
-        return archive_path
-    
+
     def _quantize_embedding(self, embedding: List[float], bits: int = 8) -> List[int]:
         """Quantize float embeddings to reduce size"""
         if not embedding:
             return []
-        
-        # Find min/max
+
         min_val = min(embedding)
         max_val = max(embedding)
         range_val = max_val - min_val or 1.0
-        
-        # Quantize to 8-bit
+
         quantized = [int(((x - min_val) / range_val) * 255) for x in embedding]
         return quantized
-    
+
     def _compute_checksum(self, data: dict) -> str:
         """Compute SHA256 checksum of pack data"""
         json_bytes = json.dumps(data, sort_keys=True).encode('utf-8')
         return hashlib.sha256(json_bytes).hexdigest()
-    
+
     def get_pack_manifest(self, pack_id: str) -> Optional[dict]:
         """Get pack manifest"""
         return self.repository.load_manifest(pack_id)
-    
+
     def list_packs(self) -> List[dict]:
         """List all available packs"""
         return self.repository.list_packs()
-    
+
     def validate_pack_integrity(self, pack_id: str) -> Tuple[bool, str]:
         """Validate pack integrity"""
         valid, errors = self.repository.validate_pack(pack_id)

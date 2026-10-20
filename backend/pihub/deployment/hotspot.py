@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from shared.file_utils import atomic_write_json, atomic_write_text
+
 
 class Hostapd:
     """hostapd configuration and management"""
@@ -36,15 +38,20 @@ class Hostapd:
         hw_mode: str = "g",
     ) -> str:
         """Generate hostapd configuration"""
+        clean_ssid = ssid.replace("\r", "").replace("\n", "")
+        clean_passphrase = passphrase.replace("\r", "").replace("\n", "")
+        if not clean_ssid or not clean_passphrase:
+            raise ValueError("SSID and passphrase must be non-empty and cannot contain newlines")
+
         config = f"""
 interface={self.interface}
 driver=nl80211
-ssid={ssid}
+ssid={clean_ssid}
 hw_mode={hw_mode}
 channel={channel}
 wmm_enabled=1
 wpa=2
-wpa_passphrase={passphrase}
+wpa_passphrase={clean_passphrase}
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 wpa_ptk_rekey=600
@@ -65,7 +72,7 @@ ieee80211d=1
 
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            self.config_file.write_text(config)
+            atomic_write_text(self.config_file, config)
             return {
                 "status": "ok",
                 "interface": self.interface,
@@ -127,7 +134,7 @@ log-facility=/var/log/dnsmasq.log
 
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            self.config_file.write_text(config)
+            atomic_write_text(self.config_file, config)
             return {
                 "status": "ok",
                 "interface": self.interface,
@@ -180,13 +187,13 @@ class HotspotNetworking:
                 pass
 
     def _save_state(self) -> None:
-        """Persist hotspot state"""
+        """Persist hotspot state (crash-safe: tmp + fsync + rename)"""
         data = {
             "hotspot_enabled": self.hotspot_enabled,
             "last_updated": int(time.time()),
             "interface": self.interface,
         }
-        self.state_file.write_text(json.dumps(data, indent=2))
+        atomic_write_json(self.state_file, data)
 
     def setup_hotspot(
         self,

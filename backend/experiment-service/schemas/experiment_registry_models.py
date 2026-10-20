@@ -28,6 +28,7 @@ class ExperimentSummary(BaseModel):
     id: str
     title: str
     subject: str
+    category: ExperimentCategory | None = None
     chapter: str | None = None
     topic: str | None = None
     difficulty: ExperimentDifficulty

@@ -1,26 +1,51 @@
-from __future__ import annotations
-
+import hashlib
+import hmac
 import json
+import logging
 import sqlite3
+import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class PiHubStore:
     def __init__(self, db_path: str) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._local = threading.local()
+        self._enable_wal()
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _enable_wal(self) -> None:
+        # Switch the database to WAL once, at startup. Re-issuing
+        # `PRAGMA journal_mode = WAL` on every request raced under concurrency
+        # and caused sporadic `SQLITE_CANTOPEN: unable to open database file`.
         connection = sqlite3.connect(self.db_path, timeout=10.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode = WAL;")
-        connection.execute("PRAGMA busy_timeout = 10000;")
-        connection.execute("PRAGMA synchronous = NORMAL;")
-        connection.execute("PRAGMA foreign_keys = ON;")
+        try:
+            connection.execute("PRAGMA journal_mode = WAL;")
+        finally:
+            connection.close()
+
+    def _connect(self) -> sqlite3.Connection:
+        # One reusable connection per worker thread. FastAPI runs sync endpoints
+        # in a thread pool, so this avoids opening a fresh SQLite handle (and
+        # re-running WAL setup) on every single request.
+        connection = getattr(self._local, "connection", None)
+        if connection is None:
+            connection = sqlite3.connect(self.db_path, timeout=10.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout = 10000;")
+            connection.execute("PRAGMA synchronous = NORMAL;")
+            connection.execute("PRAGMA foreign_keys = ON;")
+            self._local.connection = connection
         return connection
 
     def _init_db(self) -> None:
@@ -32,14 +57,31 @@ class PiHubStore:
                     device_name text not null,
                     role text not null,
                     classroom text,
-                    auth_token text not null,
+                    auth_token_hash text,
                     status text not null,
                     metadata text not null,
                     created_at integer not null,
                     updated_at integer not null,
                     last_seen integer
                 );
+                """
+            )
+            cols = [row[1] for row in connection.execute("pragma table_info(devices)").fetchall()]
+            if "auth_token_hash" not in cols:
+                connection.execute("alter table devices add column auth_token_hash text")
+            if "auth_token" in cols:
+                rows = connection.execute("select device_id, auth_token from devices where auth_token is not null and (auth_token_hash is null or auth_token_hash = '')").fetchall()
+                for r in rows:
+                    connection.execute("update devices set auth_token_hash = ? where device_id = ?", (_hash_token(r["auth_token"]), r["device_id"]))
+                # All secrets are hashes now: drop the legacy plaintext column
+                # so no future code path can read or leak raw tokens.
+                try:
+                    connection.execute("alter table devices drop column auth_token")
+                except Exception as exc:
+                    logger.warning("Could not drop legacy devices.auth_token column: %s", exc)
 
+            connection.executescript(
+                """
                 create table if not exists classroom (
                     id integer primary key check (id = 1),
                     classroom_name text,
@@ -226,8 +268,53 @@ class PiHubStore:
 
                 create index if not exists idx_quiz_sessions_student
                 on quiz_sessions(student_id, updated_at desc);
+
+                create table if not exists student_device_map (
+                    device_id text primary key,
+                    student_id text unique,
+                    updated_at integer not null
+                );
                 """
             )
+            # Auto-backfill student_device_map from devices metadata if empty
+            cursor = connection.execute("select count(*) from student_device_map")
+            if cursor.fetchone()[0] == 0:
+                connection.execute(
+                    """
+                    insert or ignore into student_device_map (device_id, student_id, updated_at)
+                    select device_id, json_extract(metadata, '$.student_id'), strftime('%s','now')
+                    from devices
+                    where json_extract(metadata, '$.student_id') is not null
+                    """
+                )
+
+    def map_student_device(self, device_id: str, student_id: str) -> None:
+        now = int(time.time())
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into student_device_map (device_id, student_id, updated_at)
+                values (?, ?, ?)
+                on conflict(device_id) do update set student_id=excluded.student_id, updated_at=excluded.updated_at
+                on conflict(student_id) do update set device_id=excluded.device_id, updated_at=excluded.updated_at
+                """,
+                (device_id, student_id, now),
+            )
+
+    def get_student_for_device(self, device_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute("select student_id from student_device_map where device_id = ?", (device_id,)).fetchone()
+            return str(row["student_id"]) if row and row["student_id"] else None
+
+    def get_device_for_student(self, student_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute("select device_id from student_device_map where student_id = ?", (student_id,)).fetchone()
+            return str(row["device_id"]) if row and row["device_id"] else None
+
+    def list_student_device_mappings(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute("select device_id, student_id, updated_at from student_device_map").fetchall()
+            return [dict(row) for row in rows]
 
     def upsert_classroom(self, classroom_name: str | None, teacher_name: str | None, sync_mode: str, metadata: dict[str, Any]) -> dict[str, Any]:
         now = int(time.time())
@@ -265,23 +352,55 @@ class PiHubStore:
     ) -> dict[str, Any]:
         now = int(time.time())
         device_id = device_id or str(uuid.uuid4())
+        token_hash = _hash_token(auth_token)
         with self._connect() as connection:
-            connection.execute(
-                """
-                insert into devices (device_id, device_name, role, classroom, auth_token, status, metadata, created_at, updated_at, last_seen)
-                values (?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
-                """,
-                (device_id, device_name, role, classroom, auth_token, json.dumps(metadata), now, now, now),
-            )
+            cols = [r[1] for r in connection.execute("pragma table_info(devices)").fetchall()]
+            if "auth_token" in cols and "auth_token_hash" in cols:
+                connection.execute(
+                    """
+                    insert into devices (device_id, device_name, role, classroom, auth_token, auth_token_hash, status, metadata, created_at, updated_at, last_seen)
+                    values (?, ?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+                    """,
+                    (device_id, device_name, role, classroom, token_hash, token_hash, json.dumps(metadata), now, now, now),
+                )
+            elif "auth_token_hash" in cols:
+                connection.execute(
+                    """
+                    insert into devices (device_id, device_name, role, classroom, auth_token_hash, status, metadata, created_at, updated_at, last_seen)
+                    values (?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+                    """,
+                    (device_id, device_name, role, classroom, token_hash, json.dumps(metadata), now, now, now),
+                )
+            else:
+                connection.execute(
+                    """
+                    insert into devices (device_id, device_name, role, classroom, auth_token, status, metadata, created_at, updated_at, last_seen)
+                    values (?, ?, ?, ?, ?, 'online', ?, ?, ?, ?)
+                    """,
+                    (device_id, device_name, role, classroom, token_hash, json.dumps(metadata), now, now, now),
+                )
         return {
             "device_id": device_id,
             "device_name": device_name,
             "role": role,
             "status": "online",
             "auth_token": auth_token,
+            "auth_token_hash": token_hash,
             "classroom": classroom,
             "metadata": metadata,
         }
+
+    def verify_device_token(self, device_id: str, auth_token: str) -> bool:
+        if not auth_token:
+            return False
+        device = self.get_device(device_id)
+        if not device:
+            return False
+        stored_hash = device.get("auth_token_hash")
+        if not stored_hash:
+            return False
+        incoming_hash = _hash_token(auth_token)
+        return hmac.compare_digest(incoming_hash, stored_hash)
 
     def list_devices(self) -> list[dict[str, Any]]:
         with self._connect() as connection:
@@ -302,6 +421,9 @@ class PiHubStore:
         return self._row_to_device(row) if row else None
 
     def _row_to_device(self, row: sqlite3.Row) -> dict[str, Any]:
+        # NOTE: the legacy auth_token column (if present on old databases)
+        # holds hashes only after migration; API list/status routes strip it
+        # before responding, while registration returns it exactly once.
         return {
             **dict(row),
             "metadata": json.loads(row["metadata"] or "{}"),

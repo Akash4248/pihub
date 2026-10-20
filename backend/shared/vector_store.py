@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -68,7 +69,24 @@ def upsert_chunks(
     texts: list[str],
     metadatas: list[dict[str, Any]],
 ) -> list[str]:
-    point_ids = [str(uuid.uuid4()) for _ in embeddings]
+    # Deterministic ids so re-ingesting the same content overwrites instead of
+    # duplicating it (random uuid4 previously created duplicate points).
+    def _point_id(text: str, metadata: dict[str, Any]) -> str:
+        basis = "|".join(str(metadata.get(k, "")) for k in ("grade", "subject", "chapter", "section", "topic"))
+        digest = hashlib.sha1(f"{basis}|{text}".encode("utf-8")).hexdigest()
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, digest))
+
+    def _coerce_grade(value: Any) -> Any:
+        # grade occasionally arrives as a numeric string ("7"); store it as an
+        # int so numeric Qdrant filters (grade == 7) work correctly.
+        if isinstance(value, str) and value.strip().isdigit():
+            return int(value.strip())
+        return value
+
+    point_ids = [
+        _point_id(text, metadata)
+        for text, metadata in zip(texts, metadatas)
+    ]
     points = [
             qmodels.PointStruct(
                 id=point_id,
@@ -79,6 +97,8 @@ def upsert_chunks(
                         key: (
                             normalize_language_code(value)
                             if key == "language" and isinstance(value, str)
+                            else _coerce_grade(value)
+                            if key == "grade"
                             else normalize_curriculum_name(value)
                             if key in {"subject", "chapter", "topic", "section", "textbook_name"} and isinstance(value, str)
                             else value

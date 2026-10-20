@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os as _os
+import sys as _sys
+from typing import Optional
+from pydantic import BaseModel
+
+_sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..")))
+from shared.security import InternalAuthMiddleware  # noqa: E402
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -27,7 +34,15 @@ from app.classroom.repositories.classroom_repository import ClassroomRepository
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("experiment-service")
 
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    version: Optional[str] = "1.0"
+
+
 app = FastAPI(title="experiment-service")
+app.add_middleware(InternalAuthMiddleware)
 app.middleware("http")(request_observability_middleware)
 app.middleware("http")(payload_limit_middleware)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
@@ -50,9 +65,9 @@ async def health() -> HealthResponse:
 import os
 from pathlib import Path
 if Path("/shared/packs/phet_simulations_v1/simulations").exists():
-    app.mount("/simulations", StaticFiles(directory="/shared/packs/phet_simulations_v1/simulations"), name="simulations")
+    app.mount("/simulations", StaticFiles(directory="/shared/packs/phet_simulations_v1/simulations", follow_symlink=False), name="simulations")
 elif os.path.exists("/shared/simulations"):
-    app.mount("/simulations", StaticFiles(directory="/shared/simulations"), name="simulations")
+    app.mount("/simulations", StaticFiles(directory="/shared/simulations", follow_symlink=False), name="simulations")
 
 @app.middleware("http")
 async def api_version_middleware(request, call_next):

@@ -1,0 +1,25 @@
+{
+  "requests": 2688,
+  "success": 2688,
+  "errors": 0,
+  "error_rate": 0.0,
+  "rps": 268.3,
+  "concurrency": 10,
+  "elapsed_s": 10.019,
+  "latency_ms": {
+    "min": 14.19,
+    "mean": 37.11,
+    "p50": 37.41,
+    "p90": 45.61,
+    "p95": 48.69,
+    "p99": 54.82,
+    "max": 63.71
+  },
+  "status_counts": {
+    "200": 2688
+  },
+  "service": "content-pipeline",
+  "base": "http://localhost:8001",
+  "path": "/health",
+  "kind": "load"
+}

@@ -292,13 +292,11 @@ class Gemma4AudioBackend(VoiceBackend):
                 if hasattr(inputs, "to"):
                     inputs = inputs.to(self._model.device)  # type: ignore[union-attr]
 
-                async with self._inference_lock:
-                    outputs = await asyncio.to_thread(
-                        self._model.generate,  # type: ignore[union-attr]
-                        **inputs,
-                        max_new_tokens=self.max_new_tokens,
-                        do_sample=False,
-                    )
+                outputs = self._model.generate(  # type: ignore[union-attr]
+                    **inputs,
+                    max_new_tokens=self.max_new_tokens,
+                    do_sample=False,
+                )
 
                 input_len = inputs["input_ids"].shape[-1] if "input_ids" in inputs else 0
                 decoded = self._processor.decode(outputs[0][input_len:], skip_special_tokens=False)  # type: ignore[union-attr]

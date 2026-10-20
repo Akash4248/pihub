@@ -75,7 +75,9 @@ class PiSyncEngine:
     def __init__(
         self,
         cache_manager,
-        host_url: str = "http://192.168.1.100",
+        # Classroom hotspot gateway (deployment/hotspot.py subnet
+        # 192.168.42.0/24); pass HOST_URL explicitly for laptop/docker.
+        host_url: str = "http://192.168.42.1:8000",
         cache_path: str = "/cache",
         sync_interval_minutes: int = 60
     ):

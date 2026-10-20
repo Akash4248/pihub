@@ -25,3 +25,18 @@ def append_experiment_context(user_prompt: str, experiment_context: Any) -> str:
     if getattr(experiment_context, "active_investigation_step", None):
         lines.append("Active investigation step: " + json.dumps(experiment_context.active_investigation_step, ensure_ascii=False))
     return user_prompt + "\n" + "\n".join(lines)
+
+
+#: Single relevance contract for retrieved context. Emitted at most once per
+#: prompt (builders must not add their own copy).
+RELEVANCE_INSTRUCTION = "IMPORTANT: Use provided context only if it is relevant and accurate."
+
+#: Appended when retrieval returned nothing, instead of the relevance line.
+NO_CONTEXT_NOTE = "[Note: No relevant educational context was found. Answer based on your knowledge.]"
+
+
+def append_no_context_note(system_prompt: str) -> str:
+    """Append the no-context signal exactly once."""
+    if NO_CONTEXT_NOTE in system_prompt:
+        return system_prompt
+    return f"{system_prompt}\n{NO_CONTEXT_NOTE}"

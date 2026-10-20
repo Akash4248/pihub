@@ -469,6 +469,11 @@ class ConceptIndex:
         query_terms.extend([self._normalize_term(topic) for topic in (curriculum_graph.infer_topics_for_query(query) or [])])
         query_terms.extend([self._normalize_term(concept) for concept in (curriculum_graph.infer_concepts_for_text(query, limit=6) or [])])
 
+        # Snapshot the profile maps so a concurrent rebuild (e.g. during
+        # ingestion) cannot mutate the dicts while we iterate them.
+        chapter_profiles = self._chapter_profiles.copy()
+        concept_to_chapters = self._concept_to_chapters.copy()
+
         search_terms: list[str] = []
         for term in query_terms:
             normalized = self._normalize_term(term)
@@ -486,17 +491,17 @@ class ConceptIndex:
                     search_terms.append(alias_term)
 
         for term in search_terms:
-            for chapter_key, source_weight in self._concept_to_chapters.get(term, {}).items():
+            for chapter_key, source_weight in concept_to_chapters.get(term, {}).items():
                 chapter_scores[chapter_key] += source_weight
                 matched_terms[chapter_key].add(term)
-                profile = self._chapter_profiles.get(chapter_key, {})
+                profile = chapter_profiles.get(chapter_key, {})
                 for source_name, source_terms in (profile.get("sources") or {}).items():
                     if term in source_terms:
                         matched_sources[chapter_key].add(source_name)
 
         inferred_subject_key = self._normalize_term(inferred_subject or "")
         ranking_scores: dict[str, float] = {}
-        for chapter_key, profile in self._chapter_profiles.items():
+        for chapter_key, profile in chapter_profiles.items():
             subject_key = self._normalize_term(profile.get("subject") or "")
             subject_bonus = 0.0
             if inferred_subject_key and subject_key:
@@ -507,15 +512,15 @@ class ConceptIndex:
             ranking_scores[chapter_key] = chapter_scores.get(chapter_key, 0.0) + subject_bonus
 
         ranked_keys = sorted(
-            self._chapter_profiles.keys(),
+            chapter_profiles.keys(),
             key=lambda chapter_key: (
                 -ranking_scores.get(chapter_key, 0.0),
                 self._chapter_order.get(chapter_key, 10**6),
-                self._chapter_profiles[chapter_key].get("display_name", ""),
+                chapter_profiles.get(chapter_key, {}).get("display_name", ""),
             ),
         )
 
-        candidates = [self._chapter_profiles[key]["display_name"] for key in ranked_keys if ranking_scores.get(key, 0.0) > 0.0]
+        candidates = [chapter_profiles[key]["display_name"] for key in ranked_keys if key in chapter_profiles and ranking_scores.get(key, 0.0) > 0.0]
         if candidates:
             top_key = ranked_keys[0]
             top_score = ranking_scores.get(top_key, 0.0)
@@ -529,7 +534,7 @@ class ConceptIndex:
         query_text = self._normalize_term(query)
         fallback_candidates: list[str] = []
         for chapter_key in ranked_keys:
-            title = self._chapter_profiles[chapter_key].get("display_name", "")
+            title = chapter_profiles.get(chapter_key, {}).get("display_name", "")
             normalized_title = self._normalize_term(title)
             if normalized_title and (normalized_title in query_text or any(token in normalized_title for token in self._tokenize(query_text))):
                 fallback_candidates.append(title)

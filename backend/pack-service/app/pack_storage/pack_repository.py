@@ -8,12 +8,13 @@ from typing import Any
 
 from ..pack_system.manifest_builder import ManifestBuilder
 from ..pack_system.manifest_validator import ManifestValidator
+from shared.pack_version import RETRIEVAL_INDEX_VERSION
 from .pack_locator import PackLocator
 from .pack_registry import PackRegistry
 
 
 class PackRepository:
-    def __init__(self, storage_root: Path, retrieval_index_version: str = "v2") -> None:
+    def __init__(self, storage_root: Path, retrieval_index_version: str = RETRIEVAL_INDEX_VERSION) -> None:
         self.storage_root = storage_root
         self.storage_root.mkdir(parents=True, exist_ok=True)
         self.locator = PackLocator(storage_root)
@@ -71,10 +72,16 @@ class PackRepository:
         if record:
             pack_dir = Path(str(record.get("pack_dir") or ""))
             archive_path = Path(str(record.get("archive_path") or ""))
-            if pack_dir.exists():
-                shutil.rmtree(pack_dir)
-            if archive_path.exists():
-                archive_path.unlink()
+            try:
+                if pack_dir.exists():
+                    shutil.rmtree(pack_dir)
+            except Exception as exc:
+                logger.warning("Failed to remove pack directory %s: %s", pack_dir, exc)
+            try:
+                if archive_path.exists():
+                    archive_path.unlink()
+            except Exception as exc:
+                logger.warning("Failed to remove archive %s: %s", archive_path, exc)
         self.registry.remove(pack_id, version)
 
     def load_manifest(self, pack_id: str, version: str | None = None) -> dict[str, Any] | None:
@@ -84,7 +91,11 @@ class PackRepository:
         manifest_path = Path(record["pack_dir"]) / "manifest.json"
         if not manifest_path.exists():
             return None
-        return json.loads(manifest_path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Corrupt manifest at %s: %s", manifest_path, exc)
+            return None
 
     def validate_pack(self, pack_id: str, version: str | None = None) -> tuple[bool, list[str]]:
         manifest = self.load_manifest(pack_id, version)
@@ -122,8 +133,9 @@ class PackRepository:
                 ):
                     if key in manifest:
                         hydrated[key] = manifest[key]
-            except (OSError, json.JSONDecodeError):
-                pass
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Corrupt manifest at %s: %s", manifest_path, exc)
+                hydrated["valid"] = False
 
         archive_path = Path(str(hydrated.get("archive_path") or ""))
         hydrated["archive_exists"] = archive_path.exists()

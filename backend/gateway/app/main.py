@@ -13,17 +13,31 @@ from typing import Any
 from urllib.parse import quote, urlparse
 
 import httpx
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from shared.config import get_settings
 from shared.schemas import HealthResponse, IngestResponse, Metadata, SearchRequest, SearchResponse
+from shared.security import (
+    InternalAuthMiddleware,
+    get_internal_service_key,
+    read_file_chunks_safely,
+    require_admin,
+    sanitize_llm_prompt,
+    sanitize_safe_filename,
+    verify_internal_api_key,
+    verify_jwt_token,
+)
 from shared.topic_normalization import normalize_subject, normalize_topic, should_use_planner, topic_aliases
+from app.services.auth_service import get_current_user_optional, get_current_user_required
 from app.services.experiment_service_client import ExperimentGatewayMetrics, ExperimentServiceClient
 
+
+from app.middleware.structlog_middleware import StructuredLoggingMiddleware
 
 settings = get_settings()
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -84,73 +98,52 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(StructuredLoggingMiddleware)
+app.add_middleware(
+    InternalAuthMiddleware,
+    public_prefixes=(
+        "/health", "/healthz", "/ready", "/readyz", "/livez", "/ping",
+        "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
+        "/auth/register", "/auth/login", "/",
+    ),
+)
 
 
-def _log_tag(path: str) -> str:
-    if path.startswith("/discovery"):
-        return "DISCOVERY"
-    if path.startswith("/sync") or path.startswith("/packs/sync"):
-        return "SYNC"
-    if path.startswith("/packs") or path in {"/flashcards", "/quizzes", "/glossary", "/summaries"}:
-        return "PACK"
-    if path.startswith("/rag"):
-        return "RAG"
-    if path.startswith("/experiments") or path.startswith("/experiment-templates") or path.startswith("/experiment-runs") or path.startswith("/analytics") or path.startswith("/experiment-metrics"):
-        return "EXPERIMENT_GATEWAY"
-    if settings.voice_service_enabled and (path.startswith("/api/voice") or path.startswith("/voice")):
-        return "VOICE"
-    if path.startswith("/ai") or path.startswith("/tutor") or path.startswith("/planner") or path.startswith("/metrics/tutor") or path.startswith("/metrics/retrieval"):
-        return "TUTOR"
-    if path.startswith("/progress"):
-        return "PROGRESS"
-    if path.startswith("/quiz-sessions"):
-        return "PROGRESS"
-    return "REQUEST"
+class RegisterRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8, max_length=128)
+    full_name: str = Field(min_length=1, max_length=120)
+    role: str = Field(default="student")
+    grade: int = Field(default=9, ge=0, le=12)
 
 
-@app.middleware("http")
-async def structured_logging(request: Request, call_next):
-    if request.scope.get("type") == "websocket":
-        return await call_next(request)
-    started = time.perf_counter()
-    tag = _log_tag(request.url.path)
-    if request.url.path == "/ai/tutor":
-        body = await request.body()
-        logger.info("[TUTOR] RAW_REQUEST=%s", body.decode("utf-8", errors="ignore"))
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
-        async def receive():
-            return {"type": "http.request", "body": body, "more_body": False}
 
-        request = Request(request.scope, receive)
+_SELF_REGISTERABLE_ROLES = {"student", "teacher", "parent"}
 
-    if tag == "DISCOVERY":
-        logger.info("[DISCOVERY] REQUEST_RECEIVED method=%s path=%s", request.method, request.url.path)
-    logger.info("[%s] REQUEST_START method=%s path=%s", tag, request.method, request.url.path)
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        duration_ms = (time.perf_counter() - started) * 1000
-        logger.exception(
-            "[%s] REQUEST_ERROR method=%s path=%s duration_ms=%.2f error=%s",
-            tag,
-            request.method,
-            request.url.path,
-            duration_ms,
-            exc,
-        )
-        raise
-    duration_ms = (time.perf_counter() - started) * 1000
-    logger.info(
-        "[%s] REQUEST_END method=%s path=%s status=%s duration_ms=%.2f",
-        tag,
-        request.method,
-        request.url.path,
-        response.status_code,
-        duration_ms,
+
+@app.post("/auth/register")
+async def auth_register(payload: RegisterRequest) -> dict[str, Any]:
+    """Create a user account and return a JWT. Admin roles cannot be self-assigned."""
+    if payload.role not in _SELF_REGISTERABLE_ROLES:
+        raise HTTPException(status_code=400, detail="Invalid role for self-registration.")
+    from app.services.auth_service import register_user
+
+    return await asyncio.to_thread(
+        register_user, payload.email, payload.password, payload.full_name, payload.role, payload.grade
     )
-    if tag == "DISCOVERY":
-        logger.info("[DISCOVERY] REQUEST_COMPLETED method=%s path=%s", request.method, request.url.path)
-    return response
+
+
+@app.post("/auth/login")
+async def auth_login(payload: LoginRequest) -> dict[str, Any]:
+    """Exchange credentials for a JWT."""
+    from app.services.auth_service import authenticate_user
+
+    return await asyncio.to_thread(authenticate_user, payload.email, payload.password)
+
 
 
 @app.exception_handler(RequestValidationError)
@@ -162,38 +155,64 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-async def _proxy_json(path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    response = await app.state.http.post(f"{settings.content_pipeline_url}{path}", json=payload)
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+# Per-route downstream timeouts (seconds). The shared client ceiling stays at
+# settings.gateway_http_timeout_seconds; these bound each proxied call so one
+# hung service cannot hold gateway workers for the full ceiling.
+DEFAULT_PROXY_TIMEOUT = 15.0
+INGEST_PROXY_TIMEOUT = 45.0
+AI_PROXY_TIMEOUT = 120.0
 
 
-async def _proxy_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.content_pipeline_url}{path}", params=params)
+async def _proxy_request(
+    base_url: str,
+    path: str,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+    files: dict[str, Any] | None = None,
+    stream: bool = False,
+    timeout: float = DEFAULT_PROXY_TIMEOUT,
+) -> Any:
+    # Always authenticate gateway->service hops with the internal service key so
+    # downstream services can stay locked down regardless of the caller.
+    proxy_headers = dict(headers or {})
+    proxy_headers.setdefault("X-Internal-Service-Key", get_internal_service_key())
+
+    if stream:
+        return await _proxy_stream(base_url, method, path, payload=payload, headers=proxy_headers, timeout=timeout)
+
+    url = f"{base_url}{path}"
+    try:
+        response = await app.state.http.request(
+            method, url, json=payload, params=params, headers=proxy_headers, files=files,
+            timeout=timeout,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}") from exc
+
     if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+        raise HTTPException(status_code=response.status_code, detail=response.text[:2000])
+
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type or not content_type:
+        try:
+            return response.json()
+        except json.JSONDecodeError:
+            return {"text": response.text[:2000]}
+
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return {"text": response.text[:2000]}
 
 
 async def _get_json(base_url: str, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    try:
-        response = await app.state.http.get(f"{base_url}{path}", params=params)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _proxy_request(base_url, path, method="GET", params=params)
 
 
 async def _post_json(base_url: str, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    try:
-        response = await app.state.http.post(f"{base_url}{path}", json=payload)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _proxy_request(base_url, path, method="POST", payload=payload)
 
 
 async def _post_multipart(
@@ -202,21 +221,14 @@ async def _post_multipart(
     file: UploadFile,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    content = await file.read()
-    files = {
-        "file": (
-            file.filename or "audio.wav",
-            content,
-            file.content_type or "application/octet-stream",
-        )
-    }
-    try:
-        response = await app.state.http.post(f"{base_url}{path}", params=params, files=files)
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=_error_detail(response.text))
-    return response.json()
+    safe_name = sanitize_safe_filename(file.filename or "file.bin")
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    files = {"file": (safe_name, content, file.content_type or "application/octet-stream")}
+    return await _proxy_request(base_url, path, method="POST", params=params, files=files)
+
 
 
 def _iso_from_epoch(value: Any) -> str | None:
@@ -579,7 +591,7 @@ def _discovery_payload() -> dict[str, Any]:
 
 
 async def _discovery_beacon_loop() -> None:
-    port = 47890
+    port = settings.discovery_port
     while True:
         payload = json.dumps(_discovery_payload(), separators=(",", ":")).encode("utf-8")
         try:
@@ -614,10 +626,21 @@ def _asset_metadata(asset_name: str, item: dict[str, Any], manifest: dict[str, A
 async def _pack_service_packs(params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     try:
         data = await _get_json(settings.pack_service_url, "/packs/search" if params else "/packs", params=params)
-    except HTTPException:
+    except HTTPException as exc:
+        # Outage is NOT an empty catalog: log loudly so [] is never mistaken
+        # for "no packs installed". Callers keep the 200 shape.
+        logger.warning("[PACK] PACK_SERVICE_UNAVAILABLE status=%s detail=%s", exc.status_code, exc.detail)
         return []
     packs = data.get("packs", [])
     return packs if isinstance(packs, list) else []
+
+
+async def _fetch_pack_preview(pack_id: str) -> dict[str, Any] | None:
+    try:
+        res = await _get_json(settings.pack_service_url, f"/packs/{pack_id}/preview")
+        return res if isinstance(res, dict) else None
+    except Exception:
+        return None
 
 
 async def _asset_response(asset_name: str, filters: dict[str, Any]) -> dict[str, Any]:
@@ -626,26 +649,33 @@ async def _asset_response(asset_name: str, filters: dict[str, Any]) -> dict[str,
     params = {key: value for key, value in filters.items() if value is not None}
     packs = await _pack_service_packs(params)
     items: list[dict[str, Any]] = []
-    for pack in packs:
-        pack_id = pack.get("pack_id")
-        if not pack_id:
-            continue
-        try:
-            preview = await _get_json(settings.pack_service_url, f"/packs/{pack_id}/preview")
-        except HTTPException:
-            continue
-        manifest = preview.get("manifest", {})
-        for item in preview.get(asset_name, []) or []:
-            if isinstance(item, dict) and _matches_topic(item, topic):
-                metadata = _asset_metadata(asset_name, item, manifest)
-                items.append({
-                    "pack_id": pack_id,
-                    "manifest": manifest,
-                    "metadata": metadata,
-                    **metadata,
-                    **item,
-                })
-    return {"items": items, "total": len(items), "filters": {**params, "topic": topic}}
+    
+    valid_packs = [p for p in packs if p.get("pack_id")]
+    dropped = 0
+    if valid_packs:
+        previews = await asyncio.gather(
+            *[_fetch_pack_preview(str(p["pack_id"])) for p in valid_packs],
+            return_exceptions=True,
+        )
+        for pack, preview in zip(valid_packs, previews):
+            if not isinstance(preview, dict):
+                dropped += 1
+                continue
+            pack_id = str(pack["pack_id"])
+            manifest = preview.get("manifest", {})
+            for item in preview.get(asset_name, []) or []:
+                if isinstance(item, dict) and _matches_topic(item, topic):
+                    metadata = _asset_metadata(asset_name, item, manifest)
+                    items.append({
+                        "pack_id": pack_id,
+                        "manifest": manifest,
+                        "metadata": metadata,
+                        **metadata,
+                        **item,
+                    })
+    if dropped:
+        logger.warning("[ASSET] PREVIEW_DROPPED asset=%s dropped=%d packs=%d", asset_name, dropped, len(valid_packs))
+    return {"items": items, "total": len(items), "filters": {**params, "topic": topic}, "warnings": dropped}
 
 
 async def _chapter_knowledge_assets(filters: dict[str, Any]) -> list[dict[str, Any]]:
@@ -657,29 +687,31 @@ async def _chapter_knowledge_assets(filters: dict[str, Any]) -> list[dict[str, A
     topic = str(filters.get("topic") or "").lower()
     packs = await _pack_service_packs({key: value for key, value in params.items() if value is not None})
     assets: list[dict[str, Any]] = []
-    for pack in packs[:2]:
-        pack_id = pack.get("pack_id")
-        if not pack_id:
-            continue
-        try:
-            preview = await _get_json(settings.pack_service_url, f"/packs/{pack_id}/preview")
-        except HTTPException:
-            continue
-        knowledge = preview.get("chapter_knowledge") or {}
-        if not isinstance(knowledge, dict):
-            continue
-        snippets = _chapter_knowledge_snippets(knowledge, topic)
-        if snippets:
-            assets.append({
-                "title": preview.get("manifest", {}).get("chapter") or pack.get("chapter") or pack_id,
-                "text": "\n".join(snippets[:8]),
-                "metadata": {
-                    "pack_id": pack_id,
-                    "grade": pack.get("grade"),
-                    "subject": pack.get("subject"),
-                    "chapter": pack.get("chapter"),
-                },
-            })
+    valid_packs = [p for p in packs[:2] if p.get("pack_id")]
+    if valid_packs:
+        previews = await asyncio.gather(
+            *[_fetch_pack_preview(str(p["pack_id"])) for p in valid_packs],
+            return_exceptions=True,
+        )
+        for pack, preview in zip(valid_packs, previews):
+            if not isinstance(preview, dict):
+                continue
+            pack_id = str(pack["pack_id"])
+            knowledge = preview.get("chapter_knowledge") or {}
+            if not isinstance(knowledge, dict):
+                continue
+            snippets = _chapter_knowledge_snippets(knowledge, topic)
+            if snippets:
+                assets.append({
+                    "title": preview.get("manifest", {}).get("chapter") or pack.get("chapter") or pack_id,
+                    "text": "\n".join(snippets[:8]),
+                    "metadata": {
+                        "pack_id": pack_id,
+                        "grade": pack.get("grade"),
+                        "subject": pack.get("subject"),
+                        "chapter": pack.get("chapter"),
+                    },
+                })
     return assets[:2]
 
 
@@ -724,18 +756,31 @@ async def _asset_search_bundle(payload: dict[str, Any], normalized_topic: str | 
         "chapter": payload.get("chapter"),
         "topic": normalized_topic or payload.get("topic") or payload.get("question"),
     }
-    summaries = await _asset_response("summaries", dict(filters))
-    flashcards = await _asset_response("flashcards", dict(filters))
-    quizzes = await _asset_response("quizzes", dict(filters))
-    glossary = await _asset_response("glossary", dict(filters))
+    summaries_task = _asset_response("summaries", dict(filters))
+    flashcards_task = _asset_response("flashcards", dict(filters))
+    quizzes_task = _asset_response("quizzes", dict(filters))
+    glossary_task = _asset_response("glossary", dict(filters))
+    chapter_task = _chapter_knowledge_assets(filters)
+
+    results = await asyncio.gather(
+        summaries_task, flashcards_task, quizzes_task, glossary_task, chapter_task, return_exceptions=True
+    )
+
+    summaries = results[0] if isinstance(results[0], dict) else {}
+    flashcards = results[1] if isinstance(results[1], dict) else {}
+    quizzes = results[2] if isinstance(results[2], dict) else {}
+    glossary = results[3] if isinstance(results[3], dict) else {}
+    chapter_knowledge = results[4] if isinstance(results[4], list) else []
+
     return {
         "filters": filters,
         "summaries": summaries.get("items", [])[:3],
         "flashcards": flashcards.get("items", [])[:5],
         "quizzes": quizzes.get("items", [])[:5],
         "glossary": glossary.get("items", [])[:5],
-        "chapter_knowledge": await _chapter_knowledge_assets(filters),
+        "chapter_knowledge": chapter_knowledge,
     }
+
 
 
 def _asset_bundle_count(bundle: dict[str, Any]) -> int:
@@ -788,6 +833,7 @@ async def _proxy_stream(
     path: str,
     payload: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    timeout: float = AI_PROXY_TIMEOUT,
 ) -> StreamingResponse:
     response = await _send_with_retry(
         base_url,
@@ -796,6 +842,7 @@ async def _proxy_stream(
         payload=payload,
         headers=headers,
         stream=True,
+        timeout=timeout,
     )
 
     if response.is_error:
@@ -822,11 +869,17 @@ async def _proxy_stream(
     )
 
 
-async def _proxy_to(base_url: str, method: str, path: str, payload: dict[str, Any] | None = None) -> Any:
+async def _proxy_to(
+    base_url: str,
+    method: str,
+    path: str,
+    payload: dict[str, Any] | None = None,
+    timeout: float = DEFAULT_PROXY_TIMEOUT,
+) -> Any:
     if isinstance(payload, dict) and payload.get("stream") is True:
-        return await _proxy_stream(base_url, method, path, payload)
+        return await _proxy_stream(base_url, method, path, payload, timeout=timeout)
 
-    response = await _send_with_retry(base_url, method, path, payload=payload)
+    response = await _send_with_retry(base_url, method, path, payload=payload, timeout=timeout)
 
     if response.is_error:
         raise HTTPException(
@@ -851,7 +904,7 @@ async def _proxy_to(base_url: str, method: str, path: str, payload: dict[str, An
 
     raise HTTPException(
         status_code=502,
-        detail=f"Unexpected response type from inference service: {content_type}"
+        detail=f"Unexpected response type from {base_url}{path}: {content_type}"
     )
 
 
@@ -863,6 +916,7 @@ async def _send_with_retry(
     headers: dict[str, str] | None = None,
     stream: bool = False,
     retries: int = 3,
+    timeout: float = DEFAULT_PROXY_TIMEOUT,
 ) -> httpx.Response:
     url = f"{base_url}{path}"
     retryable = settings.voice_service_enabled and base_url == settings.voice_service_url
@@ -873,8 +927,8 @@ async def _send_with_retry(
         try:
             if stream:
                 request = app.state.http.build_request(method, url, json=payload, headers=headers)
-                return await app.state.http.send(request, stream=True)
-            return await app.state.http.request(method, url, json=payload, headers=headers)
+                return await app.state.http.send(request, stream=True, timeout=timeout)
+            return await app.state.http.request(method, url, json=payload, headers=headers, timeout=timeout)
         except httpx.RequestError as exc:
             last_error = exc
             if not retryable or attempt >= retries:
@@ -918,7 +972,7 @@ async def discovery() -> dict[str, Any]:
 async def discovery_beacon() -> dict[str, Any]:
     return {
         "protocol": "udp-broadcast",
-        "port": 47890,
+        "port": settings.discovery_port,
         "interval_seconds": 15,
         "payload": _discovery_payload(),
     }
@@ -938,108 +992,118 @@ async def tutor_capabilities() -> dict[str, bool]:
     }
 
 
+async def _safe_http_get_json(url: str, timeout: float = 3.0) -> tuple[bool, Any]:
+
+    # Downstream services enforce fail-closed auth; the health fan-out must
+    # authenticate with the internal service key (Qdrant simply ignores it).
+    headers = {"X-Internal-Service-Key": get_internal_service_key()}
+    try:
+        resp = await app.state.http.get(url, timeout=timeout, headers=headers)
+        if resp.is_error:
+            try:
+                return False, resp.json()
+            except Exception:
+                return False, {"status": "error", "status_code": resp.status_code, "text": resp.text[:500]}
+        try:
+            return True, resp.json()
+        except Exception:
+            return True, {"status": "ok", "text": resp.text[:500]}
+    except Exception as exc:
+        return False, {"status": "error", "detail": str(exc)}
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     checks: dict[str, Any] = {"gateway": "ok"}
     status = "healthy"
-    inference_ok = False
-    experiment_ok = False
-    voice_ok = False
-    database_ok = False
-    pack_count = 0
+
+    # Define tasks for concurrent execution
+    content_task = _safe_http_get_json(f"{settings.content_pipeline_url}/health")
+    qdrant_task = _safe_http_get_json(f"{settings.qdrant_url}/healthz")
+    qdrant_coll_task = _safe_http_get_json(f"{settings.qdrant_url}/collections/{settings.qdrant_collection}")
+    inference_task = _safe_http_get_json(f"{settings.inference_service_url}/ai/health")
+    exp_task = app.state.experiment_client.health()
+    pihub_task = _safe_http_get_json(f"{settings.pihub_url}/health")
+    pihub_packs_task = _safe_http_get_json(f"{settings.pihub_url}/packs")
+    pack_svc_task = _safe_http_get_json(f"{settings.pack_service_url}/packs")
+
+    voice_task = (
+        _safe_http_get_json(f"{settings.voice_service_url}/health")
+        if settings.voice_service_enabled
+        else None
+    )
+
+    tasks = [content_task, qdrant_task, qdrant_coll_task, inference_task, exp_task, pihub_task, pihub_packs_task, pack_svc_task]
+    if voice_task:
+        tasks.append(voice_task)
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Process content_pipeline
+    content_ok, content_body = results[0] if isinstance(results[0], tuple) else (False, {"error": str(results[0])})
+    checks["content_pipeline"] = content_body
+    if not content_ok:
+        status = "degraded"
+
+    # Process qdrant
+    qdrant_ok, qdrant_body = results[1] if isinstance(results[1], tuple) else (False, {"error": str(results[1])})
+    checks["qdrant"] = qdrant_body
+    if not qdrant_ok:
+        status = "degraded"
+
+    # Process qdrant collection
+    coll_ok, coll_body = results[2] if isinstance(results[2], tuple) else (False, {"error": str(results[2])})
+    checks["qdrant_collection"] = coll_body
     chunk_count = 0
+    if coll_ok and isinstance(coll_body, dict):
+        res = coll_body.get("result", {})
+        if isinstance(res, dict):
+            chunk_count = int(res.get("points_count") or res.get("vectors_count") or 0)
 
-    try:
-        content = await app.state.http.get(f"{settings.content_pipeline_url}/health")
-        checks["content_pipeline"] = content.json()
-        if content.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["content_pipeline"] = {"status": "error", "detail": str(exc)}
+    # Process inference
+    inference_ok, inference_body = results[3] if isinstance(results[3], tuple) else (False, {"error": str(results[3])})
+    checks["inference_service"] = inference_body
+    if not inference_ok:
         status = "degraded"
 
-    try:
-        qdrant = await app.state.http.get(f"{settings.qdrant_url}/healthz")
-        checks["qdrant"] = {"status_code": qdrant.status_code, "body": qdrant.text}
-        if qdrant.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["qdrant"] = {"status": "error", "detail": str(exc)}
+    # Process experiment service
+    exp_res = results[4] if isinstance(results[4], dict) else {"healthy": False, "error": str(results[4])}
+    checks["experiment_service"] = exp_res
+    experiment_ok = bool(exp_res.get("healthy"))
+    if not experiment_ok and settings.experiment_service_required:
         status = "degraded"
 
-    try:
-        collection = await app.state.http.get(f"{settings.qdrant_url}/collections/{settings.qdrant_collection}")
-        collection_body = collection.json()
-        checks["qdrant_collection"] = collection_body
-        if collection.is_success:
-            result = collection_body.get("result", {})
-            chunk_count = int(result.get("points_count") or result.get("vectors_count") or 0)
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["qdrant_collection"] = {"status": "error", "detail": str(exc)}
-
-    try:
-        inference = await app.state.http.get(f"{settings.inference_service_url}/ai/health")
-        checks["inference_service"] = inference.json()
-        inference_ok = inference.is_success
-        if inference.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["inference_service"] = {"status": "error", "detail": str(exc)}
+    # Process pihub
+    pihub_ok, pihub_body = results[5] if isinstance(results[5], tuple) else (False, {"error": str(results[5])})
+    checks["pihub"] = pihub_body
+    database_ok = pihub_ok
+    if not pihub_ok:
         status = "degraded"
 
-    try:
-        experiment_health = await app.state.experiment_client.health()
-        checks["experiment_service"] = experiment_health
-        experiment_ok = bool(experiment_health.get("healthy"))
-        if not experiment_ok and settings.experiment_service_required:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - defensive path
-        checks["experiment_service"] = {"healthy": False, "error": str(exc)}
-        if settings.experiment_service_required:
-            status = "degraded"
+    # Process packs count
+    pack_count = 0
+    packs_ok, packs_body = results[6] if isinstance(results[6], tuple) else (False, {})
+    if packs_ok and isinstance(packs_body, dict):
+        pack_count = len(packs_body.get("packs", [])) + len(packs_body.get("cached", []))
 
-    if settings.voice_service_enabled:
-        try:
-            voice = await app.state.http.get(f"{settings.voice_service_url}/health")
-            checks["voice_service"] = voice.json()
-            voice_ok = voice.is_success
-            if voice.is_error and settings.voice_service_required:
-                status = "degraded"
-        except Exception as exc:  # pragma: no cover - network failure path
-            checks["voice_service"] = {"healthy": False, "error": str(exc)}
-            if settings.voice_service_required:
-                status = "degraded"
+    # Process pack_service
+    pack_svc_ok, pack_svc_body = results[7] if isinstance(results[7], tuple) else (False, {})
+    if pack_svc_ok and isinstance(pack_svc_body, dict):
+        pack_count = max(pack_count, len(pack_svc_body.get("packs", [])))
+        checks["pack_service"] = {"status": "ok", "pack_count": len(pack_svc_body.get("packs", []))}
+    else:
+        checks["pack_service"] = pack_svc_body if isinstance(pack_svc_body, dict) else {"status": "degraded"}
+
+    # Process voice service
+    voice_ok = False
+    if settings.voice_service_enabled and len(results) > 8:
+        v_ok, v_body = results[8] if isinstance(results[8], tuple) else (False, {})
+        checks["voice_service"] = v_body
+        voice_ok = v_ok
+        if not v_ok and settings.voice_service_required:
+            status = "degraded"
     else:
         checks["voice_service"] = {"healthy": True, "disabled": True}
-
-    try:
-        pihub = await app.state.http.get(f"{settings.pihub_url}/health")
-        checks["pihub"] = pihub.json()
-        database_ok = pihub.is_success
-        if pihub.is_error:
-            status = "degraded"
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["pihub"] = {"status": "error", "detail": str(exc)}
-        status = "degraded"
-
-    try:
-        packs = await app.state.http.get(f"{settings.pihub_url}/packs")
-        if packs.is_success:
-            body = packs.json()
-            pack_count = len(body.get("packs", [])) + len(body.get("cached", []))
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["packs"] = {"status": "error", "detail": str(exc)}
-
-    try:
-        pack_service = await app.state.http.get(f"{settings.pack_service_url}/packs")
-        if pack_service.is_success:
-            body = pack_service.json()
-            pack_count = max(pack_count, len(body.get("packs", [])))
-            checks["pack_service"] = {"status": "ok", "pack_count": len(body.get("packs", []))}
-        elif pack_service.is_error:
-            checks["pack_service"] = {"status": "degraded", "status_code": pack_service.status_code}
-    except Exception as exc:  # pragma: no cover - network failure path
-        checks["pack_service"] = {"status": "error", "detail": str(exc)}
 
     return {
         "status": status,
@@ -1060,8 +1124,12 @@ async def health() -> dict[str, Any]:
     }
 
 
-@app.post("/content/upload", response_model=IngestResponse)
-@app.post("/upload", response_model=IngestResponse)
+@app.post("/content/upload", status_code=301, dependencies=[Depends(require_admin)])
+async def content_upload_alias() -> RedirectResponse:
+    return RedirectResponse(url="/upload", status_code=301)
+
+
+@app.post("/upload", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def upload_content(
     file: UploadFile = File(...),
     grade: int | None = Form(default=None),
@@ -1070,92 +1138,201 @@ async def upload_content(
     topic: str | None = Form(default=None),
     language: str | None = Form(default=None),
 ) -> dict[str, Any]:
+    safe_name = sanitize_safe_filename(file.filename or "upload.pdf")
     metadata = Metadata(grade=grade, subject=subject, chapter=chapter, topic=topic, language=language)
-    content = await file.read()
-    response = await app.state.http.post(
-        f"{settings.content_pipeline_url}/ingest/pdf",
-        data={"metadata": metadata.model_dump_json()},
-        files={"file": (file.filename or "upload.pdf", content, file.content_type or "application/pdf")},
-    )
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+
+    try:
+        response = await app.state.http.post(
+            f"{settings.content_pipeline_url}/ingest/pdf",
+            data={"metadata": metadata.model_dump_json()},
+            files={"file": (safe_name, content, file.content_type or "application/pdf")},
+            timeout=INGEST_PROXY_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}") from exc
     if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+        raise HTTPException(status_code=response.status_code, detail=response.text[:2000])
     return response.json()
 
 
-@app.post("/ingest/pdf", response_model=IngestResponse)
+
+@app.post("/ingest/pdf", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_pdf(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
     source: str | None = Form(default=None),
 ) -> dict[str, Any]:
-    content = await file.read()
-    response = await app.state.http.post(
-        f"{settings.content_pipeline_url}/ingest/pdf",
-        data={"metadata": metadata, "source": source},
-        files={"file": (file.filename or "upload.pdf", content, file.content_type or "application/pdf")},
-    )
+    safe_name = sanitize_safe_filename(file.filename or "upload.pdf")
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    try:
+        response = await app.state.http.post(
+            f"{settings.content_pipeline_url}/ingest/pdf",
+            data={"metadata": metadata, "source": source},
+            files={"file": (safe_name, content, file.content_type or "application/pdf")},
+            timeout=INGEST_PROXY_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}") from exc
     if response.is_error:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
 
 
-@app.post("/ingest/textbook", response_model=IngestResponse)
+@app.post("/ingest/textbook", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_textbook(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
     source: str | None = Form(default="textbook"),
 ) -> dict[str, Any]:
-    content = await file.read()
-    response = await app.state.http.post(
-        f"{settings.content_pipeline_url}/ingest/textbook",
-        data={"metadata": metadata, "source": source or "textbook"},
-        files={"file": (file.filename or "textbook.pdf", content, file.content_type or "application/pdf")},
-    )
+    safe_name = sanitize_safe_filename(file.filename or "textbook.pdf")
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    try:
+        response = await app.state.http.post(
+            f"{settings.content_pipeline_url}/ingest/textbook",
+            data={"metadata": metadata, "source": source or "textbook"},
+            files={"file": (safe_name, content, file.content_type or "application/pdf")},
+            timeout=INGEST_PROXY_TIMEOUT,
+        )
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {exc}") from exc
     if response.is_error:
         raise HTTPException(status_code=response.status_code, detail=response.text)
     return response.json()
 
 
-@app.post("/ingest/generated-pack")
+@app.post("/ingest/generated-pack", dependencies=[Depends(require_admin)])
 async def ingest_generated_pack(payload: dict[str, Any]) -> dict[str, Any]:
-    return await _proxy_json("/ingest/generated-pack", payload)
+    return await _proxy_request(settings.content_pipeline_url, "/ingest/generated-pack", method="POST", payload=payload)
 
 
-@app.post("/admin/reset-rag")
+@app.post("/admin/reset-rag", dependencies=[Depends(require_admin)])
 async def reset_rag() -> dict[str, Any]:
-    return await _proxy_json("/admin/reset-rag", {})
+    return await _proxy_request(settings.content_pipeline_url, "/admin/reset-rag", method="POST", payload={})
+
+
+async def _forward_rag(
+    *,
+    kind: str,
+    query: str,
+    path: str,
+    method: str,
+    limit: int,
+    payload: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Proxy a RAG request to content-pipeline, then log + record one metric per request."""
+    started = time.perf_counter()
+    result = await _proxy_request(settings.content_pipeline_url, path, method=method, payload=payload, params=params)
+    total_ms = (time.perf_counter() - started) * 1000
+    results = result.get("results", []) if isinstance(result, dict) else []
+    top_score = float(results[0].get("score", 0.0)) if results else 0.0
+    _record_retrieval_metric({
+        "query": query,
+        "kind": kind,
+        "limit": limit,
+        "results_returned": len(results),
+        "top_score": round(top_score, 4),
+        "chunks_retrieved": len(results),
+        "chunks_used": len(results),
+        "asset_matches": 0,
+        "asset_ms": 0.0,
+        "rag_ms": round(total_ms, 2),
+        "total_ms": round(total_ms, 2),
+        "fallback_reason": None if results else "no_rag_match",
+    })
+    logger.info(
+        "[RAG] kind=%s query=%r limit=%d returned=%d top_score=%.3f total_ms=%.1f top_ids=%s",
+        kind,
+        query,
+        limit,
+        len(results),
+        top_score,
+        total_ms,
+        [str(r.get("id"))[:8] for r in results[:5]],
+    )
+    return result
 
 
 @app.post("/rag/search", response_model=SearchResponse)
 async def rag_search(request: SearchRequest) -> dict[str, Any]:
-    return await _proxy_json("/rag/search", request.model_dump())
+    return await _forward_rag(
+        kind="search", query=request.query, path="/rag/search", method="POST",
+        limit=request.limit, payload=request.model_dump(),
+    )
 
 
 @app.post("/rag/curriculum_search")
 async def rag_curriculum_search(request: SearchRequest) -> dict[str, Any]:
-    return await _proxy_json("/rag/curriculum_search", request.model_dump())
+    return await _forward_rag(
+        kind="curriculum_search", query=request.query, path="/rag/curriculum_search", method="POST",
+        limit=request.limit, payload=request.model_dump(),
+    )
 
 
 @app.get("/rag/chapter", response_model=SearchResponse)
 async def rag_chapter(chapter: str, limit: int = 5) -> dict[str, Any]:
-    return await _proxy_get("/rag/chapter", {"chapter": chapter, "limit": limit})
+    return await _forward_rag(
+        kind="chapter", query=chapter, path="/rag/chapter", method="GET",
+        limit=limit, params={"chapter": chapter, "limit": limit},
+    )
 
 
 @app.get("/rag/subject", response_model=SearchResponse)
 async def rag_subject(subject: str, limit: int = 5) -> dict[str, Any]:
-    return await _proxy_get("/rag/subject", {"subject": subject, "limit": limit})
+    return await _forward_rag(
+        kind="subject", query=subject, path="/rag/subject", method="GET",
+        limit=limit, params={"subject": subject, "limit": limit},
+    )
+
+
+def _validate_question(payload: dict[str, Any], *keys: str) -> str:
+    """Reject empty/oversize prompts before any asset-search or LLM fanout."""
+    for key in keys:
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            query = sanitize_llm_prompt(value.strip())
+            if len(query) > 2000:
+                raise HTTPException(status_code=422, detail=f"Field '{key}' exceeds 2000 characters.")
+            return query
+    raise HTTPException(status_code=422, detail=f"One of {list(keys)} must be a non-empty string.")
+
+
+def _clamp_grade(value: Any) -> int:
+    try:
+        grade = int(value)
+    except (TypeError, ValueError):
+        return 9
+    return min(12, max(5, grade))
 
 
 @app.post("/ai/chat")
 async def ai_chat(payload: dict[str, Any]) -> Any:
-    return await _proxy_to(settings.inference_service_url, "POST", "/ai/chat", payload)
+    _validate_question(payload, "prompt", "message", "question", "query")
+    sanitized_payload = dict(payload)
+    if "prompt" in sanitized_payload and isinstance(sanitized_payload["prompt"], str):
+        sanitized_payload["prompt"] = sanitize_llm_prompt(sanitized_payload["prompt"])
+    if "message" in sanitized_payload and isinstance(sanitized_payload["message"], str):
+        sanitized_payload["message"] = sanitize_llm_prompt(sanitized_payload["message"])
+    return await _proxy_to(settings.inference_service_url, "POST", "/ai/chat", sanitized_payload, timeout=AI_PROXY_TIMEOUT)
 
 
 @app.post("/ai/tutor")
 async def ai_tutor(payload: dict[str, Any]) -> Any:
     started = time.perf_counter()
-    query = str(payload.get("question") or payload.get("query") or "").strip()
+    query = _validate_question(payload, "question", "query")
+    payload = {**payload, "grade": _clamp_grade(payload.get("grade", 9))}
     normalization = normalize_topic(payload.get("topic"), query)
+
     normalized_topic = normalization.normalized_topic
     intent = payload.get("intent")
 
@@ -1212,7 +1389,7 @@ async def ai_tutor(payload: dict[str, Any]) -> Any:
         },
     }
 
-    result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload)
+    result = await _proxy_to(settings.inference_service_url, "POST", "/ai/tutor", enriched_payload, timeout=AI_PROXY_TIMEOUT)
     total_ms = (time.perf_counter() - started) * 1000
     if isinstance(result, StreamingResponse):
         _record_retrieval_metric({
@@ -1415,10 +1592,7 @@ async def voice_stream_proxy(websocket: WebSocket) -> None:
 
 @app.get("/sync")
 async def sync_get() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.pihub_url}/sync")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _proxy_to(settings.pihub_url, "GET", "/sync")
 
 
 @app.post("/sync")
@@ -1465,9 +1639,8 @@ async def packs_sync(
         for pack in all_packs
         if _pack_matches_filters(pack, grade=grade, subject=subject, language=language)
     ]
-    if not packs and all_packs:
-        packs = all_packs
     records = {str(pack["pack_id"]): pack for pack in packs}
+
     changed_packs = [
         pack
         for pack in packs
@@ -1939,6 +2112,16 @@ async def experiment_metrics() -> Any:
     }
 
 
+async def _learning_asset(
+    asset_name: str,
+    grade: int | None,
+    subject: str | None,
+    chapter: str | None,
+    topic: str | None,
+) -> dict[str, Any]:
+    return await _asset_response(asset_name, {"grade": grade, "subject": subject, "chapter": chapter, "topic": topic})
+
+
 @app.get("/flashcards")
 async def flashcards(
     grade: int | None = Query(default=None),
@@ -1946,7 +2129,7 @@ async def flashcards(
     chapter: str | None = Query(default=None),
     topic: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    return await _asset_response("flashcards", {"grade": grade, "subject": subject, "chapter": chapter, "topic": topic})
+    return await _learning_asset("flashcards", grade, subject, chapter, topic)
 
 
 @app.get("/quizzes")
@@ -1956,7 +2139,7 @@ async def quizzes(
     chapter: str | None = Query(default=None),
     topic: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    return await _asset_response("quizzes", {"grade": grade, "subject": subject, "chapter": chapter, "topic": topic})
+    return await _learning_asset("quizzes", grade, subject, chapter, topic)
 
 
 @app.get("/glossary")
@@ -1966,7 +2149,7 @@ async def glossary(
     chapter: str | None = Query(default=None),
     topic: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    return await _asset_response("glossary", {"grade": grade, "subject": subject, "chapter": chapter, "topic": topic})
+    return await _learning_asset("glossary", grade, subject, chapter, topic)
 
 
 @app.get("/summaries")
@@ -1976,12 +2159,12 @@ async def summaries(
     chapter: str | None = Query(default=None),
     topic: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    return await _asset_response("summaries", {"grade": grade, "subject": subject, "chapter": chapter, "topic": topic})
+    return await _learning_asset("summaries", grade, subject, chapter, topic)
 
 
 @app.post("/planner/lesson")
 async def planner_lesson(payload: dict[str, Any]) -> dict[str, Any]:
-    question = str(payload.get("question") or payload.get("topic") or payload.get("title") or "").strip()
+    question = _validate_question(payload, "question", "topic", "title")
     filters = {
         "grade": payload.get("grade"),
         "subject": normalize_subject(payload.get("subject")),
@@ -2070,8 +2253,16 @@ async def retrieval_metrics_endpoint() -> dict[str, Any]:
         inference = await _get_json(settings.inference_service_url, "/metrics/retrieval")
     except HTTPException as exc:
         inference = {"status": "unavailable", "detail": exc.detail}
+    content_pipeline = {}
+    try:
+        content_pipeline = await _get_json(settings.content_pipeline_url, "/rag/metrics")
+    except HTTPException as exc:
+        content_pipeline = {"status": "unavailable", "detail": exc.detail}
+    except Exception as exc:
+        content_pipeline = {"status": "unavailable", "detail": str(exc)}
     return {
         "gateway": _retrieval_summary(),
+        "content_pipeline": content_pipeline,
         "inference": inference,
     }
 
@@ -2106,78 +2297,67 @@ async def quiz_session_answer(quiz_session_id: str, payload: dict[str, Any]) -> 
     return await _post_json(settings.pihub_url, f"/quiz-sessions/{quiz_session_id}/answer", payload)
 
 
-@app.get("/classroom")
+@app.get("/classroom", dependencies=[Depends(verify_internal_api_key)])
 async def classroom_get() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.pihub_url}/classroom")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.pihub_url, "/classroom")
 
 
-@app.post("/classroom")
+@app.post("/classroom", dependencies=[Depends(verify_internal_api_key)])
 async def classroom_post(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.pihub_url, "POST", "/classroom", payload)
 
 
-@app.post("/ingest/directory")
+@app.post("/ingest/directory", dependencies=[Depends(require_admin)])
 async def ingest_directory(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.content_pipeline_url, "POST", "/ingest/directory", payload)
 
 
-@app.get("/devices")
+@app.get("/devices", dependencies=[Depends(verify_internal_api_key)])
 async def devices_get() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.pihub_url}/devices")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.pihub_url, "/devices")
 
 
-@app.post("/devices")
+@app.post("/devices", dependencies=[Depends(verify_internal_api_key)])
 async def devices_post(payload: dict[str, Any]) -> dict[str, Any]:
     return await _proxy_to(settings.pihub_url, "POST", "/devices", payload)
 
 
-@app.get("/debug/curriculum")
+@app.get("/debug/curriculum", dependencies=[Depends(verify_internal_api_key)])
 async def debug_curriculum() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.content_pipeline_url}/debug/curriculum")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.content_pipeline_url, "/debug/curriculum")
 
 
-@app.get("/debug/curriculum-relations")
+@app.get("/debug/curriculum-relations", dependencies=[Depends(verify_internal_api_key)])
 async def debug_curriculum_relations() -> dict[str, Any]:
-    response = await app.state.http.get(f"{settings.content_pipeline_url}/debug/curriculum-relations")
-    if response.is_error:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
-    return response.json()
+    return await _get_json(settings.content_pipeline_url, "/debug/curriculum-relations")
 
 
-@app.get("/debug/metadata")
+@app.get("/debug/metadata", dependencies=[Depends(verify_internal_api_key)])
 async def debug_metadata(path: str) -> dict[str, Any]:
-    return await _proxy_get("/debug/metadata", {"path": path})
+    return await _proxy_request(settings.content_pipeline_url, "/debug/metadata", method="GET", params={"path": path})
 
 
-@app.get("/debug/chunks")
+@app.get("/debug/chunks", dependencies=[Depends(verify_internal_api_key)])
 async def debug_chunks(path: str) -> dict[str, Any]:
-    return await _proxy_get("/debug/chunks", {"path": path})
+    return await _proxy_request(settings.content_pipeline_url, "/debug/chunks", method="GET", params={"path": path})
 
 
-@app.post("/debug/retrieval")
+@app.post("/debug/retrieval", dependencies=[Depends(verify_internal_api_key)])
 async def debug_retrieval(payload: dict[str, Any]) -> dict[str, Any]:
-    return await _proxy_json("/debug/retrieval", payload)
+    return await _proxy_request(settings.content_pipeline_url, "/debug/retrieval", method="POST", payload=payload)
 
 
-@app.get("/debug/similarity")
+@app.get("/debug/similarity", dependencies=[Depends(verify_internal_api_key)])
 async def debug_similarity(left: str, right: str) -> dict[str, Any]:
-    return await _proxy_get("/debug/similarity", {"left": left, "right": right})
+    return await _proxy_request(settings.content_pipeline_url, "/debug/similarity", method="GET", params={"left": left, "right": right})
 
 
-@app.get("/debug/pack-preview")
+@app.get("/debug/pack-preview", dependencies=[Depends(verify_internal_api_key)])
 async def debug_pack_preview(path: str, pack_name: str = "curriculum_pack") -> dict[str, Any]:
-    return await _proxy_get("/debug/pack-preview", {"path": path, "pack_name": pack_name})
+    return await _proxy_request(settings.content_pipeline_url, "/debug/pack-preview", method="GET", params={"path": path, "pack_name": pack_name})
 
 
-@app.get("/debug/learning-pack-preview")
+@app.get("/debug/learning-pack-preview", dependencies=[Depends(verify_internal_api_key)])
 async def debug_learning_pack_preview(path: str, pack_name: str = "curriculum_pack") -> dict[str, Any]:
-    return await _proxy_get("/debug/learning-pack-preview", {"path": path, "pack_name": pack_name})
+    return await _proxy_request(settings.content_pipeline_url, "/debug/learning-pack-preview", method="GET", params={"path": path, "pack_name": pack_name})
+

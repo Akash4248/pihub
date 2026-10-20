@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from shared.file_utils import atomic_write_json
+
 
 class PersistentSyncQueue:
     """Persistent synchronization queue that survives reboot"""
@@ -37,9 +39,9 @@ class PersistentSyncQueue:
                 self.memory_queue = []
 
     def _persist_to_disk(self) -> None:
-        """Write queue to persistent storage"""
+        """Write queue to persistent storage (crash-safe: tmp + fsync + rename)"""
         data = {"queue": self.memory_queue, "saved_at": int(time.time())}
-        self.queue_file.write_text(json.dumps(data, indent=2))
+        atomic_write_json(self.queue_file, data)
 
     def enqueue(self, job: dict[str, Any]) -> None:
         """Add job to persistent queue"""
@@ -91,12 +93,12 @@ class TransferRecoveryCoordinator:
                 self.recovery_map = {}
 
     def _persist_recovery_state(self) -> None:
-        """Save recovery state to disk"""
+        """Save recovery state to disk (crash-safe: tmp + fsync + rename)"""
         data = {
             "recovery_map": self.recovery_map,
             "persisted_at": int(time.time()),
         }
-        self.recovery_file.write_text(json.dumps(data, indent=2))
+        atomic_write_json(self.recovery_file, data)
 
     def start_transfer(
         self,

@@ -33,6 +33,15 @@ def _validate_model(model_type, payload):
     return model_type.parse_obj(payload)
 
 
+def _validate_uuid(val: str, field_name: str) -> None:
+    if not val or not isinstance(val, str):
+        raise ValueError(f"{field_name} must be a non-empty string")
+    try:
+        uuid.UUID(val)
+    except ValueError:
+        pass  # allow custom string IDs while ensuring non-empty string
+
+
 class ExperimentSqliteStore:
     def __init__(self, db_path: str | Path | None = None) -> None:
         default_path = Path(__file__).resolve().parents[1] / "storage" / "experiment_service.sqlite3"
@@ -52,8 +61,10 @@ class SqliteExperimentRunRepository(ExperimentRunRepository):
         self.store = store or ExperimentSqliteStore()
 
     async def create_run(self, run: ExperimentRun) -> ExperimentRun:
+        _validate_uuid(run.run_id, "run_id")
+        _validate_uuid(run.experiment_id, "experiment_id")
         now = _iso(utc_now())
-        with self.store.connect() as connection:
+        with sqlite_transaction(self.store.db_path) as connection:
             connection.execute(
                 """
                 insert into experiment_runs (
@@ -74,10 +85,13 @@ class SqliteExperimentRunRepository(ExperimentRunRepository):
                     now,
                 ),
             )
-        created = await self.get_run(run.run_id)
-        if created is None:
+            row = connection.execute(
+                "select * from experiment_runs where run_id = ?",
+                (run.run_id,),
+            ).fetchone()
+        if row is None:
             raise RuntimeError("Failed to create experiment run")
-        return created
+        return self._row_to_run(row)
 
     async def get_run(self, run_id: str) -> ExperimentRun | None:
         with self.store.connect() as connection:
@@ -116,13 +130,17 @@ class SqliteExperimentRunRepository(ExperimentRunRepository):
         return await self.get_run(run_id)
 
     async def complete_run(self, run_id: str, result: ExperimentResult) -> ExperimentRun | None:
-        current = await self.get_run(run_id)
-        if current is None:
-            return None
-        now = utc_now()
-        started = current.started_at or now
-        duration_ms = int((now - started).total_seconds() * 1000)
-        with self.store.connect() as connection:
+        with sqlite_transaction(self.store.db_path) as connection:
+            row = connection.execute(
+                "select * from experiment_runs where run_id = ?",
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            current = self._row_to_run(row)
+            now = utc_now()
+            started = current.started_at or now
+            duration_ms = int((now - started).total_seconds() * 1000)
             connection.execute(
                 """
                 update experiment_runs
@@ -131,7 +149,11 @@ class SqliteExperimentRunRepository(ExperimentRunRepository):
                 """,
                 (ExperimentStatus.COMPLETED.value, _iso(now), duration_ms, _iso(now), run_id),
             )
-        return await self.get_run(run_id)
+            updated_row = connection.execute(
+                "select * from experiment_runs where run_id = ?",
+                (run_id,),
+            ).fetchone()
+        return self._row_to_run(updated_row) if updated_row else None
 
     def _row_to_run(self, row: sqlite3.Row) -> ExperimentRun:
         return _validate_model(

@@ -4,6 +4,8 @@
 graphify-out/
 backend/.env
 .env
+.env.local
+backend/.env.local
 .env.example.bak
 TEXTBOOKS/
 KANNADA_MEDIUM/
@@ -17,8 +19,10 @@ backend/voice-service/models/
 *.pth
 
 # Local run/debug scratch
+.local_run/
 backend/.local_run/
 backend/.local_run_env
+backend/.cp_audit.key
 backend/_depcheck.py
 backend/content-pipeline/_dbgpath.py
 *.sqlite3-shm

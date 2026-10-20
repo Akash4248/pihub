@@ -139,7 +139,7 @@ class ClassroomRepository:
             return self._assignment_row(row) if row else None
 
     def ensure_student(self, session_id: str, student_id: str, joined_at: str) -> None:
-        with self._connect() as connection:
+        with sqlite_transaction(self.db_path) as connection:
             connection.execute(
                 """
                 insert or ignore into classroom_students (id, session_id, student_id, joined_at)

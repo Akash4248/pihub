@@ -1,0 +1,60 @@
+{
+  "service": "content-pipeline",
+  "base": "http://localhost:8001",
+  "checks": {
+    "health": {
+      "status": 200,
+      "latency_ms": 18.16,
+      "body": {
+        "status": "ok",
+        "service": "content-pipeline",
+        "checks": {
+          "service": "ok",
+          "qdrant": {
+            "status": "ok",
+            "collection": "educational_chunks"
+          },
+          "curriculum_graph": {
+            "status": "ok",
+            "grades": 11,
+            "path": "/shared/work/curriculum_graph.json"
+          }
+        }
+      }
+    }
+  },
+  "openapi": {
+    "reachable": true,
+    "route_count": 27,
+    "routes": [
+      "/admin/reset-rag",
+      "/build/agentic-artifacts",
+      "/build/artifacts",
+      "/build/enriched-artifacts",
+      "/build/pack",
+      "/build/quality/{path}",
+      "/build/report/{job_id}",
+      "/debug/chunks",
+      "/debug/curriculum",
+      "/debug/curriculum-relations",
+      "/debug/learning-pack-preview",
+      "/debug/metadata",
+      "/debug/pack-preview",
+      "/debug/retrieval",
+      "/debug/similarity",
+      "/health",
+      "/ingest/directory",
+      "/ingest/generated-pack",
+      "/ingest/pdf",
+      "/ingest/status",
+      "/ingest/textbook",
+      "/rag/chapter",
+      "/rag/curriculum_search",
+      "/rag/metrics",
+      "/rag/search",
+      "/rag/subject",
+      "/reports"
+    ]
+  },
+  "ok": true
+}

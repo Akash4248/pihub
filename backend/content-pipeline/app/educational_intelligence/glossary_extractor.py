@@ -83,7 +83,7 @@ class GlossaryExtractor:
             language=metadata.get("language"),
         )
         if ai_result and ai_result.get("items"):
-            return [
+            extracted = [
                 {
                     "term": clean_text(str(item.get("term", ""))),
                     "definition": clean_text(str(item.get("definition", ""))),
@@ -93,8 +93,13 @@ class GlossaryExtractor:
                     "source": "inference-service",
                 }
                 for item in ai_result["items"]
-                if clean_text(str(item.get("term", ""))) and clean_text(str(item.get("definition", "")))
+                if clean_text(str(item.get("term", "")))
+                and clean_text(str(item.get("definition", "")))
+                and is_meaningful_term(clean_text(str(item.get("term", ""))))
+                and not is_noisy_text(clean_text(str(item.get("term", ""))))
             ]
+            if extracted:
+                return extracted
         return None
 
     async def extract(self, chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:

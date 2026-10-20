@@ -23,6 +23,7 @@ content/
 from __future__ import annotations
 
 import io
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -47,16 +48,34 @@ class TextbookMetadataExtractor:
     
     LANGUAGES = ["english", "kannada", "hindi", "marathi", "tamil", "telugu"]
 
+    # Unicode script ranges used to detect the medium of a chunk. We only infer
+    # a non-English language from the actual script used, never from the *name*
+    # of a language appearing in the text (e.g. "Tamil Nadu" in an English
+    # social-science chapter used to mislabel the entire chunk as Tamil).
+    SCRIPT_RANGES = {
+        "kn": ("\u0c80", "\u0cff"),  # Kannada
+        "ta": ("\u0b80", "\u0bff"),  # Tamil
+        "te": ("\u0c00", "\u0c7f"),  # Telugu
+        "hi": ("\u0900", "\u097f"),  # Devanagari (Hindi / Marathi)
+    }
+
     @classmethod
     def detect_language_from_text(cls, text: str) -> str:
-        lower_text = text.lower()
-        if any("\u0c80" <= char <= "\u0cff" for char in text):
-            return "kn"
-        if any("\u0900" <= char <= "\u097f" for char in text):
-            return "hi"
-        for language in cls.LANGUAGES:
-            if language in lower_text:
-                return normalize_language_code(language) or language
+        sample = text[:4000]
+        total_letters = 0
+        counts = {code: 0 for code in cls.SCRIPT_RANGES}
+        for char in sample:
+            if char.isalpha():
+                total_letters += 1
+            for code, (start, end) in cls.SCRIPT_RANGES.items():
+                if start <= char <= end:
+                    counts[code] += 1
+                    break
+        if total_letters == 0:
+            return "en"
+        best_code, best_count = max(counts.items(), key=lambda item: item[1])
+        if best_count and best_count >= max(3, total_letters * 0.15):
+            return best_code
         return "en"
     
     @classmethod
@@ -120,29 +139,31 @@ class TextbookMetadataExtractor:
 
         # If subject still not found, prefer filename tokens and then path tokens.
         if "subject" not in metadata:
-            SUBJECT_TOKENS = ["math", "maths", "mathematics", "science", "social", "social_science", "english", "kannada"]
-            for token in SUBJECT_TOKENS:
+            subject_aliases = {
+                "mathematics": "mathematics", "maths": "mathematics", "math": "mathematics",
+                "social_science": "social_science", "socialscience": "social_science",
+                "social": "social_science",
+                "science": "science",
+                "english": "english", "kannada": "kannada",
+            }
+
+            def _compact(value: str) -> str:
+                return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+
+            # Longest aliases first so "social_science" beats "science"/"social".
+            aliases_by_len = sorted(subject_aliases, key=len, reverse=True)
+            for token in aliases_by_len:
                 if token in filename_tokens:
-                    if "math" in token:
-                        metadata["subject"] = "mathematics"
-                    elif "social" in token:
-                        metadata["subject"] = "social_science"
-                    else:
-                        metadata["subject"] = normalize_curriculum_name(token)
+                    metadata["subject"] = subject_aliases[token]
                     break
             if "subject" not in metadata:
                 for part in parts:
-                    low = normalize_curriculum_name(part).lower()
+                    low = _compact(part)
                     if not low or "medium" in low:
                         continue
-                    for token in SUBJECT_TOKENS:
+                    for token in aliases_by_len:
                         if low == token or low.endswith(f"_{token}") or low.startswith(f"{token}_"):
-                            if "math" in token:
-                                metadata["subject"] = "mathematics"
-                            elif "social" in token:
-                                metadata["subject"] = "social_science"
-                            else:
-                                metadata["subject"] = normalize_curriculum_name(token)
+                            metadata["subject"] = subject_aliases[token]
                             break
                     if "subject" in metadata:
                         break
@@ -150,16 +171,24 @@ class TextbookMetadataExtractor:
         if "subject" not in metadata and subject_candidate:
             metadata["subject"] = subject_candidate
         
-        # Extract language if specified in path
-        for lang in cls.LANGUAGES:
-            if lang in str(file_path).lower():
-                metadata["language"] = normalize_language_code(lang) or lang
+        # Extract language only from explicit path tokens (e.g. "kannada",
+        # "tamil medium", "class 10 kan maths"). Substring matching used to
+        # misfire badly: "hi" matched "history", "en" matched "science".
+        path_tokens = {
+            token
+            for part in file_path.parts
+            for token in re.split(r"[^a-z]+", part.lower())
+            if token
+        }
+        for language, aliases in language_aliases.items():
+            if path_tokens & aliases:
+                metadata["language"] = normalize_language_code(language) or language
                 break
 
         # Default to English if not specified
         if "language" not in metadata:
             metadata["language"] = "en"
-        
+
         # Extract textbook name / chapter from filename and sanitize
         # cleanup trailing dashes, separators, and trailing numbers
         name = re.sub(r"[\(\)\[\]]", "", filename)
@@ -168,11 +197,6 @@ class TextbookMetadataExtractor:
         # Also expose a cleaned 'chapter' field for downstream use
         metadata["chapter"] = name
 
-        for language, aliases in language_aliases.items():
-            if any(alias in str(file_path).lower() for alias in aliases):
-                metadata["language"] = normalize_language_code(language) or language
-                break
-        
         return metadata
 
     @classmethod
@@ -321,97 +345,25 @@ class EducationalChunkDetector:
         return [t.strip().lower() for t in topics if t.strip() and len(t.strip()) > 3]
 
 
-class EducationalChunker:
-    """
-    Semantic chunking for educational content.
-    
-    DO NOT use fixed-size character chunks.
-    Chunk by:
-    - chapter
-    - section  
-    - paragraph
-    """
-    
-    def __init__(self, chapter_separator: str = "\n\n", min_chunk_size: int = 100, max_chunk_size: int = 1200):
-        self.chapter_separator = chapter_separator
-        self.min_chunk_size = min_chunk_size
-        self.max_chunk_size = max_chunk_size
-    
-    def chunk_educational(self, text: str, metadata: dict[str, Any]) -> list[dict[str, Any]]:
-        """
-        Chunk text using educational semantic boundaries.
-        
-        Returns chunks with enriched metadata.
-        """
-        # Detect chapters first
-        chapters = EducationalChunkDetector.detect_chapters(text)
-        
-        chunks: list[dict[str, Any]] = []
-        
-        for chapter in chapters:
-            chapter_text = text[chapter["start"]:chapter["end"]]
-
-            section_title = chapter["title"]
-            paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", chapter_text) if paragraph.strip()]
-
-            buffer: list[str] = []
-            buffer_length = 0
-
-            def flush_buffer(current_section: str | None = None) -> None:
-                nonlocal buffer, buffer_length
-                if not buffer:
-                    return
-                chunk_text = "\n\n".join(buffer).strip()
-                if len(chunk_text) >= self.min_chunk_size or not chunks:
-                    chunks.append({
-                        "text": chunk_text,
-                        "metadata": {
-                            **metadata,
-                            "chapter": chapter["title"],
-                            "section": current_section or section_title,
-                            "topics": chapter.get("topics", []),
-                        },
-                    })
-                buffer = []
-                buffer_length = 0
-
-            for paragraph in paragraphs:
-                lines = paragraph.splitlines()
-                first_line = lines[0].strip() if lines else ""
-                is_section = EducationalChunkDetector._is_section_heading(first_line)
-                if is_section:
-                    flush_buffer(section_title)
-                    section_title = first_line
-                    remaining = "\n".join(lines[1:]).strip()
-                    if remaining:
-                        buffer.append(remaining)
-                        buffer_length = len(remaining)
-                    continue
-
-                if buffer_length + len(paragraph) + 2 > self.max_chunk_size and buffer:
-                    flush_buffer(section_title)
-
-                buffer.append(paragraph)
-                buffer_length += len(paragraph) + 2
-
-            flush_buffer(section_title)
-        
-        return chunks
-
-
 class StructuredTextbookIngest:
     """Main API for structured textbook ingestion."""
     
     def __init__(self):
         settings = get_settings()
         self.metadata_extractor = TextbookMetadataExtractor()
-        self.chunker = EducationalChunker()
-        self.semantic_chunker = EducationalChunkerV2()
-        self.enable_semantic_educational_chunking = settings.enable_semantic_educational_chunking
+        self.chunker = EducationalChunkerV2()
+        self.semantic_chunker = self.chunker
+        self.enable_semantic_educational_chunking = True
+
 
     def extract_text_from_pdf(self, file_path: Path) -> str:
-        """Extract text from PDF with Docling first, then OCR-capable fallback."""
-        docling_text = self._extract_text_with_docling(file_path)
+        """Extract text from PDF with Docling first, then OCR-capable fallback.
+
+        Set ``INGEST_EXTRACTOR=fitz`` to bypass Docling entirely (much faster on
+        CPU for text-based PDFs).
+        """
+        extractor = os.environ.get("INGEST_EXTRACTOR", "docling").strip().lower()
+        docling_text = "" if extractor in ("fitz", "pymupdf") else self._extract_text_with_docling(file_path)
         if docling_text and len(docling_text) > 40:
             logger.debug("Docling extracted text length from %s: %d", file_path.name, len(docling_text))
             print(f"[ingest] docling_extracted_text_length {file_path.name} {len(docling_text)}")
@@ -577,7 +529,7 @@ class StructuredTextbookIngest:
         # Extract and persist important figures; tag chunks whose text
         # references a figure with that image (caption-based association,
         # since the section chunker does not track page numbers).
-        image_manifest = self.extract_images(file_path)
+        image_manifest = [] if os.environ.get("INGEST_SKIP_IMAGES", "").lower() in ("1", "true", "yes") else self.extract_images(file_path)
         if image_manifest:
             metadata.setdefault("images", [m["filename"] for m in image_manifest])
             for chunk in chunks:

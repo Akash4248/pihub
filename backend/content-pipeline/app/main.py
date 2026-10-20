@@ -5,23 +5,31 @@ import hashlib
 import json
 import math
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
 import logging
+import os
+import time
+from collections import deque
+from datetime import datetime, timezone
 
 from dataclasses import dataclass
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from qdrant_client import QdrantClient
 
 from shared.config import get_settings
+from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely, validate_pdf_upload, InternalAuthMiddleware, require_admin
 from shared.curriculum_graph import CurriculumGraph, create_sample_curriculum
 from shared.schemas import (
     ChunkPreview,
     DebugRetrievalRequest,
     DirectoryIngestRequest,
+    DirectoryIngestResponse,
+    DirectoryIngestStatus,
     EducationalResource,
     HealthResponse,
     IngestResponse,
@@ -35,6 +43,59 @@ from shared.text_normalization import normalize_curriculum_name, normalize_langu
 from shared.vector_store import build_filter, ensure_collection, make_qdrant_client, upsert_chunks
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+
+# In-process RAG observability. Records one entry per retrieval request so the
+# console log stream and /rag/metrics can report latency + accuracy proxies.
+rag_metrics: deque[dict[str, Any]] = deque(maxlen=500)
+_rag_metrics_lock = threading.Lock()
+
+
+def _record_rag_metric(metric: dict[str, Any]) -> None:
+    with _rag_metrics_lock:
+        rag_metrics.appendleft({"recorded_at": datetime.now(timezone.utc).isoformat(), **metric})
+
+
+def _percentile(values: list[float], p: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    k = int(round((p / 100.0) * (len(ordered) - 1)))
+    return round(ordered[k], 2)
+
+
+def _rag_metrics_summary() -> dict[str, Any]:
+    with _rag_metrics_lock:
+        metrics = list(rag_metrics)
+    if not metrics:
+        return {"count": 0, "latency_ms": {}, "quality": {}, "recent": []}
+    lat = [float(m.get("total_ms", 0.0)) for m in metrics]
+    embed = [float(m.get("embed_ms", 0.0)) for m in metrics]
+    retrieve = [float(m.get("retrieve_ms", 0.0)) for m in metrics]
+    rerank = [float(m.get("rerank_ms", 0.0)) for m in metrics]
+    non_empty = [m for m in metrics if int(m.get("results_returned", 0)) > 0]
+    return {
+        "count": len(metrics),
+        "latency_ms": {
+            "avg": round(sum(lat) / len(lat), 2),
+            "p50": _percentile(lat, 50),
+            "p95": _percentile(lat, 95),
+            "p99": _percentile(lat, 99),
+            "embed_avg": round(sum(embed) / len(embed), 2),
+            "retrieve_avg": round(sum(retrieve) / len(retrieve), 2),
+            "rerank_avg": round(sum(rerank) / len(rerank), 2),
+        },
+        "quality": {
+            "non_empty_rate": round(100.0 * len(non_empty) / len(metrics), 2),
+            "avg_candidates": round(sum(float(m.get("candidates", 0)) for m in metrics) / len(metrics), 2),
+            "avg_results": round(sum(float(m.get("results_returned", 0)) for m in metrics) / len(metrics), 2),
+            "avg_top_score": round(sum(float(m.get("top_score", 0.0)) for m in metrics) / len(metrics), 3),
+        },
+        "recent": metrics[:40],
+    }
 
 
 def _sanitize_pack_id(s: str) -> str:
@@ -76,58 +137,29 @@ from app.generated_pack_ingestor import GeneratedPackIngestor
 
 settings = get_settings()
 app = FastAPI(title="content-pipeline")
+app.add_middleware(InternalAuthMiddleware)
 
 
-class SimpleEmbeddingModel:
-    def __init__(self, dimension: int = 384) -> None:
-        self.dimension = dimension
-
-    def get_sentence_embedding_dimension(self) -> int:
-        return self.dimension
-
-    def encode(self, texts: list[str] | str, normalize_embeddings: bool = True) -> list[list[float]]:
-        if isinstance(texts, str):
-            texts = [texts]
-        return [self._encode_one(text, normalize_embeddings) for text in texts]
-
-    def _encode_one(self, text: str, normalize_embeddings: bool) -> list[float]:
-        vector = [0.0] * self.dimension
-        tokens = re.findall(r"[A-Za-z0-9']+", text.lower())
-        for token in tokens:
-            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
-            index = int.from_bytes(digest, "big") % self.dimension
-            vector[index] += 1.0
-
-        if normalize_embeddings:
-            norm = math.sqrt(sum(value * value for value in vector))
-            if norm > 0:
-                vector = [value / norm for value in vector]
-
-        return vector
+from shared.embedding_service import EmbeddingModelManager, HashFallbackEmbeddingModel
 
 
 class SentenceTransformerEmbeddingModel:
+    """Proxy embedding model routing calls to shared EmbeddingModelManager singleton."""
+
     def __init__(self, model_name: str, device: str = "cpu", cache_dir: str | None = None) -> None:
         self.model_name = model_name
         self.device = device
         self.cache_dir = Path(cache_dir) if cache_dir else None
-        self._model: Any | None = None
-        self._dimension: int | None = None
+        self._manager = EmbeddingModelManager.get_instance()
 
     def get_sentence_embedding_dimension(self) -> int:
-        self._ensure_loaded()
-        if self._dimension is None:
-            return 384
-        return self._dimension
+        return self._manager.get_dimension()
 
     def encode(self, texts: list[str] | str, normalize_embeddings: bool = True) -> list[list[float]]:
-        self._ensure_loaded()
-        if self._model is None:
-            fallback = SimpleEmbeddingModel()
-            return fallback.encode(texts, normalize_embeddings=normalize_embeddings)
+        model = self._manager.get_model()
         if isinstance(texts, str):
             texts = [texts]
-        embeddings = self._model.encode(
+        embeddings = model.encode(
             texts,
             normalize_embeddings=normalize_embeddings,
             show_progress_bar=False,
@@ -136,22 +168,6 @@ class SentenceTransformerEmbeddingModel:
             embeddings = embeddings.tolist()
         return [[float(value) for value in row] for row in embeddings]
 
-    def _ensure_loaded(self) -> None:
-        if self._model is not None or self._dimension is not None:
-            return
-        try:
-            from sentence_transformers import SentenceTransformer
-        except Exception:
-            self._model = None
-            self._dimension = 384
-            return
-        try:
-            load_target = self._resolve_local_model_path()
-            self._model = SentenceTransformer(str(load_target or self.model_name), device=self.device)
-            self._dimension = int(self._model.get_sentence_embedding_dimension())
-        except Exception:
-            self._model = None
-            self._dimension = 384
 
     def _resolve_local_model_path(self) -> Path | None:
         model_path = Path(self.model_name)
@@ -183,9 +199,9 @@ class Pipeline:
     LEGACY_COLLECTION_NAMES = ("educational_chunks",)
 
     def __init__(self) -> None:
+        self._write_lock = threading.Lock()
         self.client = make_qdrant_client(settings.qdrant_url)
         self.embedding_model: SimpleEmbeddingModel | None = None
-        self.local_retrieval_model: Any | None = None
         self.collection_name = settings.qdrant_collection
         self.upload_dir = Path(settings.upload_dir)
         self.work_dir = Path(settings.work_dir)
@@ -254,17 +270,6 @@ class Pipeline:
             )
         return self.embedding_model
 
-    def _load_local_retrieval_model(self) -> Any | None:
-        if self.local_retrieval_model is None:
-            model = SentenceTransformerEmbeddingModel(
-                settings.local_retrieval_model_name,
-                settings.local_retrieval_device,
-                settings.local_retrieval_cache_dir,
-            )
-            model._ensure_loaded()
-            self.local_retrieval_model = model if model._model is not None else None
-        return self.local_retrieval_model
-
     def _vector_size(self) -> int:
         return self._load_model().get_sentence_embedding_dimension()
 
@@ -310,26 +315,27 @@ class Pipeline:
                 self.hybrid_store.load_snapshot()
             if not self.hybrid_store.is_ready():
                 self._hydrate_hybrid_store()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Hybrid store hydration failed — search degraded: %s", str(exc)[:300])
 
     def reset_rag_state(self) -> dict[str, Any]:
-        logger.info("Resetting RAG collection %s", self.collection_name)
-        try:
-            self.client.delete_collection(collection_name=self.collection_name)
-        except Exception as exc:
-            logger.warning("Could not delete collection %s cleanly: %s", self.collection_name, str(exc)[:300])
-        ensure_collection(self.client, self.collection_name, self._vector_size(), settings.qdrant_url)
-        self.hybrid_store.clear()
-        if self.enable_curriculum_graph_engine:
-            self.relation_graph = {}
-            self.graph_storage.save(self.relation_graph)
-        self.ingestion_log.clear()
-        return {
-            "collection": self.collection_name,
-            "hybrid_snapshot": str(self.retrieval_snapshot_path),
-            "status": "reset",
-        }
+        with self._write_lock:
+            logger.info("Resetting RAG collection %s", self.collection_name)
+            try:
+                self.client.delete_collection(collection_name=self.collection_name)
+            except Exception as exc:
+                logger.warning("Could not delete collection %s cleanly: %s", self.collection_name, str(exc)[:300])
+            ensure_collection(self.client, self.collection_name, self._vector_size(), settings.qdrant_url)
+            self.hybrid_store.clear()
+            if self.enable_curriculum_graph_engine:
+                self.relation_graph = {}
+                self.graph_storage.save(self.relation_graph)
+            self.ingestion_log.clear()
+            return {
+                "collection": self.collection_name,
+                "hybrid_snapshot": str(self.retrieval_snapshot_path),
+                "status": "reset",
+            }
 
     def _collection_point_count(self, collection_name: str) -> int:
         try:
@@ -579,54 +585,57 @@ class Pipeline:
     def _store_chunks(self, chunks: list[dict[str, Any]]) -> None:
         if not chunks:
             return
-        logger.info("Storing %d enriched chunks to vector store", len(chunks))
-        print(f"[store] storing_chunks count={len(chunks)}")
+        with self._write_lock:
+            logger.info("Storing %d enriched chunks to vector store", len(chunks))
+            print(f"[store] storing_chunks count={len(chunks)}")
 
-        texts = [chunk["text"] for chunk in chunks]
-        embedding_texts = []
-        for chunk in chunks:
-            metadata = chunk.get("metadata", {})
-            prefix_parts = [
-                str(metadata.get("grade") or ""),
-                str(metadata.get("subject") or ""),
-                str(metadata.get("chapter") or ""),
-                str(metadata.get("section") or ""),
-                " ".join(metadata.get("topics", [])),
-                " ".join(metadata.get("concepts", [])),
-            ]
-            prefix = " ".join(part for part in prefix_parts if part).strip()
-            embedding_texts.append(f"{prefix}\n\n{chunk['text']}" if prefix else chunk["text"])
-
-        embeddings = self._load_model().encode(embedding_texts, normalize_embeddings=True)
-        logger.info("Generated %d embeddings for %d chunks", len(embeddings), len(chunks))
-        print(f"[store] embeddings_generated count={len(embeddings)}")
-        metadatas = [chunk["metadata"] for chunk in chunks]
-        point_ids = upsert_chunks(self.client, self.collection_name, embeddings, texts, metadatas)
-        logger.info("Upserted %d vectors into collection %s", len(point_ids), self.collection_name)
-        print(f"[store] upserted_vectors count={len(point_ids)} collection={self.collection_name}")
-        try:
-            self.hybrid_store.upsert(
-                [
-                    {
-                        "chunk_id": str(point_ids[idx]),
-                        "text": chunk["text"],
-                        "metadata": {
-                            **chunk["metadata"],
-                            "retrieval_source": "local_hybrid",
-                        },
-                    }
-                    for idx, chunk in enumerate(chunks)
+            texts = [chunk["text"] for chunk in chunks]
+            embedding_texts = []
+            for chunk in chunks:
+                metadata = chunk.get("metadata", {})
+                prefix_parts = [
+                    str(metadata.get("grade") or ""),
+                    str(metadata.get("subject") or ""),
+                    str(metadata.get("chapter") or ""),
+                    str(metadata.get("section") or ""),
+                    " ".join(metadata.get("topics", [])),
+                    " ".join(metadata.get("concepts", [])),
                 ]
-            )
-        except Exception as exc:
-            logger.warning("Hybrid retrieval store update failed: %s", str(exc)[:300])
-        self.curriculum_graph.build_from_chunks(chunks)
-        self.curriculum_graph.save(self.curriculum_graph_path)
-        glossary_entries = self.glossary_extractor._heuristic_extract(chunks) if hasattr(self.glossary_extractor, '_heuristic_extract') else []
-        try:
-            self._rebuild_concept_index(chunks=chunks, glossary_entries=glossary_entries)
-        except Exception:
-            pass
+                prefix = " ".join(part for part in prefix_parts if part).strip()
+                embedding_texts.append(f"{prefix}\n\n{chunk['text']}" if prefix else chunk["text"])
+
+            embeddings = self._load_model().encode(embedding_texts, normalize_embeddings=True)
+            logger.info("Generated %d embeddings for %d chunks", len(embeddings), len(chunks))
+            print(f"[store] embeddings_generated count={len(embeddings)}")
+            metadatas = [chunk["metadata"] for chunk in chunks]
+            point_ids = upsert_chunks(self.client, self.collection_name, embeddings, texts, metadatas)
+            logger.info("Upserted %d vectors into collection %s", len(point_ids), self.collection_name)
+            print(f"[store] upserted_vectors count={len(point_ids)} collection={self.collection_name}")
+            try:
+                self.hybrid_store.upsert(
+                    [
+                        {
+                            "chunk_id": str(point_ids[idx]),
+                            "text": chunk["text"],
+                            "metadata": {
+                                **chunk["metadata"],
+                                "retrieval_source": "local_hybrid",
+                            },
+                        }
+                        for idx, chunk in enumerate(chunks)
+                    ],
+                    vectors=embeddings,
+                )
+
+            except Exception as exc:
+                logger.warning("Hybrid retrieval store update failed: %s", str(exc)[:300])
+            self.curriculum_graph.build_from_chunks(chunks)
+            self.curriculum_graph.save(self.curriculum_graph_path)
+            glossary_entries = self.glossary_extractor._heuristic_extract(chunks) if hasattr(self.glossary_extractor, '_heuristic_extract') else []
+            try:
+                self._rebuild_concept_index(chunks=chunks, glossary_entries=glossary_entries)
+            except Exception:
+                pass
         if self.enable_curriculum_graph_engine:
             self.relation_graph = self.graph_builder.build(chunks, existing=self.relation_graph)
             self.graph_storage.save(self.relation_graph)
@@ -713,14 +722,15 @@ class Pipeline:
         enriched_chunks = self._enrich_chunks(chunks, base_metadata)
         self._store_chunks(enriched_chunks)
 
-        self.ingestion_log.append(
-            {
-                "file_name": file_path.name,
-                "source_path": str(file_path),
-                "chunks_created": len(enriched_chunks),
-                "metadata": base_metadata,
-            }
-        )
+        with self._write_lock:
+            self.ingestion_log.append(
+                {
+                    "file_name": file_path.name,
+                    "source_path": str(file_path),
+                    "chunks_created": len(enriched_chunks),
+                    "metadata": base_metadata,
+                }
+            )
 
         return {
             "file_name": file_path.name,
@@ -731,63 +741,10 @@ class Pipeline:
             "chunks": enriched_chunks,
         }
 
-    def _split_into_sections(self, raw_text: str) -> list[dict[str, str]]:
-        lines = [line.strip() for line in raw_text.splitlines()]
-        sections: list[dict[str, str]] = []
-        current_title = "Introduction"
-        current_lines: list[str] = []
-
-        def flush() -> None:
-            text = "\n".join(line for line in current_lines if line).strip()
-            if text:
-                sections.append({"title": current_title, "text": text})
-
-        for line in lines:
-            if not line:
-                continue
-            is_heading = line.startswith("#") or (line.isupper() and len(line.split()) <= 8) or line.endswith(":")
-            if is_heading and current_lines:
-                flush()
-                current_title = line.lstrip("# ").strip()
-                current_lines = []
-                continue
-            if is_heading and not current_lines:
-                current_title = line.lstrip("# ").strip()
-                continue
-            current_lines.append(line)
-
-        flush()
-        return sections or [{"title": "Document", "text": raw_text.strip()}]
-
-    def _chunk_text(self, sections: list[dict[str, str]], metadata: Metadata) -> list[dict[str, Any]]:
-        results: list[dict[str, Any]] = []
-        for section in sections:
-            text = section["text"].strip()
-            if not text:
-                continue
-
-            start = 0
-            while start < len(text):
-                end = min(len(text), start + self.chunk_size)
-                chunk_text = text[start:end].strip()
-                if chunk_text:
-                    results.append(
-                        {
-                            "text": chunk_text,
-                            "metadata": {
-                                **metadata.model_dump(exclude_none=True),
-                                "section_title": section["title"],
-                            },
-                        }
-                    )
-                if end >= len(text):
-                    break
-                start = max(end - self.chunk_overlap, start + 1)
-        return results
-
     def ingest_pdf(self, file_name: str, content: bytes, metadata: Metadata, source: str | None = None) -> IngestResponse:
         self.ensure_ready()
-        target_path = self.upload_dir / file_name
+        safe_name = sanitize_safe_filename(file_name)
+        target_path = self.upload_dir / safe_name
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(content)
 
@@ -799,14 +756,78 @@ class Pipeline:
             metadata=result["metadata"],
         )
 
-    def ingest_textbook_directory(self, directory: Path, recursive: bool = True, source: str | None = None) -> dict[str, Any]:
+    def _directory_checkpoint_path(self, directory: Path, recursive: bool) -> Path:
+        key = hashlib.sha1(
+            f"{self.collection_name}|{directory}|{recursive}".encode("utf-8")
+        ).hexdigest()[:16]
+        return self.work_dir / "ingest_checkpoints" / f"{key}.json"
+
+    def _load_ingest_checkpoint(self, directory: Path, recursive: bool) -> dict[str, Any]:
+        checkpoint = self._directory_checkpoint_path(directory, recursive)
+        if not checkpoint.exists():
+            return {"checkpoint": checkpoint, "completed": set(), "updated_at": None}
+        try:
+            payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+            if payload.get("collection") == self.collection_name and payload.get("directory") == str(directory):
+                return {
+                    "checkpoint": checkpoint,
+                    "completed": set(payload.get("completed", [])),
+                    "updated_at": payload.get("updated_at"),
+                }
+        except Exception as exc:
+            logger.warning("Ignoring unreadable ingest checkpoint %s: %s", checkpoint, exc)
+        return {"checkpoint": checkpoint, "completed": set(), "updated_at": None}
+
+    def _save_ingest_checkpoint(
+        self, checkpoint: Path, directory: Path, recursive: bool, files: list[Path], completed: set[str]
+    ) -> None:
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "collection": self.collection_name,
+            "directory": str(directory),
+            "recursive": recursive,
+            "total_files": len(files),
+            "completed": sorted(completed),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        tmp = checkpoint.with_name(checkpoint.name + ".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        os.replace(tmp, checkpoint)
+
+    def ingest_textbook_directory(
+        self,
+        directory: Path,
+        recursive: bool = True,
+        source: str | None = None,
+        restart: bool = False,
+    ) -> dict[str, Any]:
         self.ensure_ready()
         directory = self._resolve_content_path(str(directory))
         pattern = "**/*.pdf" if recursive else "*.pdf"
+        files = sorted(directory.glob(pattern))
+
+        state = self._load_ingest_checkpoint(directory, recursive)
+        checkpoint = state["checkpoint"]
+        completed: set[str] = set() if restart else set(state["completed"])
+        resumed = bool(completed)
+
+        def _persist() -> None:
+            self._save_ingest_checkpoint(checkpoint, directory, recursive, files, completed)
+
         results: list[dict[str, Any]] = []
         total_chunks = 0
+        skipped = 0
+        remaining = sum(1 for f in files if str(f) not in completed)
+        logger.info(
+            "Directory ingest: dir=%s total=%d already_done=%d remaining=%d resume=%s restart=%s",
+            directory, len(files), len(completed), remaining, resumed, restart,
+        )
 
-        for file_path in sorted(directory.glob(pattern)):
+        for file_path in files:
+            source_path = str(file_path)
+            if source_path in completed:
+                skipped += 1
+                continue
             try:
                 result = self._ingest_textbook_path(file_path, metadata=None, source=source or "directory")
                 results.append({
@@ -816,15 +837,27 @@ class Pipeline:
                     "metadata": result["metadata"].model_dump(),
                 })
                 total_chunks += result["chunks_created"]
+                completed.add(source_path)
+                _persist()
+                logger.info(
+                    "Ingested %s (%d chunks) — %d/%d files complete",
+                    file_path.name, result["chunks_created"], len(completed), len(files),
+                )
             except Exception as exc:
-                results.append({"file_name": file_path.name, "source_path": str(file_path), "error": str(exc)})
+                logger.exception("Failed to ingest %s", file_path)
+                results.append({"file_name": file_path.name, "source_path": source_path, "error": str(exc)})
 
+        _persist()
         return {
             "directory": str(directory),
             "recursive": recursive,
             "files_processed": len(results),
+            "files_skipped": skipped,
+            "total_files": len(files),
             "chunks_created": total_chunks,
             "collection": self.collection_name,
+            "resumed": resumed,
+            "restart": restart,
             "results": results,
         }
 
@@ -886,8 +919,11 @@ class Pipeline:
         boost_terms = self._query_boost_terms(query, inferred_topics, prerequisite_topics, related_topics)
         qfilter = build_filter(requested_filters)
         expanded_query = " ".join(part for part in [query, " ".join(boost_terms)] if part).strip()
+        _embed_start = time.perf_counter()
         query_vector = self._load_model().encode([expanded_query or query], normalize_embeddings=True)[0]
+        embed_ms = (time.perf_counter() - _embed_start) * 1000
 
+        _dense_start = time.perf_counter()
         dense_hits = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_vector,
@@ -905,6 +941,7 @@ class Pipeline:
                 with_payload=True,
             )
             dense_filter_fallback_used = True
+        dense_ms = (time.perf_counter() - _dense_start) * 1000
         candidate_hits: list[Any] = [
             {
                 "id": str(hit.id),
@@ -916,6 +953,7 @@ class Pipeline:
             for hit in dense_hits
         ]
 
+        _lexical_start = time.perf_counter()
         lexical_hits = self.hybrid_store.search(
             query=query,
             limit=search_limit,
@@ -931,6 +969,7 @@ class Pipeline:
                 boost_terms=boost_terms,
             )
             lexical_filter_fallback_used = True
+        lexical_ms = (time.perf_counter() - _lexical_start) * 1000
         candidate_hits.extend(lexical_hits)
 
         chapter_candidates: list[str] = []
@@ -980,10 +1019,14 @@ class Pipeline:
             "chapter_candidate_confidence": round(confidence, 3),
             "chapter_hits": chapter_hit_count,
             "boost_terms": boost_terms[:12],
+            "embed_ms": round(embed_ms, 2),
+            "dense_ms": round(dense_ms, 2),
+            "lexical_ms": round(lexical_ms, 2),
         }
         return merged, diagnostics
 
     def _search(self, query: str, limit: int, filters: dict[str, Any] | None = None) -> SearchResponse:
+        _request_start = time.perf_counter()
         self.ensure_ready()
         requested_filters = dict(filters or {})
         routed_filters = dict(requested_filters)
@@ -1007,6 +1050,7 @@ class Pipeline:
         if self.enable_educational_retrieval_engine and "topic" in routed_filters and "topic" not in requested_filters:
             routed_filters.pop("topic", None)
 
+        _retrieve_start = time.perf_counter()
         hits, _retrieval_debug = self._retrieve_candidate_hits(
             query=query,
             limit=limit,
@@ -1017,6 +1061,9 @@ class Pipeline:
             prerequisite_topics=prerequisite_topics,
             related_topics=related_topics,
         )
+        retrieve_ms = (time.perf_counter() - _retrieve_start) * 1000
+
+        _rerank_start = time.perf_counter()
         if self.enable_educational_retrieval_engine:
             results = self.retrieval_engine.rank(
                 query=query,
@@ -1044,7 +1091,43 @@ class Pipeline:
                 for hit in hits
                 if self._lexical_relevance(query, hit) >= score_threshold
             ]
+        rerank_ms = (time.perf_counter() - _rerank_start) * 1000
         results = results[:limit]
+
+        total_ms = (time.perf_counter() - _request_start) * 1000
+        top_score = float(results[0].get("score", 0.0)) if results else 0.0
+        metric = {
+            "query": query,
+            "limit": limit,
+            "filters": requested_filters,
+            "routed_filters": routed_filters,
+            "candidates": len(hits),
+            "results_returned": len(results),
+            "top_score": round(top_score, 4),
+            "embed_ms": round(float(_retrieval_debug.get("embed_ms", 0.0)), 2),
+            "retrieve_ms": round(retrieve_ms, 2),
+            "rerank_ms": round(rerank_ms, 2),
+            "total_ms": round(total_ms, 2),
+            "dense_hits": int(_retrieval_debug.get("dense_hits", 0)),
+            "lexical_hits": int(_retrieval_debug.get("lexical_hits", 0)),
+            "chapter_candidates": _retrieval_debug.get("chapter_candidates", []),
+        }
+        _record_rag_metric(metric)
+        logger.info(
+            "[RAG] query=%r limit=%d filters=%s candidates=%d returned=%d top_score=%.3f "
+            "embed_ms=%.1f retrieve_ms=%.1f rerank_ms=%.1f total_ms=%.1f top_ids=%s",
+            query,
+            limit,
+            requested_filters or {},
+            metric["candidates"],
+            metric["results_returned"],
+            metric["top_score"],
+            metric["embed_ms"],
+            metric["retrieve_ms"],
+            metric["rerank_ms"],
+            metric["total_ms"],
+            [str(r.get("id"))[:8] for r in results[:5]],
+        )
         return SearchResponse(query=query, results=results)
 
     def debug_retrieval(self, query: str, limit: int, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1306,7 +1389,7 @@ def health() -> HealthResponse:
         return HealthResponse(status="degraded", service="content-pipeline", checks=checks)
 
 
-@app.post("/ingest/pdf", response_model=IngestResponse)
+@app.post("/ingest/pdf", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_pdf(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
@@ -1317,11 +1400,15 @@ async def ingest_pdf(
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid metadata: {exc}") from exc
 
-    content = await file.read()
-    return await asyncio.to_thread(pipeline.ingest_pdf, file.filename or "upload.pdf", content, metadata_model, source)
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    safe_name = validate_pdf_upload(file.filename, content)
+    return await asyncio.to_thread(pipeline.ingest_pdf, safe_name, content, metadata_model, source)
 
 
-@app.post("/ingest/textbook", response_model=IngestResponse)
+@app.post("/ingest/textbook", response_model=IngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_textbook(
     file: UploadFile = File(...),
     metadata: str = Form(default="{}"),
@@ -1331,8 +1418,12 @@ async def ingest_textbook(
         metadata_model = Metadata.model_validate_json(metadata)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid metadata: {exc}") from exc
-    content = await file.read()
-    return await asyncio.to_thread(pipeline.ingest_pdf, file.filename or "upload.pdf", content, metadata_model, source)
+    chunks = []
+    async for chunk in read_file_chunks_safely(file, max_bytes=50 * 1024 * 1024):
+        chunks.append(chunk)
+    content = b"".join(chunks)
+    safe_name = validate_pdf_upload(file.filename, content)
+    return await asyncio.to_thread(pipeline.ingest_pdf, safe_name, content, metadata_model, source)
 
 try:
     from pydantic import BaseModel
@@ -1342,7 +1433,7 @@ except Exception:
 class IngestGeneratedPackRequest(BaseModel):
     pack_id: str
 
-@app.post("/ingest/generated-pack")
+@app.post("/ingest/generated-pack", dependencies=[Depends(require_admin)])
 async def ingest_generated_pack(request: IngestGeneratedPackRequest) -> dict:
     try:
         ingestor = GeneratedPackIngestor(pipeline)
@@ -1352,13 +1443,41 @@ async def ingest_generated_pack(request: IngestGeneratedPackRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/ingest/directory", response_model=IngestResponse)
+@app.post("/ingest/directory", response_model=DirectoryIngestResponse, dependencies=[Depends(require_admin)])
 async def ingest_directory(request: DirectoryIngestRequest) -> dict[str, Any]:
     directory = pipeline._resolve_content_path(request.directory)
-    return await asyncio.to_thread(pipeline.ingest_textbook_directory, directory, request.recursive, request.source)
+    return await asyncio.to_thread(
+        pipeline.ingest_textbook_directory,
+        directory,
+        request.recursive,
+        request.source,
+        request.restart,
+    )
 
 
-@app.post("/admin/reset-rag")
+@app.get("/ingest/status", response_model=DirectoryIngestStatus)
+async def ingest_status(directory: str, recursive: bool = True) -> dict[str, Any]:
+    def _status() -> dict[str, Any]:
+        resolved = pipeline._resolve_content_path(directory)
+        pattern = "**/*.pdf" if recursive else "*.pdf"
+        files = sorted(resolved.glob(pattern))
+        state = pipeline._load_ingest_checkpoint(resolved, recursive)
+        completed = state["completed"]
+        done = sum(1 for f in files if str(f) in completed)
+        return {
+            "directory": str(resolved),
+            "collection": pipeline.collection_name,
+            "total_files": len(files),
+            "completed_files": done,
+            "remaining_files": len(files) - done,
+            "complete": len(files) > 0 and done >= len(files),
+            "updated_at": state.get("updated_at"),
+        }
+
+    return await asyncio.to_thread(_status)
+
+
+@app.post("/admin/reset-rag", dependencies=[Depends(require_admin)])
 async def reset_rag() -> dict[str, Any]:
     return await asyncio.to_thread(pipeline.reset_rag_state)
 
@@ -1366,8 +1485,7 @@ async def reset_rag() -> dict[str, Any]:
 @app.post("/rag/search", response_model=SearchResponse)
 async def rag_search(request: SearchRequest) -> SearchResponse:
     filters = request.metadata.model_dump(exclude_none=True) if request.metadata else None
-    # Limit to 1 result for improved quality (Phase 3, Step 1)
-    limit = 1
+    limit = max(1, min(request.limit, 50))
     return await asyncio.to_thread(pipeline._search, request.query, limit, filters)
 
 
@@ -1386,6 +1504,11 @@ async def rag_chapter(chapter: str, limit: int = 5) -> SearchResponse:
 @app.get("/rag/subject", response_model=SearchResponse)
 async def rag_subject(subject: str, limit: int = 5) -> SearchResponse:
     return await asyncio.to_thread(pipeline._search, subject, limit, {"subject": subject})
+
+
+@app.get("/rag/metrics")
+async def rag_metrics_endpoint() -> dict[str, Any]:
+    return _rag_metrics_summary()
 
 
 @app.get("/debug/curriculum")
