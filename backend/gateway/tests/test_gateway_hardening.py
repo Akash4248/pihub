@@ -225,9 +225,9 @@ def test_experiments_catalog_serves_phet_shim(tmp_path, monkeypatch):
     ]
     (tmp_path / "catalog.json").write_text(json.dumps(catalog), encoding="utf-8")
 
-    import app.main as gateway_main
+    import app.services.simulations as simulations
 
-    monkeypatch.setattr(gateway_main, "SIMULATIONS_DIR", tmp_path)
+    monkeypatch.setattr(simulations, "SIMULATIONS_DIR", tmp_path)
 
     response = client.get("/experiments/catalog")
     assert response.status_code == 200
