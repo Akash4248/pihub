@@ -355,7 +355,7 @@ class StructuredTextbookIngest:
 
 
     def extract_text_from_pdf(self, file_path: Path) -> str:
-        """Extract text from PDF with Docling first, then OCR-capable fallback.
+        """Extract text from PDF with Docling first, pymupdf4llm layout parser, then OCR-capable fallback.
 
         Set ``INGEST_EXTRACTOR=fitz`` to bypass Docling entirely (much faster on
         CPU for text-based PDFs).
@@ -366,6 +366,15 @@ class StructuredTextbookIngest:
             logger.debug("Docling extracted text length from %s: %d", file_path.name, len(docling_text))
             print(f"[ingest] docling_extracted_text_length {file_path.name} {len(docling_text)}")
             return docling_text
+
+        # Try layout-aware PyMuPDF4LLM Markdown parser (preserves two-column flow and Markdown headings)
+        if extractor not in ("fitz_raw", "plain_text"):
+            pymupdf4llm_text = self._extract_text_with_pymupdf4llm(file_path)
+            if pymupdf4llm_text and len(pymupdf4llm_text) > 40:
+                logger.debug("PyMuPDF4LLM extracted text length from %s: %d", file_path.name, len(pymupdf4llm_text))
+                print(f"[ingest] pymupdf4llm_extracted_text_length {file_path.name} {len(pymupdf4llm_text)}")
+                return pymupdf4llm_text
+
         try:
             import fitz
 
@@ -402,6 +411,23 @@ class StructuredTextbookIngest:
             return ocr_text or extracted
         except Exception as exc:
             raise RuntimeError(f"Unable to extract text from {file_path.name}: {exc}") from exc
+
+    def _extract_text_with_pymupdf4llm(self, file_path: Path) -> str:
+        try:
+            import fitz
+            import pymupdf4llm
+
+            doc = fitz.open(str(file_path))
+            md_text = pymupdf4llm.to_markdown(doc)
+            if md_text and len(md_text.strip()) > 40:
+                # Remove unprintable control characters like ASCII bell \x07
+                cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", md_text)
+                # Clean up excessive blank lines
+                cleaned = re.sub(r"\n{3,}", "\n\n", cleaned.strip())
+                return cleaned
+        except Exception as exc:
+            logger.debug("pymupdf4llm extraction unavailable for %s: %s", file_path.name, exc)
+        return ""
 
     def extract_images(
         self,

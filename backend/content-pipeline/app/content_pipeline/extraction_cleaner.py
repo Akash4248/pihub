@@ -100,6 +100,8 @@ def clean_raw_text(text: str) -> str:
             continue
         cleaned_lines.append(stripped)
     value = "\n".join(cleaned_lines)
+    # Strip unprintable ASCII control characters (such as bell \x07, formfeed \x0c)
+    value = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", value)
     value = re.sub(r"(\w)-\n(\w)", r"\1\2", value)
     value = re.sub(r"\n{3,}", "\n\n", value)
     return value.strip()

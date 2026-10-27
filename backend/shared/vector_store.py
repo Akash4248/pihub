@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from qdrant_client import QdrantClient
-from qdrant_client.http import models as qmodels
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models as qmodels
+except ImportError:
+    QdrantClient = None  # type: ignore
+    qmodels = None  # type: ignore
 
 from shared.text_normalization import language_filter_values, normalize_curriculum_name, normalize_language_code
 
@@ -20,13 +24,17 @@ class StoredChunk:
     score: float | None = None
 
 
-def make_qdrant_client(url: str) -> QdrantClient:
+def make_qdrant_client(url: str) -> Any:
+    if QdrantClient is None:
+        return None
     if url == ":memory:":
         return QdrantClient(":memory:")
     return QdrantClient(url=url)
 
 
-def ensure_collection(client: QdrantClient, collection_name: str, vector_size: int, qdrant_url: str | None = None) -> None:
+def ensure_collection(client: Any, collection_name: str, vector_size: int, qdrant_url: str | None = None) -> None:
+    if client is None:
+        return
     if qdrant_url:
         try:
             response = httpx.get(f"{qdrant_url.rstrip('/')}/collections/{collection_name}", timeout=10.0)
@@ -87,7 +95,8 @@ def upsert_chunks(
         _point_id(text, metadata)
         for text, metadata in zip(texts, metadatas)
     ]
-    points = [
+    if client is not None and qmodels is not None:
+        points = [
             qmodels.PointStruct(
                 id=point_id,
                 vector=vector,
@@ -107,9 +116,9 @@ def upsert_chunks(
                     },
                 },
             )
-        for point_id, vector, text, metadata in zip(point_ids, embeddings, texts, metadatas, strict=True)
-    ]
-    client.upsert(collection_name=collection_name, points=points)
+            for point_id, vector, text, metadata in zip(point_ids, embeddings, texts, metadatas, strict=True)
+        ]
+        client.upsert(collection_name=collection_name, points=points)
     return point_ids
 
 

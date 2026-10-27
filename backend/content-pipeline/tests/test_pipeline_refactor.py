@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import pytest
-import sqlite_vec
+try:
+    import sqlite_vec
+except ImportError:
+    sqlite_vec = None
 
 from app.content_pipeline.educational_chunker import EducationalChunkerV2
 from app.educational_intelligence.artifact_schemas import (
@@ -105,6 +108,7 @@ def test_agentic_orchestrator_parse_artifact_with_pydantic():
     assert parsed["items"][0]["correct_answer"] == "Newton"
 
 
+@pytest.mark.skipif(sqlite_vec is None, reason="sqlite_vec extension not installed")
 def test_sqlite_vec_extension_loading():
     """Verify sqlite-vec extension loads successfully and performs vector distance queries."""
     db = sqlite3.connect(":memory:")

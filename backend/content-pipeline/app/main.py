@@ -19,7 +19,10 @@ from dataclasses import dataclass
 
 from fastapi import FastAPI, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
-from qdrant_client import QdrantClient
+try:
+    from qdrant_client import QdrantClient
+except ImportError:
+    QdrantClient = None  # type: ignore
 
 from shared.config import get_settings
 from shared.security import sanitize_safe_filename, verify_internal_api_key, sanitize_llm_prompt, read_file_chunks_safely, validate_pdf_upload, InternalAuthMiddleware, require_admin
@@ -924,23 +927,28 @@ class Pipeline:
         embed_ms = (time.perf_counter() - _embed_start) * 1000
 
         _dense_start = time.perf_counter()
-        dense_hits = self.client.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            limit=search_limit,
-            query_filter=qfilter,
-            with_payload=True,
-        )
+        dense_hits = []
         dense_filter_fallback_used = False
-        if not dense_hits and qfilter is not None:
-            dense_hits = self.client.search(
-                collection_name=self.collection_name,
-                query_vector=query_vector,
-                limit=search_limit,
-                query_filter=None,
-                with_payload=True,
-            )
-            dense_filter_fallback_used = True
+        if self.client is not None:
+            try:
+                dense_hits = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=query_vector,
+                    limit=search_limit,
+                    query_filter=qfilter,
+                    with_payload=True,
+                )
+                if not dense_hits and qfilter is not None:
+                    dense_hits = self.client.search(
+                        collection_name=self.collection_name,
+                        query_vector=query_vector,
+                        limit=search_limit,
+                        query_filter=None,
+                        with_payload=True,
+                    )
+                    dense_filter_fallback_used = True
+            except Exception as exc:
+                logger.warning("Dense search failed: %s", exc)
         dense_ms = (time.perf_counter() - _dense_start) * 1000
         candidate_hits: list[Any] = [
             {
@@ -983,13 +991,18 @@ class Pipeline:
                 chapter_filters = {"chapter": chapter}
                 if inferred_subject:
                     chapter_filters["subject"] = inferred_subject
-                chapter_dense_hits = self.client.search(
-                    collection_name=self.collection_name,
-                    query_vector=query_vector,
-                    limit=max(6, limit * 3),
-                    query_filter=build_filter(chapter_filters),
-                    with_payload=True,
-                )
+                chapter_dense_hits = []
+                if self.client is not None:
+                    try:
+                        chapter_dense_hits = self.client.search(
+                            collection_name=self.collection_name,
+                            query_vector=query_vector,
+                            limit=max(6, limit * 3),
+                            query_filter=build_filter(chapter_filters),
+                            with_payload=True,
+                        )
+                    except Exception as exc:
+                        logger.warning("Chapter dense search failed: %s", exc)
                 chapter_hit_count += len(chapter_dense_hits)
                 candidate_hits.extend(
                     {

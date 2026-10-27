@@ -50,17 +50,11 @@ class EducationalChunkerV2:
         self.boundary_detector = ConceptBoundaryDetector()
         self.metadata_builder = ChunkMetadataBuilder()
         try:
-            from chonkie import SemanticChunker, SentenceChunker
-            try:
-                self._chonkie_chunker = SemanticChunker(
-                    max_chunk_size=max_chunk_chars,
-                    similarity_threshold=0.5,
-                )
-            except Exception:
-                self._chonkie_chunker = SentenceChunker(
-                    chunk_size=max_chunk_chars,
-                    chunk_overlap=overlap_chars,
-                )
+            from chonkie import SentenceChunker  # type: ignore
+            self._chonkie_chunker = SentenceChunker(
+                chunk_size=max_chunk_chars,
+                chunk_overlap=overlap_chars,
+            )
         except Exception:
             self._chonkie_chunker = None
 

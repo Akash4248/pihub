@@ -10,10 +10,34 @@ from shared.text_normalization import normalize_curriculum_name, normalize_langu
 class ChunkMetadataBuilder:
     """Build normalized chunk metadata with educational fields."""
 
-    STOPWORDS = {
+    EDUCATIONAL_STOPWORDS = {
+        # Core grammar
         "the", "a", "an", "is", "are", "was", "were", "to", "of", "in", "on", "and", "or", "for", "with", "by",
-        "this", "that", "these", "those", "it", "as", "at", "be", "from",
+        "this", "that", "these", "those", "it", "as", "at", "be", "from", "its", "has", "have", "had", "not",
+        "but", "if", "so", "no", "we", "you", "they", "them", "their", "there", "our", "us", "he", "she", "him",
+        # Textbook meta-filler
+        "what", "how", "why", "when", "where", "which", "who", "whose", "let", "give", "given", "find",
+        "take", "use", "using", "used", "other", "also", "one", "two", "three", "first", "second",
+        "shown", "show", "shows", "table", "fig", "figure", "following", "called", "know", "see",
+        "can", "will", "would", "could", "should", "may", "might", "such", "each", "all", "some",
+        "many", "well", "make", "made", "then", "than", "about", "into", "over", "after", "before",
+        "reprint", "chapter", "page", "section", "activity", "exercise", "question", "answer",
     }
+
+    def __init__(self) -> None:
+        self._yake_extractor = None
+        try:
+            import yake  # type: ignore
+            self._yake_extractor = yake.KeywordExtractor(
+                lan="en",
+                n=2,
+                dedupLim=0.8,
+                windowsSize=2,
+                top=10,
+                features=None,
+            )
+        except Exception:
+            self._yake_extractor = None
 
     def build(
         self,
@@ -57,8 +81,33 @@ class ChunkMetadataBuilder:
         return "en"
 
     def _extract_keywords(self, text: str, limit: int = 8) -> list[str]:
-        words = re.findall(r"[A-Za-z][A-Za-z0-9_\-]{2,}", text.lower())
-        filtered = [word for word in words if word not in self.STOPWORDS]
+        # Strip code blocks or excessive symbols before keyword extraction
+        clean_sample = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
+        clean_sample = re.sub(r"\$\$.*?\$\$", " ", clean_sample, flags=re.DOTALL)
+
+        # 1. Try statistical keyphrase extraction via YAKE if available
+        if self._yake_extractor and len(clean_sample.split()) >= 8:
+            try:
+                raw_kw = self._yake_extractor.extract_keywords(clean_sample)
+                extracted: list[str] = []
+                for kw, _ in raw_kw:
+                    candidate = kw.strip().lower()
+                    if (
+                        len(candidate) >= 3
+                        and candidate not in self.EDUCATIONAL_STOPWORDS
+                        and not candidate.isdigit()
+                    ):
+                        extracted.append(candidate)
+                    if len(extracted) >= limit:
+                        break
+                if extracted:
+                    return extracted
+            except Exception:
+                pass
+
+        # 2. Multilingual-safe tokenization fallback (supports English, Kannada, Hindi, Tamil, Telugu)
+        words = re.findall(r"[\w\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0D00-\u0D7F][\w\u0900-\u097F\u0C80-\u0CFF\u0B80-\u0BFF\u0C00-\u0C7F\u0D00-\u0D7F_\-]{2,}", clean_sample.lower())
+        filtered = [word for word in words if word not in self.EDUCATIONAL_STOPWORDS and not word.isdigit()]
         counts = Counter(filtered)
         return [word for word, _ in counts.most_common(limit)]
 

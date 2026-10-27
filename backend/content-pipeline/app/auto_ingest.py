@@ -18,8 +18,13 @@ import logging
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
-from watchdog.observers import Observer
+try:
+    from watchdog.events import FileSystemEvent, FileSystemEventHandler
+    from watchdog.observers import Observer
+except ImportError:
+    FileSystemEvent = None  # type: ignore
+    FileSystemEventHandler = object  # type: ignore
+    Observer = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +92,15 @@ class AutoIngestionEngine:
         # Process existing PDFs first
         await self._process_existing_pdfs()
         
-        # Start file watcher
-        handler = ContentWatchHandler(on_pdf_created=self._on_pdf_created)
-        self.observer = Observer()
-        self.observer.schedule(handler, str(self.content_dir), recursive=True)
-        self.observer.start()
-        
-        logger.info("Auto-ingestion engine started")
+        # Start file watcher if watchdog is available
+        if Observer is not None:
+            handler = ContentWatchHandler(on_pdf_created=self._on_pdf_created)
+            self.observer = Observer()
+            self.observer.schedule(handler, str(self.content_dir), recursive=True)
+            self.observer.start()
+            logger.info("Auto-ingestion engine started")
+        else:
+            logger.info("Watchdog not installed; directory file watcher disabled")
     
     async def stop(self) -> None:
         """Stop watching directory."""

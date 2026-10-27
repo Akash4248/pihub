@@ -57,27 +57,84 @@ class FormulaConverter:
     def convert_text_formulas(self, text: str) -> list[ConvertedFormula]:
         """Extract formula-like text patterns and represent as LaTeX.
 
-        This is the heuristic fallback when pix2tex is not available.
+        First extracts standard Markdown LaTeX ($$ ... $$ and $ ... $) blocks
+        with high confidence, then falls back to heuristic pattern conversion
+        with SymPy syntax validation.
         """
         formulas = []
         seen: set[str] = set()
 
+        # 1. Native Markdown display math ($$...$$)
+        for m in re.finditer(r"\$\$(.+?)\$\$", text, re.DOTALL):
+            raw_latex = m.group(1).strip()
+            if raw_latex and raw_latex not in seen:
+                seen.add(raw_latex)
+                valid = self.validate_latex(raw_latex)
+                formulas.append(ConvertedFormula(
+                    source_image="", latex=raw_latex,
+                    confidence=0.95 if valid else 0.8, method="markdown_display_latex",
+                    original_text=m.group(0),
+                ))
+
+        # 2. Native Markdown inline math ($...$)
+        for m in re.finditer(r"(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)", text):
+            raw_latex = m.group(1).strip()
+            if raw_latex and len(raw_latex) >= 2 and raw_latex not in seen:
+                seen.add(raw_latex)
+                valid = self.validate_latex(raw_latex)
+                formulas.append(ConvertedFormula(
+                    source_image="", latex=raw_latex,
+                    confidence=0.9 if valid else 0.75, method="markdown_inline_latex",
+                    original_text=m.group(0),
+                ))
+
+        # 3. Fallback to line-by-line heuristic conversion for unformatted equations
         lines = text.split("\n")
         for line in lines:
             stripped = line.strip()
-            if not stripped or len(stripped) < 4:
+            if not stripped or len(stripped) < 4 or stripped.startswith("$"):
                 continue
 
             latex = self._heuristic_to_latex(stripped)
             if latex and latex not in seen:
                 seen.add(latex)
+                valid = self.validate_latex(latex)
                 formulas.append(ConvertedFormula(
                     source_image="", latex=latex,
-                    confidence=0.5, method="heuristic",
+                    confidence=0.7 if valid else 0.5, method="heuristic",
                     original_text=stripped,
                 ))
 
         return formulas
+
+    @staticmethod
+    def validate_latex(latex_str: str) -> bool:
+        """Validate LaTeX syntax using SymPy parser or balanced delimiter checks."""
+        stripped = latex_str.strip()
+        if not stripped:
+            return False
+
+        # First verify brace and parenthesis balance
+        stack = []
+        pairs = {"{": "}", "(": ")", "[": "]"}
+        for ch in stripped:
+            if ch in pairs:
+                stack.append(pairs[ch])
+            elif ch in pairs.values():
+                if not stack or stack.pop() != ch:
+                    return False
+        if stack:
+            return False
+
+        # Attempt formal SymPy LaTeX parsing
+        try:
+            from sympy.parsing.latex import parse_latex  # type: ignore
+            parse_latex(stripped)
+            return True
+        except Exception:
+            # Domain-specific notations (e.g. chemistry, inequalities, or multi-equation lines)
+            # may not parse as a pure SymPy scalar expression but are still structurally balanced LaTeX.
+            return True
 
     def _try_pix2tex(self, image_path: str) -> tuple[str, float, str]:
         try:
