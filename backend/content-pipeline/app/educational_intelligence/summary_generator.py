@@ -37,7 +37,7 @@ class SummaryGenerator:
     def _heuristic_summary(self, chunks: list[dict[str, Any]], chapter: str | None, topic: str | None) -> dict[str, Any]:
         text = self._collect_focus_text(chunks)
         sentences = [s for s in self._sentences(text) if s and not is_noisy_text(s)]
-        summary_sentences = [pick_anchor_sentence(s) for s in sentences[:4] if s]
+        summary_sentences = sentences[:4]
         summary = " ".join(summary_sentences).strip()
         if not summary and chunks:
             summary = clean_text(str(chunks[0].get("text", "")))[:240]
@@ -93,14 +93,15 @@ class SummaryGenerator:
             language=language,
         )
         if ai_result:
+            key_pts = ai_result.get("keyPoints") or ai_result.get("key_points") or concepts
             return {
                 "chapter": chapter or metadata.get("chapter"),
-                "topic": topic or (ai_result.get("keyPoints")[:1] if ai_result.get("keyPoints") else None),
+                "topic": topic or (key_pts[:1] if key_pts else None),
                 "language": language or "en",
-                "summary": ai_result.get("summary", ""),
-                "key_points": ai_result.get("keyPoints", concepts)[:8],
-                "important_facts": ai_result.get("importantFacts", []),
-                "revision_notes": [f"Remember: {p}" for p in ai_result.get("keyPoints", [])[:3]],
+                "summary": ai_result.get("summary") or ai_result.get("overview", ""),
+                "key_points": key_pts[:8],
+                "important_facts": ai_result.get("importantFacts") or ai_result.get("takeaways", []),
+                "revision_notes": [f"Remember: {p}" for p in key_pts[:3]],
                 "chunk_count": len(chunks),
                 "generated_by": "inference-service",
             }

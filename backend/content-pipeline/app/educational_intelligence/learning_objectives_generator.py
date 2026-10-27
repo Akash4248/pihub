@@ -40,15 +40,16 @@ class LearningObjectivesGenerator:
             chapter=metadata.get("chapter"),
             language=metadata.get("language"),
         )
-        if ai_result and ai_result.get("items"):
+        items_list = (ai_result.get("items") if ai_result else None) or (ai_result.get("objectives") if ai_result else None)
+        if items_list:
             return [
                 {
-                    "objective": clean_text(str(item.get("objective", ""))),
+                    "objective": clean_text(str(item.get("objective") if isinstance(item, dict) else item)),
                     "language": metadata.get("language", "en"),
                     "generated_by": "inference-service",
                 }
-                for item in ai_result["items"]
-                if clean_text(str(item.get("objective", "")))
+                for item in items_list
+                if clean_text(str(item.get("objective") if isinstance(item, dict) else item))
             ]
 
         return self._heuristic_generate(text_parts, concepts)

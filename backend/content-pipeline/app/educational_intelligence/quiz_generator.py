@@ -46,20 +46,21 @@ class QuizGenerator:
             language=metadata.get("language"),
         )
         ai_quizzes: list[dict[str, Any]] = []
-        if ai_result and ai_result.get("items"):
+        items_list = (ai_result.get("items") if ai_result else None) or (ai_result.get("quizzes") if ai_result else None)
+        if items_list:
             ai_quizzes = [
                 {
                     "question_type": "mcq",
                     "question": clean_text(str(item.get("question", ""))),
                     "options": [clean_text(str(o)) for o in item.get("options", [])],
-                    "answer": clean_text(str(item.get("answer", ""))),
+                    "answer": clean_text(str(item.get("correct_answer") or item.get("answer", ""))),
                     "explanation": clean_text(str(item.get("explanation", ""))),
                     "chapter": metadata.get("chapter"),
                     "subject": metadata.get("subject"),
                     "language": metadata.get("language"),
                     "generated_by": "inference-service",
                 }
-                for item in ai_result["items"]
+                for item in items_list
                 if clean_text(str(item.get("question", "")))
             ]
         if len(ai_quizzes) >= limit:
@@ -84,6 +85,7 @@ class QuizGenerator:
             if clean_text(str(entry.get("definition") or ""))
         ]
 
+        tf_toggle = True
         for entry in glossary:
             term = clean_text(str(entry.get("term") or ""))
             definition = clean_text(str(entry.get("definition") or ""))
@@ -101,28 +103,64 @@ class QuizGenerator:
                 "language": entry.get("language") or language,
                 "generated_by": "heuristic",
             })
+
+            # Balanced True/False questions (both true formulation and plausible falsification)
             quizzes.append({
                 "question_type": "true_false",
-                "question": definition,
+                "question": f"True or False: {definition}",
                 "answer": True,
                 "chapter": entry.get("chapter"),
                 "subject": entry.get("subject"),
                 "language": entry.get("language") or language,
                 "generated_by": "heuristic",
             })
+            false_statement = self._negate_statement(definition)
             quizzes.append({
-                "question_type": "fill_blank",
-                "question": re.sub(re.escape(term), "______", definition, flags=re.IGNORECASE),
-                "answer": term,
+                "question_type": "true_false",
+                "question": f"True or False: {false_statement}",
+                "answer": False,
                 "chapter": entry.get("chapter"),
                 "subject": entry.get("subject"),
                 "language": entry.get("language") or language,
                 "generated_by": "heuristic",
             })
+
+            # Fill-in-the-blank (only when term exists as standalone word)
+            if re.search(rf"\b{re.escape(term)}\b", definition, flags=re.IGNORECASE):
+                blanked = re.sub(rf"\b{re.escape(term)}\b", "______", definition, count=1, flags=re.IGNORECASE)
+                quizzes.append({
+                    "question_type": "fill_blank",
+                    "question": f"Fill in the blank: {blanked}",
+                    "answer": term,
+                    "chapter": entry.get("chapter"),
+                    "subject": entry.get("subject"),
+                    "language": entry.get("language") or language,
+                    "generated_by": "heuristic",
+                })
             if len(quizzes) >= max(limit * 3, 3):
                 break
 
         return quizzes[: max(limit * 3, 3)]
+
+    @staticmethod
+    def _negate_statement(text: str) -> str:
+        s = text.strip().rstrip(".")
+        replacements = [
+            (r"\bis directly proportional to\b", "is inversely proportional to"),
+            (r"\bis always\b", "is never"),
+            (r"\bcan always\b", "cannot"),
+            (r"\bcan\b", "cannot"),
+            (r"\bincreases\b", "decreases"),
+            (r"\bdecreases\b", "increases"),
+            (r"\bhas no effect on\b", "directly determines"),
+            (r"\bis defined as\b", "is completely unrelated to"),
+            (r"\bis\b", "is not"),
+            (r"\bare\b", "are not"),
+        ]
+        for pattern, repl in replacements:
+            if re.search(pattern, s, re.IGNORECASE):
+                return re.sub(pattern, repl, s, count=1, flags=re.IGNORECASE) + "."
+        return f"It is never the case that {s.lower()}."
 
     def _build_distractors(self, answer: str, glossary_definitions: list[str], language: str) -> list[str]:
         distractors = []

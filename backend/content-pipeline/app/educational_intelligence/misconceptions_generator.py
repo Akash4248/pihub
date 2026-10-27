@@ -40,17 +40,18 @@ class MisconceptionsGenerator:
             chapter=metadata.get("chapter"),
             language=metadata.get("language"),
         )
-        if ai_result and ai_result.get("items"):
+        items_list = (ai_result.get("items") if ai_result else None) or (ai_result.get("misconceptions") if ai_result else None)
+        if items_list:
             return [
                 {
-                    "misconception": clean_text(str(item.get("misconception", ""))),
+                    "misconception": clean_text(str(item.get("common_misconception") or item.get("misconception", ""))),
                     "correction": clean_text(str(item.get("correction", ""))),
-                    "why_students_confuse_it": clean_text(str(item.get("why_students_confuse_it", ""))),
+                    "why_students_confuse_it": clean_text(str(item.get("why_it_occurs") or item.get("why_students_confuse_it", ""))),
                     "language": metadata.get("language", "en"),
                     "generated_by": "inference-service",
                 }
-                for item in ai_result["items"]
-                if clean_text(str(item.get("misconception", "")))
+                for item in items_list
+                if clean_text(str(item.get("common_misconception") or item.get("misconception", "")))
             ]
 
         return self._heuristic_generate(text_parts, concepts)

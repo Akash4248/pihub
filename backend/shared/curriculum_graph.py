@@ -296,13 +296,19 @@ class CurriculumGraph:
         stop_words = {
             "about", "their", "there", "which", "these", "those", "through", "where", "because", "using",
             "chapter", "exercise", "lesson", "topic", "section", "question", "answer", "plant", "plants",
+            "what", "when", "with", "would", "could", "should", "some", "many", "much", "more", "most",
+            "this", "that", "then", "than", "them", "they", "have", "were", "been", "being", "does",
+            "must", "will", "from", "into", "also", "only", "such", "since", "above", "below", "other",
+            "each", "both", "very", "just", "even", "like", "well", "strip", "strips", "together",
+            "give", "given", "take", "make", "made", "know", "said", "find", "call", "called", "look",
         }
         concepts: list[str] = []
         for token in self._tokenize(text):
-            if len(token) <= 3 or token in stop_words:
+            tok_low = token.lower()
+            if len(tok_low) <= 3 or tok_low in stop_words or tok_low.isdigit():
                 continue
-            if token not in concepts:
-                concepts.append(token)
+            if tok_low not in concepts:
+                concepts.append(tok_low)
             if len(concepts) >= limit:
                 break
         return concepts

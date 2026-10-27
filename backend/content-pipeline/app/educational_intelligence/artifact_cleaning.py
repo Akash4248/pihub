@@ -39,8 +39,8 @@ GENERIC_PHRASES = (
 )
 
 GENERIC_TERMS = {
-    "a", "an", "and", "are", "both", "correct", "example", "idea", "image", "object", "paper",
-    "reason", "size", "surface", "beam", "glass", "light", "mirror", "plane", "concave", "convex",
+    "a", "an", "and", "are", "both", "correct", "example", "idea", "object", "paper",
+    "reason", "size", "table", "figure", "chapter", "section", "page",
 }
 
 
@@ -76,7 +76,7 @@ def is_noisy_text(text: str) -> bool:
         return True
     if any(phrase in value for phrase in GENERIC_PHRASES):
         return True
-    if len(tokenize(value)) <= 1 and len(value) < 5:
+    if len(tokenize(value)) <= 1 and len(value) < 3:
         return True
     return False
 
@@ -130,9 +130,27 @@ def pick_anchor_sentence(text: str, term: str | None = None) -> str:
 
 
 def extract_candidate_terms(text: str) -> list[str]:
-    tokens = tokenize(text)
-    counts = Counter(token.strip("-/").title() for token in tokens if is_meaningful_term(token))
-    return [term for term, _ in counts.most_common(20)]
+    clean = clean_text(text)
+    tokens = tokenize(clean)
+    counts: Counter[str] = Counter()
+    for token in tokens:
+        cand = token.strip("-/").title()
+        if len(cand) > 3 and is_meaningful_term(cand):
+            counts[cand] += 1
+    # Extract 2-gram and 3-gram key phrases (e.g. Electric Current, Focal Length)
+    words = clean.split()
+    for n in (2, 3):
+        for i in range(len(words) - n + 1):
+            ngram = " ".join(words[i : i + n]).strip(".,;:-_()[]")
+            if (
+                ngram
+                and 4 < len(ngram) < 45
+                and not is_noisy_text(ngram)
+                and all(w.lower() not in GENERIC_TERMS for w in ngram.split())
+                and is_meaningful_term(ngram)
+            ):
+                counts[ngram.title()] += 2
+    return [term for term, _ in counts.most_common(25)]
 
 
 def build_mcq_options(answer: str, distractor_pool: list[str], limit: int = 4, language: str | None = None) -> list[str]:
@@ -145,10 +163,26 @@ def build_mcq_options(answer: str, distractor_pool: list[str], limit: int = 4, l
         options.append(candidate_clean)
         if len(options) >= limit:
             break
-    while len(options) < limit:
-        fallback = "ಅಧ್ಯಾಯಕ್ಕೆ ಸಂಬಂಧಿಸದ ಕಲ್ಪನೆ" if language_code == "kn" or re.search(r"[\u0C80-\u0CFF]", answer) else "An unrelated idea from a different chapter"
+
+    # Contextual distractors when pool has insufficient candidates
+    kn_plausible_distractors = [
+        "ಕೇವಲ ನಿರ್ದಿಷ್ಟ ಬಾಹ್ಯ ಪರಿಸ್ಥಿತಿಗಳಲ್ಲಿ ಮಾತ್ರ ಅನ್ವಯಿಸುತ್ತದೆ",
+        "ಭೌತಿಕ ಪ್ರಮಾಣದ ಮೇಲೆ ವಿಲೋಮವಾಗಿ ಅವಲಂಬಿತವಾಗಿದೆ",
+        "ಬಾಹ್ಯ ಶಕ್ತಿಯ ಹರಿವಿಲ್ಲದೆ ಪ್ರಕ್ರಿಯೆ ಸಂಭವಿಸುವುದಿಲ್ಲ",
+        "ಪ್ರಮಾಣಿತ ಉಷ್ಣಾಂಶ ಮತ್ತು ಒತ್ತಡದಲ್ಲಿ ಸ್ಥಿರವಾಗಿರುತ್ತದೆ",
+    ]
+    en_plausible_distractors = [
+        "Applies exclusively under specific external conditions",
+        "Depends inversely on the magnitude of the related variable",
+        "Occurs only when sufficient external energy is transferred",
+        "Remains unchanged regardless of system transformations",
+    ]
+
+    fallback_pool = kn_plausible_distractors if language_code == "kn" or re.search(r"[\u0C80-\u0CFF]", answer) else en_plausible_distractors
+    for fallback in fallback_pool:
+        if len(options) >= limit:
+            break
         if fallback not in options:
             options.append(fallback)
-        else:
-            options.append(fallback + f" {len(options) + 1}")
+
     return options[:limit]

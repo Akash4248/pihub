@@ -35,12 +35,18 @@ class DefinitionExtractor:
 
 
 class FormulaExtractor:
+    # Requires genuine equality, proportionality, or algebraic operators, not hyphens in English prose
+    FORMULA_RE = re.compile(r"([A-Za-z0-9_]{1,10}\s*[=≈∝×÷]\s*[^=]+|\b[a-zA-Z]\s*=\s*[0-9]|\\frac|\\sqrt|\^[0-9])")
+
     def extract_formulas(self, text: str) -> list[dict[str, str]]:
         formulas: list[dict[str, str]] = []
         for line in [segment.strip() for segment in text.splitlines() if segment.strip()]:
             line = clean_text(line)
-            if re.search(r"[=+\-*/^]", line) and len(line) < 180 and not is_noisy_text(line):
-                formulas.append({"formula": line, "definition": "Formula referenced in chapter text"})
+            # Guard against section titles, numbered lists, or plain text with hyphens
+            if re.match(r"^\d+(\.\d+)*\s*[-–:]", line):
+                continue
+            if self.FORMULA_RE.search(line) and len(line) < 140 and not is_noisy_text(line):
+                formulas.append({"formula": line, "definition": f"Mathematical relationship: {line}"})
         return formulas
 
 
@@ -82,7 +88,8 @@ class GlossaryExtractor:
             chapter=metadata.get("chapter"),
             language=metadata.get("language"),
         )
-        if ai_result and ai_result.get("items"):
+        items_list = (ai_result.get("items") if ai_result else None) or (ai_result.get("terms") if ai_result else None)
+        if items_list:
             extracted = [
                 {
                     "term": clean_text(str(item.get("term", ""))),
@@ -92,7 +99,7 @@ class GlossaryExtractor:
                     "language": metadata.get("language"),
                     "source": "inference-service",
                 }
-                for item in ai_result["items"]
+                for item in items_list
                 if clean_text(str(item.get("term", "")))
                 and clean_text(str(item.get("definition", "")))
                 and is_meaningful_term(clean_text(str(item.get("term", ""))))
@@ -159,5 +166,5 @@ class GlossaryExtractor:
             if str(term).lower() in sentence.lower():
                 return pick_anchor_sentence(sentence, term)
         if re.search(r"[\u0C80-\u0CFF]", f"{term} {text}"):
-            return f"{clean_text(str(term))} ಗೆ ಸಂಬಂಧಿಸಿದ ಪ್ರಮುಖ ಪರಿಕಲ್ಪನೆ"
-        return f"Key concept related to {clean_text(str(term))}"
+            return f"{clean_text(str(term))} - ಅಧ್ಯಾಯದ ಪ್ರಮುಖ ಕಲ್ಪನೆ ಮತ್ತು ವಿವರಣೆ."
+        return f"Fundamental concept defining the principles and behavior of {clean_text(str(term))}."

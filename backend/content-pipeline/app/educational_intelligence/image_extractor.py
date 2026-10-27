@@ -121,8 +121,12 @@ class ImageExtractor:
         if self.job_dir:
             base = Path(self.job_dir)
         else:
-            base = Path("/tmp/pihub-images") / pdf.stem
-        img_dir = base / "images"
+            from shared.config import get_settings
+            try:
+                base = Path(get_settings().upload_dir) / "images" / pdf.stem
+            except Exception:
+                base = Path("/tmp/pihub-images") / pdf.stem
+        img_dir = base / "figures"
         img_dir.mkdir(parents=True, exist_ok=True)
         return img_dir
 

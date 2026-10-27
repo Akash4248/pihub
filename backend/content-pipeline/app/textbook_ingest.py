@@ -379,46 +379,61 @@ class StructuredTextbookIngest:
             import fitz
 
             document = fitz.open(str(file_path))
-            pages: list[str] = []
-            for page in document:
-                page_text = page.get_text("text").strip()
-                if page_text:
-                    pages.append(page_text)
-
-            extracted = "\n".join(pages).strip()
-            logger.debug("Extracted text length from %s: %d", file_path.name, len(extracted))
-            print(f"[ingest] extracted_text_length {file_path.name} {len(extracted)}")
-            if extracted and len(extracted) > 40:
-                return extracted
-
             try:
-                import pytesseract
-                from PIL import Image
-            except Exception:
-                return extracted
+                pages: list[str] = []
+                for page in document:
+                    page_text = page.get_text("text").strip()
+                    if page_text:
+                        pages.append(page_text)
 
-            ocr_pages: list[str] = []
-            for page in document:
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-                image = Image.open(io.BytesIO(pix.tobytes("png")))
-                ocr_text = pytesseract.image_to_string(image).strip()
-                if ocr_text:
-                    ocr_pages.append(ocr_text)
+                extracted = "\n".join(pages).strip()
+                logger.debug("Extracted text length from %s: %d", file_path.name, len(extracted))
+                print(f"[ingest] extracted_text_length {file_path.name} {len(extracted)}")
+                if extracted and len(extracted) > 40:
+                    return extracted
 
-            ocr_text = "\n".join(ocr_pages).strip()
-            logger.debug("OCR extracted text length from %s: %d", file_path.name, len(ocr_text))
-            print(f"[ingest] ocr_extracted_text_length {file_path.name} {len(ocr_text)}")
-            return ocr_text or extracted
+                try:
+                    import pytesseract
+                    from PIL import Image
+                except Exception:
+                    return extracted
+
+                ocr_pages: list[str] = []
+                for page in document:
+                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                    image = Image.open(io.BytesIO(pix.tobytes("png")))
+                    ocr_text = pytesseract.image_to_string(image).strip()
+                    if ocr_text:
+                        ocr_pages.append(ocr_text)
+
+                ocr_text = "\n".join(ocr_pages).strip()
+                logger.debug("OCR extracted text length from %s: %d", file_path.name, len(ocr_text))
+                print(f"[ingest] ocr_extracted_text_length {file_path.name} {len(ocr_text)}")
+                return ocr_text or extracted
+            finally:
+                document.close()
         except Exception as exc:
             raise RuntimeError(f"Unable to extract text from {file_path.name}: {exc}") from exc
 
     def _extract_text_with_pymupdf4llm(self, file_path: Path) -> str:
+        # For large PDF files (> 8MB), pymupdf4llm's vector graphics layout engine
+        # spends excessive CPU and RAM decompressing vector illustrations, which can starve the host.
+        # Fall back to high-speed native fitz for those files.
+        try:
+            if file_path.stat().st_size > 8 * 1024 * 1024:
+                return ""
+        except Exception:
+            pass
+
+        doc = None
         try:
             import fitz
             import pymupdf4llm
 
             doc = fitz.open(str(file_path))
-            md_text = pymupdf4llm.to_markdown(doc)
+            if len(doc) > 25:
+                return ""
+            md_text = pymupdf4llm.to_markdown(doc, ignore_images=True, ignore_graphics=True)
             if md_text and len(md_text.strip()) > 40:
                 # Remove unprintable control characters like ASCII bell \x07
                 cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", md_text)
@@ -427,6 +442,12 @@ class StructuredTextbookIngest:
                 return cleaned
         except Exception as exc:
             logger.debug("pymupdf4llm extraction unavailable for %s: %s", file_path.name, exc)
+        finally:
+            if doc is not None:
+                try:
+                    doc.close()
+                except Exception:
+                    pass
         return ""
 
     def extract_images(

@@ -388,50 +388,35 @@ class ArtifactAgent:
     MUTLI_TURN_ARTIFACT_PROMPTS: dict[str, str] = {
         "summary": (
             "Generate a {subject_type} summary for grade {grade} students studying {chapter}. "
-            "The summary should: capture all key concepts in 3-5 paragraphs, use simple language, "
-            "highlight important terms in **bold**, and end with key takeaways. "
-            "Base your summary ONLY on the provided source content."
+            "Return JSON matching schema: {{\"overview\": string, \"key_points\": [string], \"takeaways\": [string]}}."
         ),
         "glossary": (
-            "Extract key terms and their definitions from the provided {subject_type} content "
-            "for grade {grade}. Return 8-15 terms. Each definition must be 1-2 sentences "
-            "and use language appropriate for grade {grade}. Only include terms that are "
-            "explicitly defined or clearly explained in the source."
+            "Extract 8-15 key terms and definitions for grade {grade} {subject_type} on {chapter}. "
+            "Return JSON matching schema: {{\"terms\": [{{\"term\": string, \"definition\": string, \"context_example\": string}}]}}."
         ),
         "chapter_notes": (
             "Generate comprehensive chapter notes for grade {grade} {subject_type} on {chapter}. "
-            "Include: a one-sentence summary, 5-8 core points, important formulas (if any), "
-            "key experiments or activities (if any), 5-8 key terms, 2-3 common misconceptions, "
-            "and 2-3 real-world applications. Base everything on the source content."
+            "Return JSON matching schema: {{\"chapter_title\": string, \"one_sentence_summary\": string, \"core_points\": [string], \"important_formulas\": [string], \"experiments\": [string], \"key_terms\": [string], \"misconceptions\": [string], \"real_world_applications\": [string], \"quiz_focus\": [string]}}."
         ),
         "learning_objectives": (
-            "Generate 4-6 learning objectives for grade {grade} {subject_type} students studying {chapter}. "
-            "Each objective should start with action verbs like 'Explain', 'Describe', 'Identify', "
-            "'Differentiate', 'Apply', 'Analyze'. Be specific and measurable."
+            "Generate 4-6 measurable learning objectives for grade {grade} {subject_type} on {chapter}. "
+            "Return JSON matching schema: {{\"objectives\": [string]}}."
         ),
         "misconceptions": (
-            "Identify 3-5 common misconceptions that grade {grade} students might have about "
-            "{chapter} in {subject_type}. For each misconception: state the incorrect belief, "
-            "provide the correct understanding, and explain why students might confuse it. "
-            "Base this on typical learning difficulties in this subject area."
+            "Identify 3-5 common student misconceptions about {chapter} in {subject_type}. "
+            "Return JSON matching schema: {{\"misconceptions\": [{{\"common_misconception\": string, \"correction\": string, \"why_it_occurs\": string}}]}}."
         ),
         "flashcards": (
-            "Create 6-10 flashcards for grade {grade} {subject_type} students studying {chapter}. "
-            "Each card should have a clear question on the front and a concise answer on the back. "
-            "Mix simple recall questions with understanding-based questions. "
-            "Include at least 2 'why' or 'explain' type questions."
+            "Create 6-10 revision flashcards for grade {grade} {subject_type} on {chapter}. "
+            "Return JSON matching schema: {{\"title\": string, \"cards\": [{{\"front\": string, \"back\": string, \"category\": string, \"difficulty\": \"easy|medium|hard\"}}]}}."
         ),
         "quiz": (
-            "Create a quiz with 5-8 questions for grade {grade} {subject_type} students studying {chapter}. "
-            "Include: 3-4 multiple-choice questions (with 4 options each), 1-2 true/false questions, "
-            "and 1-2 fill-in-the-blank questions. Each question must have the correct answer and "
-            "a brief explanation. Questions should test understanding, not just recall."
+            "Create 5-8 quiz questions for grade {grade} {subject_type} on {chapter}. "
+            "Return JSON matching schema: {{\"title\": string, \"items\": [{{\"id\": string, \"question\": string, \"options\": [string, string, string, string], \"correct_answer\": string, \"explanation\": string, \"difficulty\": \"easy|medium|hard\", \"bloom_level\": \"understanding|applying\"}}]}}."
         ),
         "applications": (
-            "Generate 3-5 real-world applications for {subject_type} concepts covered in "
-            "{chapter} at grade {grade} level. Each application should: name a specific concept, "
-            "describe a real-world use case, and explain how the concept applies. "
-            "Make connections that are meaningful for grade {grade} students."
+            "Generate 3-5 real-world applications for {subject_type} concepts on {chapter}. "
+            "Return JSON matching schema: {{\"items\": [{{\"concept\": string, \"real_world_use\": string, \"explanation\": string}}]}}."
         ),
     }
 
@@ -636,6 +621,18 @@ class ArtifactAgent:
 
         schema_cls = schema_map.get(task.artifact_type)
 
+        # Fast path: check if inference-service has direct endpoint for this artifact
+        direct_result = await self._call_endpoint_for_task(
+            task.artifact_type, chapter, source_context, analysis.key_concepts, metadata
+        )
+        if direct_result:
+            if schema_cls:
+                try:
+                    return schema_cls.model_validate(direct_result).model_dump()
+                except Exception as exc:
+                    logger.debug("Validating direct endpoint result for %s: %s", task.artifact_type, exc)
+            return direct_result
+
         for attempt in range(max_iterations):
             logger.info("Generating %s (attempt %d/%d)", task.artifact_type, attempt + 1, max_iterations)
 
@@ -669,7 +666,6 @@ class ArtifactAgent:
             if not result:
                 continue
 
-
             if skip_critique:
                 return result
 
@@ -692,7 +688,74 @@ class ArtifactAgent:
             if critique.passed:
                 return result
 
+        if not best_result:
+            best_result = await self._generate_heuristic(
+                task.artifact_type, source_context, metadata, analysis.key_concepts
+            )
+
         return best_result
+
+    async def _call_endpoint_for_task(
+        self, artifact_type: str, title: str, content: str, concepts: list[str], metadata: dict[str, Any]
+    ) -> Any | None:
+        grade = metadata.get("grade")
+        subject = metadata.get("subject")
+        chapter = metadata.get("chapter") or title
+        language = metadata.get("language")
+
+        try:
+            if artifact_type == "summary":
+                return await self.inference.generate_summary(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "glossary":
+                return await self.inference.generate_glossary(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "chapter_notes":
+                return await self.inference.generate_chapter_notes(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "flashcards":
+                return await self.inference.generate_flashcards(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "quiz":
+                return await self.inference.generate_quiz(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "learning_objectives":
+                return await self.inference.generate_learning_objectives(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "misconceptions":
+                return await self.inference.generate_misconceptions(title, content, concepts, grade, subject, chapter, language)
+            elif artifact_type == "applications":
+                return await self.inference.generate_applications(title, content, concepts, grade, subject, chapter, language)
+        except Exception as exc:
+            logger.debug("Error in _call_endpoint_for_task for %s: %s", artifact_type, exc)
+        return None
+
+    async def _generate_heuristic(
+        self, artifact_type: str, source_context: str, metadata: dict[str, Any], concepts: list[str]
+    ) -> Any | None:
+        chunks = [{"text": source_context, "metadata": metadata}]
+        try:
+            if artifact_type == "summary":
+                from app.educational_intelligence.summary_generator import SummaryGenerator
+                return await SummaryGenerator(self.inference).generate(chunks)
+            elif artifact_type == "glossary":
+                from app.educational_intelligence.glossary_extractor import GlossaryExtractor
+                return await GlossaryExtractor(self.inference).extract(chunks)
+            elif artifact_type == "chapter_notes":
+                from app.educational_intelligence.chapter_notes_generator import ChapterNotesGenerator
+                return await ChapterNotesGenerator(self.inference).generate(chunks)
+            elif artifact_type == "flashcards":
+                from app.educational_intelligence.flashcard_generator import FlashcardGenerator
+                return await FlashcardGenerator(self.inference).generate(chunks)
+            elif artifact_type == "quiz":
+                from app.educational_intelligence.quiz_generator import QuizGenerator
+                return await QuizGenerator(self.inference).generate(chunks)
+            elif artifact_type == "learning_objectives":
+                from app.educational_intelligence.learning_objectives_generator import LearningObjectivesGenerator
+                return await LearningObjectivesGenerator(self.inference).generate(chunks)
+            elif artifact_type == "misconceptions":
+                from app.educational_intelligence.misconceptions_generator import MisconceptionsGenerator
+                return await MisconceptionsGenerator(self.inference).generate(chunks)
+            elif artifact_type == "applications":
+                from app.educational_intelligence.applications_generator import ApplicationsGenerator
+                return await ApplicationsGenerator(self.inference).generate(chunks)
+        except Exception as exc:
+            logger.warning("Heuristic generation fallback failed for %s: %s", artifact_type, exc)
+        return None
 
     def _parse_artifact(self, raw: str, artifact_type: str) -> Any:
         from app.educational_intelligence.artifact_schemas import (

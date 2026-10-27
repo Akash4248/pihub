@@ -43,18 +43,20 @@ class FlashcardGenerator:
             chapter=metadata.get("chapter"),
             language=metadata.get("language"),
         )
-        if ai_result and ai_result.get("items"):
+        items_list = (ai_result.get("items") if ai_result else None) or (ai_result.get("cards") if ai_result else None)
+        if items_list:
             return [
                 {
-                    "front": clean_text(str(item.get("question", ""))),
-                    "back": clean_text(str(item.get("answer", ""))),
+                    "front": clean_text(str(item.get("front") or item.get("question", ""))),
+                    "back": clean_text(str(item.get("back") or item.get("answer", ""))),
                     "difficulty": item.get("difficulty", "medium"),
                     "chapter": metadata.get("chapter"),
                     "subject": metadata.get("subject"),
                     "generated_by": "inference-service",
                 }
-                for item in ai_result["items"]
-                if clean_text(str(item.get("question", ""))) and clean_text(str(item.get("answer", "")))
+                for item in items_list
+                if clean_text(str(item.get("front") or item.get("question", "")))
+                and clean_text(str(item.get("back") or item.get("answer", "")))
             ][:limit]
 
         return self._heuristic_generate(chunks, limit)
@@ -62,13 +64,20 @@ class FlashcardGenerator:
     def _heuristic_generate(self, chunks: list[dict[str, Any]], limit: int = 12) -> list[dict[str, Any]]:
         glossary = self.glossary_extractor._heuristic_extract(chunks)
         cards: list[dict[str, Any]] = []
-        for entry in glossary:
+        prompt_templates = [
+            "Define {term} and state its key characteristics.",
+            "What is the significance of {term} in this chapter?",
+            "Explain how {term} is understood and applied.",
+            "What is {term}?",
+        ]
+        for idx, entry in enumerate(glossary):
             term = clean_text(str(entry.get("term") or ""))
             definition = clean_text(str(entry.get("definition") or ""))
             if not term or not definition or not is_meaningful_term(term):
                 continue
+            template = prompt_templates[idx % len(prompt_templates)]
             cards.append({
-                "front": f"What does the chapter say about {term}?",
+                "front": template.format(term=term),
                 "back": definition,
                 "chapter": entry.get("chapter"),
                 "subject": entry.get("subject"),
