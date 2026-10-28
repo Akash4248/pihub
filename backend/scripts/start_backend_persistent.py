@@ -8,11 +8,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TEXTBOOKS_ROOT = Path(os.getenv("TEXTBOOKS_ROOT", str(ROOT.parents[1] / "TEXTBOOKS")))
 PY = ROOT / ".venv" / "bin" / "python"
+if not PY.exists() or subprocess.run([str(PY), "-c", "import uvicorn"], capture_output=True).returncode != 0:
+    PY = Path(sys.executable or "/usr/bin/python3")
+
 LOCAL_RUN = ROOT / ".local_run"
 LOCAL_RUN.mkdir(parents=True, exist_ok=True)
 
 SERVICES = [
     ("gateway", "gateway", "app.main:app", 8000),
+    ("content-pipeline", "content-pipeline", "app.main:app", 8001),
     ("inference-service", "inference-service", "app.main:app", 8010),
     ("pihub", "pihub", "api.main:app", 8020),
     ("pack-service", "pack-service", "app.main:app", 8030),
@@ -22,6 +26,8 @@ processes = []
 
 env_vars = {
     **os.environ,
+    "ALLOW_ANONYMOUS_DEV": "true",
+    "ENVIRONMENT": "development",
     "UPLOAD_DIR": str(LOCAL_RUN / "uploads"),
     "WORK_DIR": str(LOCAL_RUN / "work"),
     "MEDIA_STORAGE_PATH": str(LOCAL_RUN / "media"),

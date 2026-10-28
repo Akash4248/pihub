@@ -26,8 +26,12 @@ def _resolve_storage_path(env_var_name: str, default_path: str, fallback_relativ
     return str(local_dir.resolve())
 
 
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_ENV_FILES = [".env", str(_BACKEND_ROOT / ".env"), str(_BACKEND_ROOT / ".env.local")]
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILES, env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = Field(default="distributed-educational-ai-ecosystem", alias="APP_NAME")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

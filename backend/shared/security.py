@@ -34,7 +34,13 @@ _INSECURE_SECRETS = {
 
 
 def _is_dev_mode() -> bool:
-    return os.getenv("ALLOW_ANONYMOUS_DEV", "false").lower() == "true"
+    if os.getenv("ALLOW_ANONYMOUS_DEV", "").lower() == "true":
+        return True
+    try:
+        from shared.config import get_settings
+        return bool(get_settings().allow_anonymous_dev)
+    except Exception:
+        return False
 
 
 def _is_usable_secret(value: str | None, min_length: int = 32) -> bool:

@@ -100,13 +100,26 @@ start_service() {
   fi
   echo ">> starting $name on :$port"
   cd "$dir"
+  local upload_path="${UPLOAD_DIR:-$PIHUB_DATA_ROOT/uploads}"
+  [[ "$upload_path" == /shared* ]] && upload_path="$PIHUB_DATA_ROOT/uploads"
+  local work_path="${WORK_DIR:-$PIHUB_DATA_ROOT/work}"
+  [[ "$work_path" == /shared* ]] && work_path="$PIHUB_DATA_ROOT/work"
+  local media_path="${MEDIA_STORAGE_PATH:-$PIHUB_DATA_ROOT/media}"
+  [[ "$media_path" == /shared* ]] && media_path="$PIHUB_DATA_ROOT/media"
+  local pack_path="${PACK_STORAGE_PATH:-$PIHUB_DATA_ROOT/packs}"
+  [[ "$pack_path" == /shared* ]] && pack_path="$PIHUB_DATA_ROOT/packs"
+  local content_path="${CONTENT_DIR:-$PIHUB_DATA_ROOT/content}"
+  [[ "$content_path" == /shared* ]] && content_path="$PIHUB_DATA_ROOT/content"
+  local artifacts_path="${ARTIFACTS_DIR:-$PIHUB_DATA_ROOT/artifacts}"
+  [[ "$artifacts_path" == /shared* ]] && artifacts_path="$PIHUB_DATA_ROOT/artifacts"
+
   PYTHONPATH="$ROOT:$ROOT/shared:${PWD}:${PWD}/.." \
-  UPLOAD_DIR="${UPLOAD_DIR:-$PIHUB_DATA_ROOT/uploads}" \
-  WORK_DIR="${WORK_DIR:-$PIHUB_DATA_ROOT/work}" \
-  MEDIA_STORAGE_PATH="${MEDIA_STORAGE_PATH:-$PIHUB_DATA_ROOT/media}" \
-  PACK_STORAGE_PATH="${PACK_STORAGE_PATH:-$PIHUB_DATA_ROOT/packs}" \
-  CONTENT_DIR="${CONTENT_DIR:-$PIHUB_DATA_ROOT/content}" \
-  ARTIFACTS_DIR="${ARTIFACTS_DIR:-$PIHUB_DATA_ROOT/artifacts}" \
+  UPLOAD_DIR="$upload_path" \
+  WORK_DIR="$work_path" \
+  MEDIA_STORAGE_PATH="$media_path" \
+  PACK_STORAGE_PATH="$pack_path" \
+  CONTENT_DIR="$content_path" \
+  ARTIFACTS_DIR="$artifacts_path" \
   CURRICULUM_GRAPH_PATH="${CURRICULUM_GRAPH_PATH:-$PIHUB_DATA_ROOT/work/curriculum_graph.json}" \
   CURRICULUM_RELATION_GRAPH_PATH="${CURRICULUM_RELATION_GRAPH_PATH:-$PIHUB_DATA_ROOT/work/curriculum_relation_graph.json}" \
   CURRICULUM_BUILD_DIR="${CURRICULUM_BUILD_DIR:-$PIHUB_DATA_ROOT/curriculum}" \
@@ -134,7 +147,7 @@ start_service() {
   MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" \
   ALLOW_ANONYMOUS_DEV="${ALLOW_ANONYMOUS_DEV:-true}" \
   ENVIRONMENT="${ENVIRONMENT:-development}" \
-    setsid "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
+    nohup "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
     >"$LOG_DIR/$name.log" 2>&1 &
   pid=$!
   disown "$pid" 2>/dev/null || true
