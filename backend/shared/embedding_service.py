@@ -185,7 +185,13 @@ class EmbeddingModelManager:
     def _load_model(self) -> None:
         settings = get_settings()
         backend = getattr(settings, "embedding_backend", "auto").lower()
-        if backend == "llama_server":
+        if backend == "hash":
+            logger.warning("Using HashFallbackEmbeddingModel (EMBEDDING_BACKEND=hash)")
+            self._model = HashFallbackEmbeddingModel(dimension=384)
+            self._dimension = 384
+            self._is_degraded = False
+            self._load_error = None
+        elif backend == "llama_server":
             self._load_llama_server(settings)
         elif backend == "sentence_transformers":
             self._load_sentence_transformers(settings)

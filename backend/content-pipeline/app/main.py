@@ -1446,14 +1446,11 @@ except Exception:
 class IngestGeneratedPackRequest(BaseModel):
     pack_id: str
 
-@app.post("/ingest/generated-pack", dependencies=[Depends(require_admin)])
+@app.post("/ingest/generated-pack", dependencies=[Depends(require_admin)], deprecated=True, tags=["Deprecated"])
 async def ingest_generated_pack(request: IngestGeneratedPackRequest) -> dict:
-    try:
-        ingestor = GeneratedPackIngestor(pipeline)
-        return await asyncio.to_thread(ingestor.ingest_pack, request.pack_id)
-    except Exception as e:
-        logger.exception("Generated pack ingestion failed")
-        raise HTTPException(status_code=500, detail=str(e))
+    """[DEPRECATED] Re-ingestion of generated packs is disabled to prevent circular vector drift."""
+    logger.warning("Call to deprecated endpoint /ingest/generated-pack for pack_id=%s. Pack artifacts are retained in pack-service repository.", request.pack_id)
+    return {"status": "deprecated", "message": "Packs are retained in pack-service storage as distribution archives."}
 
 
 @app.post("/ingest/directory", response_model=DirectoryIngestResponse, dependencies=[Depends(require_admin)])
@@ -1580,6 +1577,187 @@ async def debug_learning_pack_preview(path: str, pack_name: str = "curriculum_pa
 # ── AI-Powered Artifact Generation Endpoints ──────────────────────────────
 
 
+def _artifacts_store_root() -> Path:
+    configured = os.getenv("ARTIFACTS_DIR")
+    if configured:
+        return Path(configured).expanduser()
+    return Path(__file__).resolve().parents[2] / ".local_run" / "artifacts"
+
+
+def _artifact_slug(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(value or "")).strip("._-")
+    return slug or "artifacts"
+
+
+def _artifact_bundle_dir(pack_id: str) -> Path:
+    return _artifacts_store_root() / _artifact_slug(pack_id)
+
+
+def _write_json_artifact(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True, default=str),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+
+
+def _store_artifact_bundle(pack_id: str, response: dict[str, Any], chunks: list[dict[str, Any]]) -> Path:
+    bundle = _artifact_bundle_dir(pack_id)
+    artifacts = response.get("artifacts") if isinstance(response.get("artifacts"), dict) else {}
+    _write_json_artifact(bundle / "chunks.json", chunks)
+    _write_json_artifact(bundle / "response.json", response)
+    _write_json_artifact(bundle / "metadata.json", response.get("metadata", {}))
+    for name in (
+        "summaries",
+        "chapter_notes",
+        "glossary",
+        "quizzes",
+        "flashcards",
+        "misconceptions",
+        "applications",
+        "learning_objectives",
+        "key_points",
+        "enrichment",
+    ):
+        _write_json_artifact(bundle / f"{name}.json", artifacts.get(name, []))
+    _write_json_artifact(bundle / "worked_examples.json", response.get("worked_examples", []))
+    _write_json_artifact(bundle / "tutor_contexts.json", response.get("tutor_contexts", []))
+    _write_json_artifact(bundle / "content.json", response.get("content", []))
+    _write_json_artifact(bundle / "textbook.json", response.get("textbook", {}))
+    _write_json_artifact(bundle / "concept_graph.json", response.get("concept_graph", {}))
+    _write_json_artifact(bundle / "quality_gate.json", response.get("quality_gate", {}))
+    return bundle
+
+
+def _load_stored_chunks(
+    chapter: str,
+    grade: int | None = None,
+    subject: str | None = None,
+) -> list[dict[str, Any]]:
+    root = _artifacts_store_root()
+    if not root.exists():
+        return []
+    target_chapter = normalize_curriculum_name(str(chapter or ""))
+    target_subject = normalize_curriculum_name(str(subject or "")) if subject else ""
+    loaded: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for chunks_path in sorted(root.glob("*/chunks.json")):
+        try:
+            rows = json.loads(chunks_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            if normalize_curriculum_name(str(meta.get("chapter") or "")) != target_chapter:
+                continue
+            row_grade = meta.get("grade")
+            if grade is not None and row_grade not in (None, "") and str(row_grade) != str(grade):
+                continue
+            if target_subject and normalize_curriculum_name(str(meta.get("subject") or "")) not in ("", target_subject):
+                continue
+            chunk_id = str(row.get("chunk_id") or f"{chunks_path.parent.name}_{len(loaded)}")
+            if chunk_id in seen:
+                continue
+            seen.add(chunk_id)
+            loaded.append(row)
+        if loaded:
+            break
+    return loaded[:60]
+
+
+class ChapterArtifactsRequest(BaseModel):
+    grade: int | None = None
+    subject: str | None = None
+    chapter: str | None = None
+    language: str | None = "english"
+    pack_id: str | None = None
+    chunks: list[dict[str, Any]] | None = None
+    path: str | None = None
+    options: dict[str, Any] | None = None
+
+
+@app.post("/artifacts", tags=["Educational Intelligence"])
+async def generate_chapter_artifacts(request: ChapterArtifactsRequest) -> dict[str, Any]:
+    """Generate unified chapter content intelligence and educational artifacts.
+
+    Consolidates chunk cleaning, concept extraction, concept graph,
+    worked examples, tutor context, textbook building, and all educational
+    artifacts (quizzes, flashcards, notes, summaries) into a single response.
+    """
+    chunks = list(request.chunks or [])
+    if not chunks and request.path:
+        file_path = pipeline._resolve_content_path(request.path)
+        chunks = await asyncio.to_thread(pipeline.preview_chunks, file_path)
+
+    if not chunks and request.chapter:
+        chunks = _load_stored_chunks(
+            request.chapter,
+            grade=request.grade,
+            subject=request.subject,
+        )
+
+    if not chunks:
+        raise HTTPException(
+            status_code=400,
+            detail="No chunks provided or found for the requested chapter/path.",
+        )
+
+    norm_subject = normalize_curriculum_name(request.subject) if request.subject else "General"
+    norm_chapter = normalize_curriculum_name(request.chapter) if request.chapter else "Chapter"
+    norm_language = normalize_language_code(request.language) or (request.language or "english")
+
+    metadata = {
+        "grade": request.grade,
+        "subject": norm_subject,
+        "chapter": norm_chapter,
+        "language": norm_language,
+    }
+    pack_id = request.pack_id or f"chapter_{request.grade or 0}_{norm_subject.lower()}_{norm_chapter.lower()}_{norm_language}"
+
+    from app.educational_intelligence.semantic_pipeline import SemanticContentPipeline
+
+    semantic_pipeline = SemanticContentPipeline()
+    result = await asyncio.to_thread(semantic_pipeline.build, chunks, pack_id=pack_id, metadata=metadata)
+
+    response = {
+        "chapter_id": pack_id,
+        "metadata": metadata,
+        "content": result.artifacts.get("content", []),
+        "textbook": result.artifacts.get("textbook", {}),
+        "concept_graph": result.reports.get("concept_graph", {}),
+        "worked_examples": result.artifacts.get("worked_examples", []),
+        "tutor_contexts": result.artifacts.get("tutor_contexts", []),
+        "artifacts": {
+            "summaries": result.artifacts.get("summaries", []),
+            "chapter_notes": result.artifacts.get("chapter_notes", []),
+            "glossary": result.artifacts.get("glossary", []),
+            "quizzes": result.artifacts.get("quizzes", []),
+            "flashcards": result.artifacts.get("flashcards", []),
+            "misconceptions": result.artifacts.get("misconceptions", []),
+            "applications": result.artifacts.get("applications", []),
+            "learning_objectives": result.artifacts.get("enrichment", {}).get("learning_objectives", []),
+            "key_points": result.artifacts.get("key_points", []),
+            "enrichment": result.artifacts.get("enrichment", {}),
+        },
+        "quality_gate": result.quality_gate,
+        "reports": result.reports,
+    }
+
+    try:
+        bundle = await asyncio.to_thread(_store_artifact_bundle, pack_id, response, chunks)
+        logger.info("Stored artifact bundle for %s at %s", pack_id, bundle)
+    except Exception as exc:
+        logger.warning("Could not persist artifact bundle for %s: %s", pack_id, str(exc)[:300])
+
+    return response
+
+
 class GenerateArtifactsRequest(BaseModel):
     path: str
     chapter: str | None = None
@@ -1627,9 +1805,9 @@ class BuildPackRequest(BaseModel):
     language: str | None = None
 
 
-@app.post("/build/pack")
+@app.post("/build/pack", deprecated=True, tags=["Deprecated"])
 async def build_pack(request: BuildPackRequest) -> dict[str, Any]:
-    """Ingest a PDF, generate AI artifacts, and compile into an offline pack."""
+    """[DEPRECATED] Compile pack directly in content-pipeline. Use pack-service /packs/generate instead."""
     file_path = pipeline._resolve_content_path(request.path)
 
     metadata = Metadata(

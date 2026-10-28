@@ -2,8 +2,8 @@
 """
 Full Textbook Ingestion and Master Educational Database Rebuild Script.
 Ingests all textbooks in TEXTBOOKS/ using the modern hybrid content pipeline,
-rebuilding Mentora/assets/educational_master.db with authentic extracted concepts,
-sections, formulas, and definitions.
+rebuilding backend/.local_run/artifacts/educational_master.db with authentic
+extracted concepts, sections, formulas, and definitions.
 
 Optimized with strict memory bounds:
 - Skips high-RAM image extraction during master db rebuild
@@ -69,8 +69,9 @@ def get_memory_mb() -> float:
 def main() -> None:
     repo_root = backend_dir.parents[1]
     textbooks_dir = repo_root / "TEXTBOOKS"
-    master_db_path = repo_root / "Mentora" / "assets" / "educational_master.db"
-    backup_db_path = repo_root / "Mentora" / "assets" / "educational_master.db.bak"
+    master_db_path = backend_dir / ".local_run" / "artifacts" / "educational_master.db"
+    backup_db_path = master_db_path.with_suffix(".db.bak")
+    master_db_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not textbooks_dir.exists():
         logger.error("Textbooks directory not found at %s", textbooks_dir)

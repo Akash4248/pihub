@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import shutil
 import tarfile
@@ -25,11 +26,16 @@ import gzip
 import io
 
 import httpx
-from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import PointStruct
+except ImportError:
+    QdrantClient = None  # type: ignore
+    PointStruct = None  # type: ignore
 
 from app.pack_storage.pack_repository import PackRepository
-from app.semantic_content_pipeline import SemanticContentPipeline
+from shared.config import get_settings
+from shared.security import get_internal_service_key
 from shared.text_normalization import language_filter_values, normalize_curriculum_name, normalize_language_code
 from shared.vector_store import build_filter
 
@@ -60,11 +66,78 @@ class PackGenerator:
         self.curriculum_graph_path = Path(curriculum_graph_path)
 
         self.pack_storage_path.mkdir(parents=True, exist_ok=True)
-        self.client = QdrantClient(url=qdrant_url)
+        self.client = QdrantClient(url=qdrant_url) if QdrantClient else None
         self.repository = PackRepository(self.pack_storage_path)
-        self.semantic_pipeline = SemanticContentPipeline()
 
         self.active_generations: Dict[str, dict] = {}
+
+    async def _fetch_artifacts_from_pipeline(
+        self,
+        processed_chunks: list[dict[str, object]],
+        pack_id: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Fetch generated educational artifacts from content-pipeline over HTTP."""
+        settings = get_settings()
+        url = os.getenv("CONTENT_PIPELINE_URL", settings.content_pipeline_url).rstrip("/")
+        key = get_internal_service_key()
+        headers = {"X-Internal-Service-Key": key}
+        payload = {
+            "pack_id": pack_id,
+            "grade": metadata.get("grade"),
+            "subject": metadata.get("subject"),
+            "chapter": metadata.get("chapter"),
+            "language": metadata.get("language") or "english",
+            "chunks": processed_chunks,
+        }
+
+        target_urls = [url]
+        if "content-pipeline" in url:
+            target_urls.append(url.replace("content-pipeline", "127.0.0.1"))
+            target_urls.append("http://127.0.0.1:8001")
+
+        for u in target_urls:
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    res = await client.post(f"{u}/artifacts", json=payload, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        # Flatten into expected artifact format
+                        return {
+                            "artifacts": {
+                                **data.get("artifacts", {}),
+                                "textbook": data.get("textbook", {}),
+                                "content": data.get("content", []),
+                                "worked_examples": data.get("worked_examples", []),
+                                "tutor_contexts": data.get("tutor_contexts", []),
+                            },
+                            "quality_gate": data.get("quality_gate", {}),
+                            "reports": data.get("reports", {}),
+                        }
+                    logger.warning(
+                        "content-pipeline /artifacts HTTP returned status %s from %s: %s",
+                        res.status_code,
+                        u,
+                        res.text[:200],
+                    )
+            except Exception as exc:
+                logger.debug("HTTP call to %s failed: %s", u, exc)
+
+        logger.warning("All HTTP calls to content-pipeline failed, falling back to in-process pipeline")
+
+        # In-process fallback if services share filesystem / imports
+        try:
+            from app.educational_intelligence.semantic_pipeline import SemanticContentPipeline
+        except ImportError:
+            from app.semantic_content_pipeline import SemanticContentPipeline
+
+        pipeline = SemanticContentPipeline()
+        result = pipeline.build(processed_chunks, pack_id=pack_id, metadata=metadata)
+        return {
+            "artifacts": result.artifacts,
+            "quality_gate": result.quality_gate,
+            "reports": result.reports,
+        }
 
     async def generate_class_pack(
         self,
@@ -309,6 +382,8 @@ class PackGenerator:
         return attempts
 
     def _scroll_points(self, scroll_filter: Any, limit: int) -> list[Any]:
+        if not self.client:
+            return []
         points: list[Any] = []
         offset = None
         while len(points) < limit:
@@ -450,22 +525,25 @@ class PackGenerator:
                 chunk_data["embedding"] = chunk.get("embedding", [])
             processed_chunks.append(chunk_data)
 
-        semantic_result = self.semantic_pipeline.build(processed_chunks, pack_id=pack_id, metadata=metadata)
-        if not semantic_result.quality_gate.get("passed"):
+        pipeline_data = await self._fetch_artifacts_from_pipeline(processed_chunks, pack_id=pack_id, metadata=metadata)
+        quality_gate = pipeline_data.get("quality_gate", {})
+        if not quality_gate.get("passed"):
             logger.error(
                 "PACK_QUALITY_GATE_FAILED pack_id=%s failures=%s metrics=%s",
                 pack_id,
-                semantic_result.quality_gate.get("failures"),
-                semantic_result.quality_gate.get("metrics"),
+                quality_gate.get("failures"),
+                quality_gate.get("metrics"),
             )
             raise PackQualityGateError(
-                f"Pack {pack_id} failed quality gate: {', '.join(semantic_result.quality_gate.get('failures', []))}"
+                f"Pack {pack_id} failed quality gate: {', '.join(quality_gate.get('failures', []))}"
             )
 
+        raw_artifacts = pipeline_data.get("artifacts", {})
+        reports = pipeline_data.get("reports", {})
         artifacts = {
-            **semantic_result.artifacts,
-            "reports": semantic_result.reports,
-            "quality_gate": semantic_result.quality_gate,
+            **raw_artifacts,
+            "reports": reports,
+            "quality_gate": quality_gate,
         }
 
         pack_record = self.repository.save_pack(
@@ -486,10 +564,10 @@ class PackGenerator:
                     "pipeline": "semantic_educational_knowledge_pipeline_v1",
                 },
                 "quality_scores": {
-                    "duplicate_ratio": semantic_result.quality_gate["metrics"]["duplicate_ratio"],
-                    "average_chunk_length": semantic_result.quality_gate["metrics"]["average_chunk_length"],
-                    "retrieval_precision": semantic_result.quality_gate["metrics"]["retrieval_precision"],
-                    "quality_gate_passed": 1.0 if semantic_result.quality_gate["passed"] else 0.0,
+                    "duplicate_ratio": quality_gate.get("metrics", {}).get("duplicate_ratio", 0.0),
+                    "average_chunk_length": quality_gate.get("metrics", {}).get("average_chunk_length", 0.0),
+                    "retrieval_precision": quality_gate.get("metrics", {}).get("retrieval_precision", 0.0),
+                    "quality_gate_passed": 1.0 if quality_gate.get("passed") else 0.0,
                 },
             }
         )

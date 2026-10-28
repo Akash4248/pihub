@@ -45,19 +45,5 @@ class GeneratedPackImporter:
 
         logger.info(f"Saving generated pack: {pack_id}")
         record = self.pack_repository.save_pack(pack_data)
-
-        # Trigger content-pipeline ingestion
-        try:
-            logger.info(f"Triggering content-pipeline for pack: {pack_id}")
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self.content_pipeline_url}/ingest/generated-pack",
-                    json={"pack_id": pack_id},
-                    timeout=180.0
-                )
-                response.raise_for_status()
-                logger.info(f"Content pipeline triggered successfully: {response.json()}")
-        except Exception as e:
-            logger.error(f"Failed to trigger content-pipeline: {e}")
-
+        logger.info(f"Imported pack stored successfully: {pack_id}")
         return record

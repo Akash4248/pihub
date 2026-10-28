@@ -6,6 +6,7 @@ from typing import Any
 
 import httpx
 from shared.config import get_settings
+from shared.security import get_internal_service_key
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,9 @@ class InferenceClient:
         try:
             client = await self._get_client()
             response = await client.post(
-                f"{self.base_url}{endpoint}", json=payload
+                f"{self.base_url}{endpoint}",
+                json=payload,
+                headers={"X-Internal-Service-Key": get_internal_service_key()},
             )
             if response.is_success:
                 return response.json()
@@ -208,6 +211,7 @@ class InferenceClient:
                 f"{self.base_url}/ai/chat",
                 json={"question": prompt, "language": "en", "limit": 3},
                 timeout=180.0,
+                headers={"X-Internal-Service-Key": get_internal_service_key()},
             )
             if response.is_success:
                 body = response.json()

@@ -122,8 +122,8 @@ def upsert_chunks(
     return point_ids
 
 
-def build_filter(metadata: dict[str, Any] | None = None) -> qmodels.Filter | None:
-    if not metadata:
+def build_filter(metadata: dict[str, Any] | None = None) -> Any:
+    if not metadata or qmodels is None:
         return None
 
     conditions: list[qmodels.FieldCondition] = []

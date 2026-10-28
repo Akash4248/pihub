@@ -64,8 +64,9 @@ class Settings(BaseSettings):
     embedding_fallback: str = Field(default="none", alias="EMBEDDING_FALLBACK") # none|hash
     # Embedding backend: "auto" tries llama-server first, then sentence-transformers.
     # "llama_server" runs BGE-M3 GGUF via llama.cpp /v1/embeddings (no torch);
-    # "sentence_transformers" is the legacy torch path.
-    embedding_backend: str = Field(default="auto", alias="EMBEDDING_BACKEND") # auto|llama_server|sentence_transformers
+    # "sentence_transformers" is the legacy torch path; "hash" is a zero-RAM
+    # deterministic fallback for artifact-only workloads.
+    embedding_backend: str = Field(default="auto", alias="EMBEDDING_BACKEND") # auto|llama_server|sentence_transformers|hash
     llama_server_url: str = Field(default="http://127.0.0.1:8081", alias="LLAMA_SERVER_URL")
     embedding_llama_model: str = Field(default="bge-m3", alias="EMBEDDING_LLAMA_MODEL")
 

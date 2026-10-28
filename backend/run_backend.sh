@@ -37,13 +37,17 @@ if [[ ! -f "${VENV}/bin/python" ]]; then
   echo ">> venv ready."
 fi
 
-PY="${VENV}/bin/python"
+if [[ -f "${VENV}/bin/uvicorn" ]]; then
+  PY="${VENV}/bin/python"
+else
+  PY="$(which python3)"
+fi
 if [[ ! -f "$PY" ]]; then
   echo "[ERROR] Could not find or create python at ${PY}. Install python3-venv and retry."
   exit 1
 fi
 # Local substitutes for the Docker volume mounts so native runs don't need root.
-mkdir -p "$PIHUB_DATA_ROOT"/{uploads,work,media,packs,textbooks,models/gemma4_audio,models/sentence-transformers/embedding,models/sentence-transformers/retrieval,content,curriculum,pihub_packs,pihub_cache,pihub_storage,pihub_logs}
+mkdir -p "$PIHUB_DATA_ROOT"/{uploads,work,media,packs,textbooks,models/gemma4_audio,models/sentence-transformers/embedding,models/sentence-transformers/retrieval,content,curriculum,artifacts,pihub_packs,pihub_cache,pihub_storage,pihub_logs}
 mkdir -p "$PIHUB_DATA_ROOT/packs/pdf_manifests"
 
 # service name -> "dir : module:app : port"
@@ -88,6 +92,7 @@ start_service() {
   MEDIA_STORAGE_PATH="${MEDIA_STORAGE_PATH:-$PIHUB_DATA_ROOT/media}" \
   PACK_STORAGE_PATH="${PACK_STORAGE_PATH:-$PIHUB_DATA_ROOT/packs}" \
   CONTENT_DIR="${CONTENT_DIR:-$PIHUB_DATA_ROOT/content}" \
+  ARTIFACTS_DIR="${ARTIFACTS_DIR:-$PIHUB_DATA_ROOT/artifacts}" \
   CURRICULUM_GRAPH_PATH="${CURRICULUM_GRAPH_PATH:-$PIHUB_DATA_ROOT/work/curriculum_graph.json}" \
   CURRICULUM_RELATION_GRAPH_PATH="${CURRICULUM_RELATION_GRAPH_PATH:-$PIHUB_DATA_ROOT/work/curriculum_relation_graph.json}" \
   CURRICULUM_BUILD_DIR="${CURRICULUM_BUILD_DIR:-$PIHUB_DATA_ROOT/curriculum}" \
