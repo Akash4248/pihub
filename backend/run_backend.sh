@@ -133,6 +133,7 @@ start_service() {
   QDRANT_URL="${QDRANT_URL:-http://localhost:6333}" \
   MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" \
   ALLOW_ANONYMOUS_DEV="${ALLOW_ANONYMOUS_DEV:-true}" \
+  ENVIRONMENT="${ENVIRONMENT:-development}" \
     setsid "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
     >"$LOG_DIR/$name.log" 2>&1 &
   pid=$!
