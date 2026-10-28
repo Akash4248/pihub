@@ -123,21 +123,24 @@ class PackGenerator:
             except Exception as exc:
                 logger.debug("HTTP call to %s failed: %s", u, exc)
 
-        logger.warning("All HTTP calls to content-pipeline failed, falling back to in-process pipeline")
+        logger.warning("All HTTP calls to content-pipeline failed, checking for content-pipeline in python path")
 
-        # In-process fallback if services share filesystem / imports
+        # In-process fallback only if content-pipeline package is accessible (e.g. monorepo test runners)
         try:
             from app.educational_intelligence.semantic_pipeline import SemanticContentPipeline
+            pipeline = SemanticContentPipeline()
+            result = pipeline.build(processed_chunks, pack_id=pack_id, metadata=metadata)
+            return {
+                "artifacts": result.artifacts,
+                "quality_gate": result.quality_gate,
+                "reports": result.reports,
+            }
         except ImportError:
-            from app.semantic_content_pipeline import SemanticContentPipeline
+            pass
 
-        pipeline = SemanticContentPipeline()
-        result = pipeline.build(processed_chunks, pack_id=pack_id, metadata=metadata)
-        return {
-            "artifacts": result.artifacts,
-            "quality_gate": result.quality_gate,
-            "reports": result.reports,
-        }
+        raise RuntimeError(
+            f"Failed to fetch artifacts for {pack_id}: content-pipeline /artifacts unreachable at {target_urls}"
+        )
 
     async def generate_class_pack(
         self,

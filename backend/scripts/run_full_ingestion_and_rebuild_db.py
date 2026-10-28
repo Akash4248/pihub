@@ -82,7 +82,7 @@ def main() -> None:
 
     # Backup existing database once if not already backed up
     if master_db_path.exists() and not backup_db_path.exists():
-        logger.info("Creating backup of existing database to %s", backup_db_path)
+        logger.info("Creating backup of existing database")
         shutil.copy2(str(master_db_path), str(backup_db_path))
 
     # Initialize master database connection with required schema
@@ -273,7 +273,7 @@ def main() -> None:
     logger.info("Total PDFs Processed: %d (Success: %d, Failed: %d)", len(all_pdfs), successful_pdfs, failed_pdfs)
     logger.info("Total Chunks Extracted: %d", total_chunks_extracted)
     logger.info("Total Real Concepts Stored: %d", total_concepts_stored)
-    logger.info("Master Database Updated: %s", master_db_path)
+    logger.info("Master database updated")
     logger.info("Final Memory RSS: %.1f MB", get_memory_mb())
     logger.info("=" * 60)
 

@@ -16,15 +16,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${SCRIPT_DIR}"
 BACKEND_DIR="${ROOT_DIR}/backend"
 
-# Determine Python Executable (.venv or system python3)
-if [[ -f "${BACKEND_DIR}/.venv/bin/python" ]]; then
-    PY="${BACKEND_DIR}/.venv/bin/python"
-elif [[ -f "${ROOT_DIR}/.venv/bin/python" ]]; then
-    PY="${ROOT_DIR}/.venv/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
-    PY="$(command -v python3)"
-else
-    echo "[ERROR] Python 3 not found. Please install python3."
+# Determine Python Executable (must have uvicorn installed)
+pick_python() {
+    local candidate
+    for candidate in "${PYTHON_BIN:-}" "${BACKEND_DIR}/.venv/bin/python" "${ROOT_DIR}/.venv/bin/python" "$(command -v python3 || true)" /usr/bin/python3; do
+        if [[ -n "${candidate}" && -x "${candidate}" ]] && "${candidate}" -c 'import uvicorn' >/dev/null 2>&1; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! PY="$(pick_python)"; then
+    echo "[ERROR] No Python interpreter with uvicorn found. Install backend requirements or set PYTHON_BIN."
     exit 1
 fi
 
@@ -87,6 +92,10 @@ check_ollama() {
     fi
 }
 
+port_in_use() {
+    command -v ss >/dev/null 2>&1 && ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN
+}
+
 start_service() {
     local name="$1" dir="$2" mod="$3" appobj="$4" port="$5"
     local pid_file="${PID_DIR}/${name}.pid"
@@ -94,6 +103,10 @@ start_service() {
 
     if [[ -f "${pid_file}" ]] && kill -0 "$(cat "${pid_file}")" 2>/dev/null; then
         echo "   [SKIP] ${name} is already running on :${port} (PID $(cat "${pid_file}"))"
+        return 0
+    fi
+    if port_in_use "${port}"; then
+        echo "   [SKIP] ${name} is already listening on :${port}"
         return 0
     fi
 
@@ -185,6 +198,8 @@ case "${cmd}" in
             pid_file="${PID_DIR}/${name}.pid"
             if [[ -f "${pid_file}" ]] && kill -0 "$(cat "${pid_file}")" 2>/dev/null; then
                 printf "  %-20s :%-5s RUNNING (PID %s)\n" "${name}" "${port}" "$(cat "${pid_file}")"
+            elif port_in_use "${port}"; then
+                printf "  %-20s :%-5s RUNNING (external)\n" "${name}" "${port}"
             else
                 printf "  %-20s :%-5s STOPPED\n" "${name}" "${port}"
             fi

@@ -171,3 +171,70 @@ class DeltaSyncResponse(BaseModel):
     packs_to_update: List[str] = Field(default_factory=list, description="Pack IDs with new versions")
     total_download_size_mb: float = Field(default=0.0, description="Total size for all updates")
     sync_priority: List[str] = Field(default_factory=list, description="Priority order for syncing")
+
+
+# ============================================================================
+# Educational Intelligence & Pedagogical Artifact Contracts
+# ============================================================================
+
+class ConceptNode(BaseModel):
+    """Concept node in educational knowledge graph"""
+    name: str = Field(..., description="Canonical academic concept name")
+    definition: str = Field(..., description="Textbook explanation of concept")
+    difficulty: str = Field(default="intermediate", description="easy, intermediate, or advanced")
+    prerequisites: List[str] = Field(default_factory=list, description="Prerequisite concept names")
+    related_concepts: List[str] = Field(default_factory=list, description="Directly related concept names")
+    misconceptions: List[str] = Field(default_factory=list, description="Common student misconceptions")
+
+
+class QuizQuestion(BaseModel):
+    """4-choice multiple choice question with pedagogical explanation"""
+    question_id: Optional[str] = Field(default=None, description="Unique question identifier")
+    question: str = Field(..., description="Question stem text")
+    option_a: str = Field(..., description="Option A")
+    option_b: str = Field(..., description="Option B")
+    option_c: str = Field(..., description="Option C")
+    option_d: str = Field(..., description="Option D")
+    correct_option: int = Field(..., ge=0, le=3, description="Index of correct option (0=A, 1=B, 2=C, 3=D)")
+    explanation: str = Field(..., description="Step-by-step pedagogical explanation")
+
+
+class Flashcard(BaseModel):
+    """Revision flashcard with prompt/term and definition"""
+    card_id: Optional[str] = Field(default=None, description="Unique flashcard identifier")
+    term: str = Field(..., description="Front of flashcard (term or question)")
+    definition: str = Field(..., description="Back of flashcard (definition or answer)")
+
+
+class ChapterNotes(BaseModel):
+    """Structured chapter summary and key revision takeaways"""
+    key_takeaways: List[str] = Field(default_factory=list, description="Key takeaway bullets")
+    summary: str = Field(default="", description="Comprehensive textbook chapter summary")
+    real_world_applications: List[str] = Field(default_factory=list, description="Real world applications")
+
+
+class ChapterArtifactsRequest(BaseModel):
+    """Unified request to generate chapter intelligence & educational artifacts"""
+    grade: Optional[int] = Field(default=None, description="Grade level (1-12)")
+    subject: Optional[str] = Field(default=None, description="Subject name")
+    chapter: Optional[str] = Field(default=None, description="Chapter title")
+    language: Optional[str] = Field(default="english", description="Language code")
+    pack_id: Optional[str] = Field(default=None, description="Target pack ID")
+    chunks: Optional[List[Dict[str, Any]]] = Field(default=None, description="Pre-loaded chunk dicts")
+    path: Optional[str] = Field(default=None, description="Relative or absolute path to textbook")
+    options: Optional[Dict[str, Any]] = Field(default=None, description="Generation options")
+
+
+class ChapterArtifactsResponse(BaseModel):
+    """Unified response containing all structured pedagogical artifacts"""
+    chapter_id: str = Field(..., description="Chapter or pack identifier")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Chapter metadata")
+    content: List[Dict[str, Any]] = Field(default_factory=list, description="Processed chunk content")
+    textbook: Dict[str, Any] = Field(default_factory=dict, description="Structured textbook hierarchy")
+    concept_graph: Dict[str, Any] = Field(default_factory=dict, description="NetworkX-derived concept graph")
+    worked_examples: List[Dict[str, Any]] = Field(default_factory=list, description="Worked examples")
+    tutor_contexts: List[Dict[str, Any]] = Field(default_factory=list, description="Offline tutor context cards")
+    artifacts: Dict[str, Any] = Field(default_factory=dict, description="Quizzes, flashcards, notes, etc.")
+    quality_gate: Dict[str, Any] = Field(default_factory=dict, description="Quality verification report")
+    reports: Dict[str, Any] = Field(default_factory=dict, description="Execution and coverage metrics")
+

@@ -164,7 +164,7 @@ def main() -> None:
 
     out_path = Path(args.output).resolve()
     shutil.copy2(str(db_path), str(out_path))
-    logger.info("Created working copy at %s", out_path)
+    logger.info("Created working copy")
 
     tokenizer, model = load_model(args.model)
 
@@ -286,7 +286,7 @@ def main() -> None:
     logger.info("============================================================")
     logger.info("COMPLETED IN %.2f SECONDS", elapsed)
     logger.info("Total Concepts: %d | Total Quizzes: %d | Total Flashcards: %d", total_concepts, total_quizzes, total_flashcards)
-    logger.info("Output Database: %s", out_path)
+    logger.info("Output database written")
     logger.info("============================================================")
 
 

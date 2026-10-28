@@ -1671,18 +1671,13 @@ def _load_stored_chunks(
     return loaded[:60]
 
 
-class ChapterArtifactsRequest(BaseModel):
-    grade: int | None = None
-    subject: str | None = None
-    chapter: str | None = None
-    language: str | None = "english"
-    pack_id: str | None = None
-    chunks: list[dict[str, Any]] | None = None
-    path: str | None = None
-    options: dict[str, Any] | None = None
+from shared.pack_schemas import (
+    ChapterArtifactsRequest,
+    ChapterArtifactsResponse,
+)
 
 
-@app.post("/artifacts", tags=["Educational Intelligence"])
+@app.post("/artifacts", tags=["Educational Intelligence"], response_model=ChapterArtifactsResponse)
 async def generate_chapter_artifacts(request: ChapterArtifactsRequest) -> dict[str, Any]:
     """Generate unified chapter content intelligence and educational artifacts.
 

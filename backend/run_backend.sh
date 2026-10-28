@@ -37,14 +37,20 @@ if [[ ! -f "${VENV}/bin/python" ]]; then
   echo ">> venv ready."
 fi
 
-if [[ -f "${VENV}/bin/uvicorn" ]]; then
-  PY="${VENV}/bin/python"
-else
-  PY="$(which python3)"
-fi
-if [[ ! -f "$PY" ]]; then
-  echo "[ERROR] Could not find or create python at ${PY}. Install python3-venv and retry."
+PY=""
+for candidate in "${PYTHON_BIN:-}" "${VENV}/bin/python" "$(command -v python3 || true)" /usr/bin/python3; do
+  if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" -c 'import uvicorn' >/dev/null 2>&1; then
+    PY="$candidate"
+    break
+  fi
+done
+if [[ -z "$PY" ]]; then
+  echo "[ERROR] No Python interpreter with uvicorn found."
+  echo "        Install the backend requirements into ${VENV} or set PYTHON_BIN."
   exit 1
+fi
+if [[ "$PY" != "${VENV}/bin/python" ]]; then
+  echo ">> ${VENV} is missing uvicorn; using ${PY}"
 fi
 # Local substitutes for the Docker volume mounts so native runs don't need root.
 mkdir -p "$PIHUB_DATA_ROOT"/{uploads,work,media,packs,textbooks,models/gemma4_audio,models/sentence-transformers/embedding,models/sentence-transformers/retrieval,content,curriculum,artifacts,pihub_packs,pihub_cache,pihub_storage,pihub_logs}
@@ -82,8 +88,16 @@ stop_stores() {
   docker rm -f pihub-qdrant pihub-mongo >/dev/null 2>&1 || true
 }
 
+port_in_use() {
+  command -v ss >/dev/null 2>&1 && ss -ltn "sport = :$1" 2>/dev/null | grep -q LISTEN
+}
+
 start_service() {
   local name="$1" dir="$2" mod="$3" appobj="$4" port="$5"
+  if port_in_use "$port"; then
+    echo "   [SKIP] $name is already listening on :$port"
+    return 0
+  fi
   echo ">> starting $name on :$port"
   cd "$dir"
   PYTHONPATH="$ROOT:$ROOT/shared:${PWD}:${PWD}/.." \
@@ -162,6 +176,8 @@ case "$cmd" in
       IFS=':' read -r name dir _ _ port <<<"$s"
       if [[ -f "$PID_DIR/$name.pid" ]] && kill -0 "$(cat "$PID_DIR/$name.pid")" 2>/dev/null; then
         printf "  %-20s :%s  RUNNING (pid %s)\n" "$name" "$port" "$(cat "$PID_DIR/$name.pid")"
+      elif port_in_use "$port"; then
+        printf "  %-20s :%s  RUNNING (external)\n" "$name" "$port"
       else
         printf "  %-20s :%s  stopped\n" "$name" "$port"
       fi
