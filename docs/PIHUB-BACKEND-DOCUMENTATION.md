@@ -218,7 +218,7 @@ PIHUB/
 │   │
 │   ├── nginx/nginx.conf
 │   ├── curriculum-builder/           # offline build scripts + reports
-│   ├── certification/ content_forensics/ content_quality/   # QA tooling
+│   ├── content_quality/              # QA tooling
 │   └── docs/api/
 │
 ├── phet_downloads/                   # ~100 offline PhET sims (index.html each)
