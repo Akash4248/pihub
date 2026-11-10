@@ -1,0 +1,50 @@
+name: "CI/CD: API Gateway"
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    paths:
+      - "backend/gateway/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-gateway.yml"
+  pull_request:
+    paths:
+      - "backend/gateway/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-gateway.yml"
+
+jobs:
+  test-gateway:
+    name: "Test & Validate Gateway"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/gateway/requirements.txt
+          pip install pytest pytest-asyncio httpx pydantic pyjwt
+
+      - name: Run Gateway Unit & Hardening Tests
+        env:
+          ALLOW_ANONYMOUS_DEV: "true"
+          PYTHONPATH: backend
+        run: |
+          cd backend
+          pytest gateway/tests -v
+
+      - name: Build Gateway Docker Image
+        run: |
+          cd backend
+          docker build -t pihub-gateway:latest -f gateway/Dockerfile .

@@ -95,6 +95,11 @@ def test_english_language_fallback_allowed():
         "used_fallback": "remove_language_filter",
     }
 
+    async def mock_fetch(*args, **kwargs):
+        return {"artifacts": {}, "quality_gate": {}, "reports": {}}
+
+    generator._fetch_artifacts_from_pipeline = mock_fetch
+
     # Should not raise PackQualityGateError for language fallback on 'en'
     try:
         asyncio.run(generator._create_pack("class5_science_en", "class", chunks, metadata))

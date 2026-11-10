@@ -1,0 +1,50 @@
+name: "CI/CD: PiHub Classroom Node"
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    paths:
+      - "backend/pihub/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-pihub.yml"
+  pull_request:
+    paths:
+      - "backend/pihub/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-pihub.yml"
+
+jobs:
+  test-pihub:
+    name: "Test & Validate PiHub Node"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/pihub/requirements.txt
+          pip install pytest pytest-asyncio httpx pydantic pyjwt
+
+      - name: Run PiHub Node Tests
+        env:
+          ALLOW_ANONYMOUS_DEV: "true"
+          PYTHONPATH: backend
+        run: |
+          cd backend
+          pytest pihub/tests -v
+
+      - name: Build PiHub Docker Image
+        run: |
+          cd backend
+          docker build -t pihub-node:latest -f pihub/Dockerfile .

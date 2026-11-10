@@ -138,8 +138,12 @@ from app.textbook_ingest import StructuredTextbookIngest
 from app.generated_pack_ingestor import GeneratedPackIngestor
 
 
+from shared.tracing import TracingMiddleware
+from shared.events import Event, EventType, dispatch_event_safe
+
 settings = get_settings()
 app = FastAPI(title="content-pipeline")
+app.add_middleware(TracingMiddleware, service_name="content-pipeline")
 app.add_middleware(InternalAuthMiddleware)
 
 

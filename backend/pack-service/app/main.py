@@ -23,6 +23,7 @@ from app.validation.pack_validator import PackValidator
 from app.generated_pack_importer import GeneratedPackImporter
 from shared.schemas import HealthResponse
 from shared.security import InternalAuthMiddleware
+from shared.tracing import TracingMiddleware
 from shared.text_normalization import normalize_curriculum_name, normalize_language_code
 from shared.textbook_paths import find_textbooks_root
 
@@ -40,6 +41,7 @@ PDF_MANIFEST_PATH = os.getenv("PDF_MANIFEST_PATH") or str(Path(PACK_STORAGE_PATH
 CURRICULUM_MANIFEST_PATH = os.getenv("CURRICULUM_MANIFEST_PATH") or str(Path(PACK_STORAGE_PATH).parent / "curriculum" / "curriculum_manifest.json")
 
 app = FastAPI(title="Pack Management Service", version="2.0.0")
+app.add_middleware(TracingMiddleware, service_name="pack-service")
 app.add_middleware(InternalAuthMiddleware)
 
 

@@ -271,9 +271,75 @@ services:
     ports:
       - "${NGINX_PORT:-80}:80"
 
+  # ==========================================
+  # Microservices Architecture Infrastructure
+  # ==========================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: pihub-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - backend_logs:/var/log/rabbitmq
+    ports:
+      - "5672:5672"     # AMQP protocol
+      - "15672:15672"   # Management Web UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 1024m
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: pihub-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    mem_limit: 512m
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: pihub-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+      - backend_logs:/var/log/loki
+    ports:
+      - "3100:3100"
+    mem_limit: 512m
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: pihub-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - loki
+    mem_limit: 512m
+
 volumes:
   qdrant_data:
   mongo_data:
   backend_logs:
   shared_storage:
   searxng_data:
+  rabbitmq_data:
+  loki_data:
+  grafana_data:

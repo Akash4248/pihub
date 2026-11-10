@@ -1,0 +1,50 @@
+name: "CI/CD: Inference Service"
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    paths:
+      - "backend/inference-service/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-inference.yml"
+  pull_request:
+    paths:
+      - "backend/inference-service/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-inference.yml"
+
+jobs:
+  test-inference:
+    name: "Test & Validate Inference Service"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/inference-service/requirements.txt
+          pip install pytest pytest-asyncio httpx pydantic pyjwt
+
+      - name: Run Inference Service Tests
+        env:
+          ALLOW_ANONYMOUS_DEV: "true"
+          PYTHONPATH: backend
+        run: |
+          cd backend/inference-service
+          pytest tests -v
+
+      - name: Build Inference Service Docker Image
+        run: |
+          cd backend
+          docker build -t pihub-inference-service:latest -f inference-service/Dockerfile .

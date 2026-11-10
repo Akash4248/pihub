@@ -18,6 +18,11 @@ from starlette.background import BackgroundTask
 
 from shared.config import get_settings
 from shared.security import get_internal_service_key, read_file_chunks_safely, sanitize_safe_filename
+from shared.discovery import get_service_registry
+from shared.resilience import get_circuit_breaker_registry
+from shared.tracing import get_tracer
+from shared.logging import current_request_id
+from shared.auth import issue_service_token
 
 from app.context import http_client
 
@@ -32,6 +37,42 @@ settings = get_settings()
 DEFAULT_PROXY_TIMEOUT = 15.0
 INGEST_PROXY_TIMEOUT = 45.0
 AI_PROXY_TIMEOUT = 120.0
+
+
+def resolve_service_name(base_url: str) -> str:
+    url_lower = base_url.lower()
+    if "inference" in url_lower or ":8010" in url_lower:
+        return "inference-service"
+    if "content-pipeline" in url_lower or ":8001" in url_lower:
+        return "content-pipeline"
+    if "pack" in url_lower or ":8030" in url_lower:
+        return "pack-service"
+    if "pihub" in url_lower or ":8020" in url_lower:
+        return "pihub"
+    if "voice" in url_lower or ":8050" in url_lower:
+        return "voice-service"
+    return "downstream-service"
+
+
+def prepare_proxy_headers(headers: dict[str, str] | None, target_service: str) -> dict[str, str]:
+    proxy_headers = dict(headers or {})
+    proxy_headers.setdefault("X-Internal-Service-Key", get_internal_service_key())
+
+    # Distributed context propagation
+    req_id = current_request_id.get()
+    if req_id:
+        proxy_headers.setdefault("X-Request-ID", req_id)
+
+    get_tracer(service_name="gateway").inject_headers(proxy_headers)
+
+    # Inter-Service Zero-Trust token
+    try:
+        token = issue_service_token("gateway", audience=target_service)
+        proxy_headers.setdefault("X-Service-Token", token)
+    except Exception:
+        pass
+
+    return proxy_headers
 
 
 def error_detail(text: str) -> Any:
@@ -55,20 +96,27 @@ async def proxy_request(
     stream: bool = False,
     timeout: float = DEFAULT_PROXY_TIMEOUT,
 ) -> Any:
-    proxy_headers = dict(headers or {})
-    proxy_headers.setdefault("X-Internal-Service-Key", get_internal_service_key())
+    service_name = resolve_service_name(base_url)
+    resolved_url = get_service_registry().resolve(service_name, default_url=base_url)
+    proxy_headers = prepare_proxy_headers(headers, service_name)
 
     if stream:
-        return await proxy_stream(base_url, method, path, payload=payload, headers=proxy_headers, timeout=timeout)
+        return await proxy_stream(resolved_url, method, path, payload=payload, headers=proxy_headers, timeout=timeout)
 
-    url = f"{base_url}{path}"
-    try:
-        response = await http_client().request(
-            method, url, json=payload, params=params, headers=proxy_headers, files=files,
-            timeout=timeout,
-        )
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}") from exc
+    cb = get_circuit_breaker_registry().get_breaker(service_name)
+
+    async def _execute_call():
+        url = f"{resolved_url}{path}"
+        try:
+            return await http_client().request(
+                method, url, json=payload, params=params, headers=proxy_headers, files=files,
+                timeout=timeout,
+            )
+        except httpx.RequestError as exc:
+            get_service_registry().mark_unhealthy(service_name, resolved_url)
+            raise HTTPException(status_code=503, detail=f"Service unavailable: {str(exc)}") from exc
+
+    response = await cb.call(_execute_call)
 
     if response.is_error:
         raise HTTPException(status_code=response.status_code, detail=response.text[:2000])
@@ -119,25 +167,34 @@ async def send_with_retry(
     retries: int = 3,
     timeout: float = DEFAULT_PROXY_TIMEOUT,
 ) -> httpx.Response:
-    url = f"{base_url}{path}"
-    retryable = settings.voice_service_enabled and base_url == settings.voice_service_url
-    delay = 0.25
-    last_error: Exception | None = None
+    service_name = resolve_service_name(base_url)
+    resolved_base = get_service_registry().resolve(service_name, default_url=base_url)
+    proxy_headers = prepare_proxy_headers(headers, service_name)
+    cb = get_circuit_breaker_registry().get_breaker(service_name)
 
-    for attempt in range(1, retries + 1):
-        try:
-            if stream:
-                request = http_client().build_request(method, url, json=payload, headers=headers)
-                return await http_client().send(request, stream=True, timeout=timeout)
-            return await http_client().request(method, url, json=payload, headers=headers, timeout=timeout)
-        except httpx.RequestError as exc:
-            last_error = exc
-            if not retryable or attempt >= retries:
-                break
-            await asyncio.sleep(delay)
-            delay *= 2
+    async def _execute_attempt():
+        url = f"{resolved_base}{path}"
+        retryable = settings.voice_service_enabled and base_url == settings.voice_service_url
+        delay = 0.25
+        last_error: Exception | None = None
 
-    raise HTTPException(status_code=503, detail=f"Service unavailable: {last_error}")
+        for attempt in range(1, retries + 1):
+            try:
+                if stream:
+                    request = http_client().build_request(method, url, json=payload, headers=proxy_headers)
+                    return await http_client().send(request, stream=True, timeout=timeout)
+                return await http_client().request(method, url, json=payload, headers=proxy_headers, timeout=timeout)
+            except httpx.RequestError as exc:
+                last_error = exc
+                if not retryable or attempt >= retries:
+                    break
+                await asyncio.sleep(delay)
+                delay *= 2
+
+        get_service_registry().mark_unhealthy(service_name, resolved_base)
+        raise HTTPException(status_code=503, detail=f"Service unavailable: {last_error}")
+
+    return await cb.call(_execute_attempt)
 
 
 async def proxy_stream(

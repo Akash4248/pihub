@@ -581,6 +581,26 @@ class PackGenerator:
         pack_record["chunk_count"] = len(processed_chunks)
         pack_record["checksum"] = pack_record.get("checksum")
         logger.info(f"Pack {pack_id} saved: {compressed_size:.2f}MB")
+
+        # Publish PackCreated event
+        try:
+            from shared.events import Event, EventType, dispatch_event_safe
+            dispatch_event_safe(
+                Event(
+                    event_type=EventType.PACK_CREATED.value,
+                    producer="pack-service",
+                    payload={
+                        "pack_id": pack_id,
+                        "grade": metadata.get("grade"),
+                        "subject": metadata.get("subject"),
+                        "chapter": metadata.get("chapter"),
+                        "size_mb": round(compressed_size, 2),
+                    },
+                )
+            )
+        except Exception as exc:
+            logger.debug("[EVENT] PackCreated dispatch skipped: %s", exc)
+
         return pack_record
 
     def _quantize_embedding(self, embedding: List[float], bits: int = 8) -> List[int]:

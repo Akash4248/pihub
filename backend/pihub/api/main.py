@@ -31,6 +31,8 @@ from distribution.pack_manager import PackDistributionManager
 from monitoring.health import HealthMonitor
 from network.discovery import ClassroomIntranet, NetworkDiscovery
 from shared.security import read_file_chunks_safely, InternalAuthMiddleware
+from shared.events import Event, EventType, dispatch_event_safe
+from shared.tracing import TracingMiddleware
 from sync.manager import build_sync_manifest
 from sync.sync_engine import SyncEngine
 from deployment.hotspot import HotspotNetworking
@@ -114,6 +116,7 @@ transfer_stress_test = TransferStressTest()
 recovery_scenarios = RecoveryScenarios()
 
 app = FastAPI(title="pihub")
+app.add_middleware(TracingMiddleware, service_name="pihub")
 # pihub uses its own admin/device token scheme; accept those in addition to the
 # shared internal key / JWT so edge-device flows keep working while anonymous
 # access is still rejected.
@@ -222,6 +225,21 @@ def register_device(payload: DeviceRegisterRequest) -> DeviceResponse:
     )
     device = store.get_device(device_id)
     classroom_intranet.announce_device(device_id, payload.device_name, device.get("metadata", {}).get("device_ip", "0.0.0.0"), 8000)
+
+    # Publish DeviceRegistered event across the microservices mesh
+    dispatch_event_safe(
+        Event(
+            event_type=EventType.DEVICE_REGISTERED.value,
+            producer="pihub",
+            payload={
+                "device_id": device_id,
+                "device_name": payload.device_name,
+                "classroom_id": payload.classroom or "default",
+                "role": payload.role,
+            },
+        )
+    )
+
     # The plaintext token is shown exactly once here from the fresh secret —
     # never read back from storage (only hashes live in the DB).
     return DeviceResponse(**{**device, "auth_token": token})
@@ -444,6 +462,13 @@ def sync_status() -> dict[str, Any]:
 @app.post("/progress")
 def record_progress(payload: ProgressRequest) -> dict[str, Any]:
     progress = store.upsert_progress(payload.model_dump())
+    dispatch_event_safe(
+        Event(
+            event_type=EventType.STUDENT_PROGRESS_UPDATED.value,
+            producer="pihub",
+            payload={"student_id": payload.student_id, "progress": progress},
+        )
+    )
     return {"status": "ok", "progress": progress}
 
 
@@ -479,12 +504,27 @@ def answer_quiz_session(quiz_session_id: str, payload: QuizAnswerRequest) -> dic
     session = store.advance_quiz_session(quiz_session_id, payload.model_dump())
     if session is None:
         raise HTTPException(status_code=404, detail="Quiz session not found")
+    dispatch_event_safe(
+        Event(
+            event_type=EventType.QUIZ_COMPLETED.value,
+            producer="pihub",
+            payload={"quiz_session_id": quiz_session_id, "session": session},
+        )
+    )
     return {"status": "ok", "session": session}
 
 
 @app.post("/sync/process")
 def process_sync_queue(_: None = Depends(require_admin)) -> dict[str, Any]:
-    return sync_engine.process_pending_syncs()
+    result = sync_engine.process_pending_syncs()
+    dispatch_event_safe(
+        Event(
+            event_type=EventType.SYNC_COMPLETED.value,
+            producer="pihub",
+            payload={"result": result},
+        )
+    )
+    return result
 
 
 @app.post("/sync/{session_id}/retry")

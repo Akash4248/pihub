@@ -1,0 +1,50 @@
+name: "CI/CD: Pack Management Service"
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    paths:
+      - "backend/pack-service/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-pack-service.yml"
+  pull_request:
+    paths:
+      - "backend/pack-service/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-pack-service.yml"
+
+jobs:
+  test-pack-service:
+    name: "Test & Validate Pack Service"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/pack-service/requirements.txt
+          pip install pytest pytest-asyncio httpx pydantic pyjwt
+
+      - name: Run Pack Service Tests
+        env:
+          ALLOW_ANONYMOUS_DEV: "true"
+          PYTHONPATH: backend
+        run: |
+          cd backend/pack-service
+          pytest tests -v
+
+      - name: Build Pack Service Docker Image
+        run: |
+          cd backend
+          docker build -t pihub-pack-service:latest -f pack-service/Dockerfile .

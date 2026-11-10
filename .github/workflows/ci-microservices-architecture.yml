@@ -1,0 +1,36 @@
+name: "CI/CD: Microservices Architecture Suite"
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+  pull_request:
+
+jobs:
+  test-microservices-architecture:
+    name: "Microservices Architecture Verification"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pydantic pydantic-settings httpx fastapi starlette pyjwt aio-pika pika opentelemetry-api opentelemetry-sdk pytest pytest-asyncio
+
+      - name: Run Microservices Architecture Test Suite
+        env:
+          ALLOW_ANONYMOUS_DEV: "true"
+          PYTHONPATH: backend
+        run: |
+          cd backend
+          pytest tests/test_microservices_architecture.py -v

@@ -1,0 +1,50 @@
+name: "CI/CD: Content Pipeline Service"
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+    paths:
+      - "backend/content-pipeline/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-content-pipeline.yml"
+  pull_request:
+    paths:
+      - "backend/content-pipeline/**"
+      - "backend/shared/**"
+      - ".github/workflows/ci-content-pipeline.yml"
+
+jobs:
+  test-content-pipeline:
+    name: "Test & Validate Content Pipeline"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/content-pipeline/requirements.txt
+          pip install pytest pytest-asyncio httpx pydantic pyjwt
+
+      - name: Run Content Pipeline Tests
+        env:
+          ALLOW_ANONYMOUS_DEV: "true"
+          PYTHONPATH: backend
+        run: |
+          cd backend
+          pytest content-pipeline/tests -v
+
+      - name: Build Content Pipeline Docker Image
+        run: |
+          cd backend
+          docker build -t pihub-content-pipeline:latest -f content-pipeline/Dockerfile .

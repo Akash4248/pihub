@@ -23,11 +23,14 @@ from fastapi.staticfiles import StaticFiles
 
 from shared.config import get_settings
 from shared.security import InternalAuthMiddleware
+from shared.tracing import TracingMiddleware
+from shared.resilience import RateLimitMiddleware
 
 from app.context import bind_application
 from app.middleware.structlog_middleware import StructuredLoggingMiddleware
 from app.routes import (
     ai,
+    architecture,
     assets,
     auth,
     debug,
@@ -71,6 +74,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 bind_application(app)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(TracingMiddleware, service_name="gateway")
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(
     InternalAuthMiddleware,
@@ -78,6 +83,8 @@ app.add_middleware(
         "/health", "/healthz", "/ready", "/readyz", "/livez", "/ping",
         "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
         "/auth/register", "/auth/login", "/",
+        "/api/v1/system", "/api/v1/discovery", "/api/v1/data-ownership",
+        "/api/v1/sagas",
     ),
 )
 app.mount(
@@ -101,6 +108,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 # Registration order mirrors the original monolith so overlapping paths keep
 # their original precedence.
 for router in (
+    architecture.router,
     auth.router,
     system.router,
     ingest.router,
@@ -116,3 +124,6 @@ for router in (
     debug.router,
 ):
     app.include_router(router)
+    # Expose API v1 versioned alias for core routers
+    if router not in (architecture.router, auth.router, system.router):
+        app.include_router(router, prefix="/api/v1")

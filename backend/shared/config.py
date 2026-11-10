@@ -162,6 +162,25 @@ class Settings(BaseSettings):
     # Qdrant collection for enrichment records (videos/articles/sims/examples)
     enrichment_collection: str = Field(default="enrichment_resources", alias="ENRICHMENT_COLLECTION")
 
+    # Microservices Architecture Settings
+    rabbitmq_url: str = Field(default="amqp://guest:guest@rabbitmq:5672/", alias="RABBITMQ_URL")
+    rabbitmq_exchange: str = Field(default="pihub.events", alias="RABBITMQ_EXCHANGE")
+    rabbitmq_dlx: str = Field(default="pihub.dlx", alias="RABBITMQ_DLX")
+    rabbitmq_dlq: str = Field(default="pihub.dlq", alias="RABBITMQ_DLQ")
+
+    jaeger_url: str = Field(default="http://jaeger:4318/v1/traces", alias="JAEGER_URL")
+    enable_tracing: bool = Field(default=True, alias="ENABLE_TRACING")
+    enable_json_logging: bool = Field(default=True, alias="ENABLE_JSON_LOGGING")
+
+    service_jwt_secret: str = Field(default="service-secret-token-min-32-chars-for-msa-auth", alias="SERVICE_JWT_SECRET")
+
+    circuit_breaker_failure_threshold: int = Field(default=5, alias="CIRCUIT_BREAKER_FAILURE_THRESHOLD")
+    circuit_breaker_recovery_timeout: float = Field(default=15.0, alias="CIRCUIT_BREAKER_RECOVERY_TIMEOUT")
+
+    rate_limit_per_minute: int = Field(default=120, alias="RATE_LIMIT_PER_MINUTE")
+    rate_limit_burst: int = Field(default=30, alias="RATE_LIMIT_BURST")
+    response_cache_ttl_seconds: int = Field(default=60, alias="RESPONSE_CACHE_TTL_SECONDS")
+
     def validate_security_config(self) -> None:
         insecure_keys = {"change-me", "change-me-super-secret-jwt-key-min32chars", "default-secret-key-change-in-production"}
         if not self.allow_anonymous_dev:
