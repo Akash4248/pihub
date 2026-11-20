@@ -113,7 +113,8 @@ start_service() {
   local artifacts_path="${ARTIFACTS_DIR:-$PIHUB_DATA_ROOT/artifacts}"
   [[ "$artifacts_path" == /shared* ]] && artifacts_path="$PIHUB_DATA_ROOT/artifacts"
 
-  PYTHONPATH="$ROOT:$ROOT/shared:${PWD}:${PWD}/.." \
+  PYTHONUNBUFFERED=1 \
+  PYTHONPATH="$ROOT:${PWD}:${PWD}/.." \
   UPLOAD_DIR="$upload_path" \
   WORK_DIR="$work_path" \
   MEDIA_STORAGE_PATH="$media_path" \
@@ -146,8 +147,9 @@ start_service() {
   QDRANT_URL="${QDRANT_URL:-http://localhost:6333}" \
   MONGO_URL="${MONGO_URL:-mongodb://localhost:27017}" \
   ALLOW_ANONYMOUS_DEV="${ALLOW_ANONYMOUS_DEV:-true}" \
+  INTERNAL_SERVICE_KEY="${INTERNAL_SERVICE_KEY:-c8387e80d8d42210e6fc10ef781f5f12c63e5f5321a8ec69ad4009c52faa6ca7}" \
   ENVIRONMENT="${ENVIRONMENT:-development}" \
-    nohup "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
+    setsid "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
     >"$LOG_DIR/$name.log" 2>&1 &
   pid=$!
   disown "$pid" 2>/dev/null || true

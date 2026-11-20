@@ -118,7 +118,7 @@ start_service() {
     fi
 
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH="${BACKEND_DIR}:${BACKEND_DIR}/shared:${target_dir}" \
+    PYTHONPATH="${BACKEND_DIR}:${target_dir}" \
     CONTENT_PIPELINE_URL="http://127.0.0.1:8001" \
     INFERENCE_SERVICE_URL="http://127.0.0.1:8010" \
     PIHUB_URL="http://127.0.0.1:8020" \
