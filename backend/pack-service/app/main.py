@@ -21,6 +21,7 @@ from app.sync.delta_builder import DeltaBuilder
 from app.sync.sync_manifest_generator import SyncManifestGenerator
 from app.validation.pack_validator import PackValidator
 from app.generated_pack_importer import GeneratedPackImporter
+from app.events import PackEventService, event_router
 from shared.schemas import HealthResponse
 from shared.security import InternalAuthMiddleware
 from shared.tracing import TracingMiddleware
@@ -58,6 +59,10 @@ def _pack_generator() -> PackGenerator:
 async def startup_event() -> None:
     storage_root = Path(PACK_STORAGE_PATH)
     storage_root.mkdir(parents=True, exist_ok=True)
+
+    event_db_path = storage_root / "pack_events.sqlite3"
+    app.state.event_service = PackEventService(event_db_path)
+    logger.info("Pack Event Store initialized at: %s", event_db_path)
 
     app.state.pack_repository = PackRepository(storage_root)
     pdf_repository = PdfRepository(Path(PDF_MANIFEST_PATH), library_root=Path(PDF_LIBRARY_PATH))
@@ -192,6 +197,21 @@ async def generate_pack(request: PackGenerationRequest) -> PackGenerationRespons
         pack_record = app.state.pack_repository.get_pack(pack_id)
         size_mb = float(pack_record.get("compressed_size_mb", 0.0)) if pack_record else 0.0
 
+        if hasattr(app.state, "event_service"):
+            try:
+                app.state.event_service.record_pack_created(
+                    pack_id=pack_id,
+                    version=manifest.get("version", "1.0.0"),
+                    grade=manifest.get("grade"),
+                    subject=manifest.get("subject"),
+                    chapter=manifest.get("chapter"),
+                    checksum=manifest.get("checksum"),
+                    size_bytes=int(pack_record.get("size_bytes", 0)) if pack_record else 0,
+                    chunk_count=int(manifest.get("artifact_counts", {}).get("content", 0)),
+                )
+            except Exception as e:
+                logger.warning("Failed to record PackCreated event for %s: %s", pack_id, e)
+
         return PackGenerationResponse(
             pack_id=pack_id,
             version=manifest.get("version", "1.0.0"),
@@ -229,6 +249,20 @@ async def import_generated_pack(request: ImportGeneratedPackRequest) -> dict:
     )
     try:
         record = await importer.import_pack(Path(request.source_dir))
+        if hasattr(app.state, "event_service") and record:
+            try:
+                manifest = record.get("manifest") or {}
+                app.state.event_service.record_pack_created(
+                    pack_id=record.get("pack_id", "generated_pack_v1"),
+                    version=record.get("version", "1.0.0"),
+                    grade=record.get("grade"),
+                    subject=record.get("subject"),
+                    chapter=record.get("chapter"),
+                    checksum=record.get("checksum"),
+                    size_bytes=int(record.get("size_bytes", 0)),
+                )
+            except Exception as ev_err:
+                logger.warning("Event logging skipped for imported pack: %s", ev_err)
         return {"status": "success", "pack": record}
     except Exception as e:
         logger.exception("Import failed")
@@ -254,6 +288,7 @@ app.include_router(pack_router)
 app.include_router(pdf_router)
 app.include_router(preview_router)
 app.include_router(analytics_router)
+app.include_router(event_router)
 
 
 if __name__ == "__main__":

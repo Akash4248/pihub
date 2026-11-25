@@ -106,9 +106,29 @@ class PackRepository:
     def search(self, **criteria: Any) -> list[dict[str, Any]]:
         return [self._hydrate_record(record) for record in self.registry.search(**criteria)]
 
+    def _resolve_storage_path(self, raw_path: Any) -> Path:
+        if not raw_path:
+            return Path("")
+        p = str(raw_path)
+        if p.startswith("/shared/packs"):
+            rel = p.removeprefix("/shared/packs").lstrip("/")
+            return (self.storage_root / rel).resolve()
+        path = Path(p)
+        if not path.is_absolute():
+            return (self.storage_root / path).resolve()
+        if not path.exists():
+            for marker in ("grade_", "pdf_manifests"):
+                if marker in p:
+                    idx = p.find(marker)
+                    candidate = (self.storage_root / p[idx:]).resolve()
+                    if candidate.exists():
+                        return candidate
+        return path
+
     def _hydrate_record(self, record: dict[str, Any]) -> dict[str, Any]:
         hydrated = dict(record)
-        pack_dir = Path(str(hydrated.get("pack_dir") or ""))
+        pack_dir = self._resolve_storage_path(hydrated.get("pack_dir"))
+        hydrated["pack_dir"] = str(pack_dir)
         manifest_path = pack_dir / "manifest.json"
         hydrated["manifest_exists"] = manifest_path.exists()
         if manifest_path.exists():
@@ -137,7 +157,8 @@ class PackRepository:
                 logger.warning("Corrupt manifest at %s: %s", manifest_path, exc)
                 hydrated["valid"] = False
 
-        archive_path = Path(str(hydrated.get("archive_path") or ""))
+        archive_path = self._resolve_storage_path(hydrated.get("archive_path"))
+        hydrated["archive_path"] = str(archive_path)
         hydrated["archive_exists"] = archive_path.exists()
         if archive_path.exists():
             size_bytes = archive_path.stat().st_size

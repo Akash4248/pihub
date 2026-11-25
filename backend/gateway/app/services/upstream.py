@@ -181,8 +181,8 @@ async def send_with_retry(
         for attempt in range(1, retries + 1):
             try:
                 if stream:
-                    request = http_client().build_request(method, url, json=payload, headers=proxy_headers)
-                    return await http_client().send(request, stream=True, timeout=timeout)
+                    request = http_client().build_request(method, url, json=payload, headers=proxy_headers, timeout=timeout)
+                    return await http_client().send(request, stream=True)
                 return await http_client().request(method, url, json=payload, headers=proxy_headers, timeout=timeout)
             except httpx.RequestError as exc:
                 last_error = exc

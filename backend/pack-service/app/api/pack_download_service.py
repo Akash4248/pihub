@@ -25,6 +25,19 @@ class PackDownloadService:
         path = Path(archive_path).resolve()
         base_dir = Path(settings.pack_storage_path).resolve()
         if not path.is_relative_to(base_dir):
+            p_str = str(archive_path)
+            if p_str.startswith("/shared/packs"):
+                path = (base_dir / p_str.removeprefix("/shared/packs").lstrip("/")).resolve()
+            else:
+                for marker in ("grade_", "pdf_manifests"):
+                    if marker in p_str:
+                        idx = p_str.find(marker)
+                        candidate = (base_dir / p_str[idx:]).resolve()
+                        if candidate.exists():
+                            path = candidate
+                            break
+
+        if not path.is_relative_to(base_dir):
             raise HTTPException(status_code=403, detail="Access denied: invalid file path outside storage directory")
 
         if not path.exists():

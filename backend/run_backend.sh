@@ -149,21 +149,24 @@ start_service() {
   ALLOW_ANONYMOUS_DEV="${ALLOW_ANONYMOUS_DEV:-true}" \
   INTERNAL_SERVICE_KEY="${INTERNAL_SERVICE_KEY:-c8387e80d8d42210e6fc10ef781f5f12c63e5f5321a8ec69ad4009c52faa6ca7}" \
   ENVIRONMENT="${ENVIRONMENT:-development}" \
-    setsid "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
+    nohup "$PY" -m uvicorn "${mod}:${appobj}" --host 0.0.0.0 --port "$port" \
     >"$LOG_DIR/$name.log" 2>&1 &
   pid=$!
-  disown "$pid" 2>/dev/null || true
   echo $pid >"$PID_DIR/$name.pid"
   cd "$ROOT"
 }
 
 stop_service() {
-  local name="$1"
+  local name="$1" port="${2:-}"
   if [[ -f "$PID_DIR/$name.pid" ]]; then
     local pid; pid="$(cat "$PID_DIR/$name.pid")"
     echo ">> stopping $name (pid $pid)"
     kill "$pid" 2>/dev/null || true
     rm -f "$PID_DIR/$name.pid"
+  fi
+  if [[ -n "$port" ]] && port_in_use "$port"; then
+    echo ">> freeing port :$port"
+    fuser -k -n tcp "$port" 2>/dev/null || true
   fi
 }
 
@@ -183,7 +186,7 @@ case "$cmd" in
     echo "Stop:   ./run_backend.sh stop"
     ;;
   stop)
-    for s in "${SERVICES[@]}"; { IFS=':' read -r name _ _ <<<"$s"; stop_service "$name"; }
+    for s in "${SERVICES[@]}"; { IFS=':' read -r name _ _ _ port <<<"$s"; stop_service "$name" "$port"; }
     stop_stores
     echo "Stopped."
     ;;

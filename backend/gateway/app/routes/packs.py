@@ -4,7 +4,7 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from shared.config import get_settings
@@ -298,12 +298,73 @@ async def pack_manifest(pack_id: str) -> dict[str, Any]:
 
 
 @router.get("/packs/{pack_id}/download")
-async def pack_download(pack_id: str) -> StreamingResponse:
+async def pack_download(pack_id: str, request: Request) -> StreamingResponse:
+    downstream_headers = {}
+    for h in ("x-classroom-id", "x-device-id", "x-user-id"):
+        val = request.headers.get(h)
+        if val:
+            downstream_headers[h] = val
+
     try:
         source_pack_id = await resolve_pack_service_pack_id(pack_id)
-        return await proxy_stream(settings.pack_service_url, "GET", pack_path(source_pack_id, "download"))
+        return await proxy_stream(
+            settings.pack_service_url,
+            "GET",
+            pack_path(source_pack_id, "download"),
+            headers=downstream_headers,
+        )
     except HTTPException as exc:
         if exc.status_code != 404:
             raise
 
-    return await proxy_stream(settings.pihub_url, "GET", pack_path(pack_id, "download"))
+    return await proxy_stream(
+        settings.pihub_url,
+        "GET",
+        pack_path(pack_id, "download"),
+        headers=downstream_headers,
+    )
+
+
+# ==============================================================================
+# Event Sourcing & CQRS Proxied Endpoints
+# ==============================================================================
+
+@router.post("/packs/{pack_id}/publish")
+async def gateway_publish_pack(pack_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    source_pack_id = await resolve_pack_service_pack_id(pack_id)
+    return await post_json(settings.pack_service_url, f"/packs/{source_pack_id}/publish", payload or {})
+
+
+@router.get("/packs/{pack_id}/history")
+async def gateway_pack_history(pack_id: str) -> dict[str, Any]:
+    source_pack_id = await resolve_pack_service_pack_id(pack_id)
+    return await get_json(settings.pack_service_url, f"/packs/{source_pack_id}/history")
+
+
+@router.get("/packs/{pack_id}/status")
+async def gateway_pack_status(pack_id: str, version: str | None = Query(default=None)) -> dict[str, Any]:
+    source_pack_id = await resolve_pack_service_pack_id(pack_id)
+    params = {"version": version} if version else None
+    return await get_json(settings.pack_service_url, f"/packs/{source_pack_id}/status", params=params)
+
+
+@router.get("/classrooms/{classroom_id}/packs")
+async def gateway_classroom_packs(classroom_id: str) -> list[dict[str, Any]]:
+    return await get_json(settings.pack_service_url, f"/classrooms/{classroom_id}/packs")
+
+
+@router.get("/packs/distribution/analytics")
+async def gateway_distribution_analytics() -> dict[str, Any]:
+    return await get_json(settings.pack_service_url, "/packs/distribution/analytics")
+
+
+@router.post("/internal/packs/{pack_id}/synchronization")
+async def gateway_acknowledge_sync(pack_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    source_pack_id = await resolve_pack_service_pack_id(pack_id)
+    return await post_json(settings.pack_service_url, f"/internal/packs/{source_pack_id}/synchronization", payload)
+
+
+@router.post("/packs/events/replay")
+async def gateway_replay_events() -> dict[str, Any]:
+    return await post_json(settings.pack_service_url, "/packs/events/replay", {})
+

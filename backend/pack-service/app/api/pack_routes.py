@@ -132,6 +132,36 @@ def download_pack(pack_id: str, request: Request, version: str | None = Query(de
     record = _repository(request).get_pack(pack_id, version)
     if record is None:
         raise HTTPException(status_code=404, detail="Pack not found")
+
+    event_service = getattr(request.app.state, "event_service", None)
+    if event_service:
+        try:
+            classroom_id = request.headers.get("X-Classroom-ID") or request.query_params.get("classroom_id") or "anonymous_node"
+            device_id = request.headers.get("X-Device-ID") or request.query_params.get("device_id") or "unknown_device"
+            request_id = request.headers.get("X-Request-ID")
+            target_version = version or record.get("version", "1.0.0")
+
+            event_service.record_pack_created(
+                pack_id=pack_id,
+                version=target_version,
+                grade=record.get("grade"),
+                subject=record.get("subject"),
+                chapter=record.get("chapter"),
+                checksum=record.get("checksum"),
+                size_bytes=int(record.get("size_bytes", 0)),
+            )
+
+            event_service.record_pack_downloaded(
+                pack_id=pack_id,
+                version=target_version,
+                classroom_id=classroom_id,
+                device_id=device_id,
+                request_id=request_id,
+                client_ip=request.client.host if request.client else None,
+            )
+        except Exception as exc:
+            logger.warning("Event logging skipped for pack download: %s", exc)
+
     return PackDownloadService().download(record)
 
 

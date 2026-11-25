@@ -141,20 +141,24 @@ start_service() {
     INTERNAL_SERVICE_KEY="${INTERNAL_SERVICE_KEY}" \
     MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY}" \
     MINIO_SECRET_KEY="${MINIO_SECRET_KEY}" \
-      setsid "${PY}" -m uvicorn "${mod}:${appobj}" --app-dir "${target_dir}" --host "${bind_host}" --port "${port}" >"${log_file}" 2>&1 &
+      nohup "${PY}" -m uvicorn "${mod}:${appobj}" --app-dir "${target_dir}" --host "${bind_host}" --port "${port}" >"${log_file}" 2>&1 &
 
     local pid=$!
     echo "${pid}" >"${pid_file}"
 }
 
 stop_service() {
-    local name="$1"
+    local name="$1" port="${2:-}"
     local pid_file="${PID_DIR}/${name}.pid"
     if [[ -f "${pid_file}" ]]; then
         local pid; pid="$(cat "${pid_file}")"
         echo ">> Stopping ${name} (PID ${pid})..."
         kill "${pid}" 2>/dev/null || true
         rm -f "${pid_file}"
+    fi
+    if [[ -n "${port}" ]] && port_in_use "${port}"; then
+        echo ">> Freeing port :${port}..."
+        fuser -k -n tcp "${port}" 2>/dev/null || true
     fi
 }
 

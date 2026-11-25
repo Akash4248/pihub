@@ -69,6 +69,16 @@ class SyncEngine:
                 }
             )
 
+        try:
+            from pihub.sync.pack_sync_reporter import PackSyncReporter
+            PackSyncReporter().report_synchronization_sync(
+                pack_id=resource_id,
+                version=pack.get("version", "1.0.0"),
+                checksum=pack.get("checksum"),
+            )
+        except Exception:
+            pass
+
     def _handle_progress_push(self, item: dict[str, Any]) -> None:
         """Handle pushing student progress to backend."""
         pass
